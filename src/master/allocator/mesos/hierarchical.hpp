@@ -176,6 +176,10 @@ public:
   void reviveOffers(
       const FrameworkID& frameworkId);
 
+  process::Future<Nothing> resolveConflicts(
+      const FrameworkID& frameworkId,
+      const SlaveID& slaveId);
+
 protected:
   // Useful typedefs for dispatch/delay/defer to self()/this.
   typedef HierarchicalAllocatorProcess Self;

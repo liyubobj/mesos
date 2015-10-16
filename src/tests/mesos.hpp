@@ -1397,6 +1397,9 @@ ACTION_P(InvokeReviveOffers, allocator)
   allocator->real->reviveOffers(arg0);
 }
 
+ACTION_P(InvokeResolveConflicts, allocator){
+  return allocator->real->resolveConflicts(arg0, arg1);
+}
 
 template <typename T = master::allocator::HierarchicalDRFAllocator>
 mesos::master::allocator::Allocator* createAllocator()
@@ -1529,6 +1532,11 @@ public:
       .WillByDefault(InvokeSuppressOffers(this));
     EXPECT_CALL(*this, suppressOffers(_))
       .WillRepeatedly(DoDefault());
+
+    ON_CALL(*this, resolveConflicts(_, _))
+      .WillByDefault(InvokeResolveConflicts(this));
+    EXPECT_CALL(*this, resolveConflicts(_, _))
+      .WillRepeatedly(DoDefault());
   }
 
   virtual ~TestAllocator() {}
@@ -1622,6 +1630,10 @@ public:
   MOCK_METHOD1(reviveOffers, void(const FrameworkID&));
 
   MOCK_METHOD1(suppressOffers, void(const FrameworkID&));
+
+  MOCK_METHOD2(resolveConflicts, process::Future<Nothing>(
+    const FrameworkID&,
+    const SlaveID&));
 
   process::Owned<mesos::master::allocator::Allocator> real;
 };

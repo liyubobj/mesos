@@ -140,6 +140,10 @@ public:
   void reviveOffers(
       const FrameworkID& frameworkId);
 
+  process::Future<Nothing> resolveConflicts(
+      const FrameworkID& frameworkId,
+      const SlaveID& slaveId);
+
 private:
   MesosAllocator();
   MesosAllocator(const MesosAllocator&); // Not copyable.
@@ -252,6 +256,10 @@ public:
 
   virtual void reviveOffers(
       const FrameworkID& frameworkId) = 0;
+
+  virtual process::Future<Nothing> resolveConflicts(
+      const FrameworkID& frameworkId,
+      const SlaveID& slaveId) = 0;
 };
 
 
@@ -561,6 +569,20 @@ inline void MesosAllocator<AllocatorProcess>::reviveOffers(
       process,
       &MesosAllocatorProcess::reviveOffers,
       frameworkId);
+}
+
+
+template <typename AllocatorProcess>
+inline process::Future<Nothing>
+MesosAllocator<AllocatorProcess>::resolveConflicts(
+    const FrameworkID& frameworkId,
+    const SlaveID& slaveId)
+{
+  return process::dispatch(
+      process,
+      &MesosAllocatorProcess::resolveConflicts,
+      frameworkId,
+      slaveId);
 }
 
 } // namespace allocator {

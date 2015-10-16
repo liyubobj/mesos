@@ -695,6 +695,14 @@ HierarchicalAllocatorProcess::getInverseOfferStatuses()
 }
 
 
+process::Future<Nothing>
+HierarchicalAllocatorProcess::resolveConflicts(
+    const FrameworkID& frameworkId,
+    const SlaveID& slaveId)
+{
+  return Nothing();
+}
+
 void HierarchicalAllocatorProcess::recoverResources(
     const FrameworkID& frameworkId,
     const SlaveID& slaveId,

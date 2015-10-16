@@ -343,6 +343,18 @@ public:
    */
   virtual void suppressOffers(
       const FrameworkID& frameworkId) = 0;
+
+ /**
+  * Resolve conflicts.
+  *
+  * Resolves the offer conflicts by allocator. This function used to
+  * handle resources race in optimistic offer scenario. It is called
+  * to defer the master sending taskLaunch message to the agent until
+  * the conflict is resolved.
+  */
+  virtual process::Future<Nothing> resolveConflicts(
+      const FrameworkID& frameworkId,
+      const SlaveID& slaveId) = 0;
 };
 
 } // namespace allocator {
