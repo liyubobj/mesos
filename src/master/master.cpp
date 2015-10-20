@@ -3274,7 +3274,35 @@ void Master::_accept(
                       slave->info));
             }
 
-            send(slave->pid, message);
+            Future<Nothing> resolution = allocator->resolveConflicts(
+                frameworkId,
+                slaveId);
+
+            resolution
+              .onReady([=]() { send(slave->pid, message); })
+              .onFailed([=]() {
+                // TODO(qiujian): We set reason to REASON_TASK_INVALID
+                // if fail to resolve conflict. A new reason may need
+                // to be added.
+                const StatusUpdate& update = protobuf::createStatusUpdate(
+                    framework->id(),
+                    task_.slave_id(),
+                    task_.task_id(),
+                    TASK_ERROR,
+                    TaskStatus::SOURCE_MASTER,
+                    None(),
+                    validationError.get().message,
+                    TaskStatus::REASON_TASK_INVALID);
+
+                metrics->tasks_error++;
+
+                metrics->incrementTasksStates(
+                    TASK_ERROR,
+                    TaskStatus::SOURCE_MASTER,
+                    TaskStatus::REASON_TASK_INVALID);
+
+                forward(update, UPID(), framework);
+              });
           }
         }
         break;
