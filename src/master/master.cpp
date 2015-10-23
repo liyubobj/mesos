@@ -6155,8 +6155,17 @@ void Master::removeTask(Task* task)
   Slave* slave = slaves.registered.get(task->slave_id());
   CHECK_NOTNULL(slave);
 
+  // Remove from framework.
+  Framework* framework = getFramework(task->framework_id());
+  if (framework != NULL) { // A framework might not be re-connected yet.
+    framework->removeTask(task);
+  }
+
+  // Remove from slave.
+  slave->removeTask(task);
+
   if (!protobuf::isTerminalState(task->state())) {
-    LOG(WARNING) << "Removing task " << task->task_id()
+    LOG(WARNING) << "Removed task " << task->task_id()
                  << " with resources " << task->resources()
                  << " of framework " << task->framework_id()
                  << " on slave " << *slave
@@ -6170,20 +6179,11 @@ void Master::removeTask(Task* task)
         task->resources(),
         None());
   } else {
-    LOG(INFO) << "Removing task " << task->task_id()
+    LOG(INFO) << "Removed task " << task->task_id()
               << " with resources " << task->resources()
               << " of framework " << task->framework_id()
               << " on slave " << *slave;
   }
-
-  // Remove from framework.
-  Framework* framework = getFramework(task->framework_id());
-  if (framework != NULL) { // A framework might not be re-connected yet.
-    framework->removeTask(task);
-  }
-
-  // Remove from slave.
-  slave->removeTask(task);
 
   delete task;
 }
@@ -6203,15 +6203,15 @@ void Master::removeExecutor(
             << "' with resources " << executor.resources()
             << " of framework " << frameworkId << " on slave " << *slave;
 
-  allocator->recoverResources(
-    frameworkId, slave->id, executor.resources(), None());
-
   Framework* framework = getFramework(frameworkId);
   if (framework != NULL) { // The framework might not be re-registered yet.
     framework->removeExecutor(slave->id, executorId);
   }
 
   slave->removeExecutor(frameworkId, executorId);
+
+  allocator->recoverResources(
+    frameworkId, slave->id, executor.resources(), None());
 }
 
 
