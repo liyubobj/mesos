@@ -2253,7 +2253,7 @@ TYPED_TEST(SlaveRecoveryTest, ReconcileTasksMissingFromSlave)
     FUTURE_PROTOBUF(SlaveReregisteredMessage(), _, _);
 
   EXPECT_CALL(allocator, activateSlave(_));
-  EXPECT_CALL(allocator, recoverResources(_, _, _, _));
+  EXPECT_CALL(allocator, recoverUnusedResources(_, _, _, _, _));
 
   Future<TaskStatus> status;
   EXPECT_CALL(sched, statusUpdate(_, _))

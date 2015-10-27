@@ -831,6 +831,10 @@ private:
 
   void suppress(Framework* framework);
 
+  // Get the real resource usage of a framework on the specified slave.
+  Resources usedResources(
+      const SlaveID& slaveId, const FrameworkID& frameworkId);
+
   bool elected() const
   {
     return leader.isSome() && leader.get() == info_;

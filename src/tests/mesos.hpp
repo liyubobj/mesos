@@ -1376,6 +1376,10 @@ ACTION_P(InvokeRecoverResources, allocator)
   allocator->real->recoverResources(arg0, arg1, arg2, arg3);
 }
 
+ACTION_P(InvokeRecoverUnusedResources, allocator)
+{
+  allocator->real->recoverUnusedResources(arg0, arg1, arg2, arg3, arg4);
+}
 
 ACTION_P2(InvokeRecoverResourcesWithFilters, allocator, timeout)
 {
@@ -1385,6 +1389,13 @@ ACTION_P2(InvokeRecoverResourcesWithFilters, allocator, timeout)
   allocator->real->recoverResources(arg0, arg1, arg2, filters);
 }
 
+ACTION_P2(InvokeRecoverUsedResourcesWithFilters, allocator, timeout)
+{
+  Filters filters;
+  filters.set_refuse_seconds(timeout);
+
+  allocator->real->recoverUnusedResources(arg0, arg1, arg2, arg3, filters);
+}
 
 ACTION_P(InvokeSuppressOffers, allocator)
 {
@@ -1523,6 +1534,11 @@ public:
     EXPECT_CALL(*this, recoverResources(_, _, _, _))
       .WillRepeatedly(DoDefault());
 
+    ON_CALL(*this, recoverUnusedResources(_, _, _, _, _))
+      .WillByDefault(InvokeRecoverUnusedResources(this));
+    EXPECT_CALL(*this, recoverUnusedResources(_, _, _, _, _))
+      .WillRepeatedly(DoDefault());
+
     ON_CALL(*this, reviveOffers(_))
       .WillByDefault(InvokeReviveOffers(this));
     EXPECT_CALL(*this, reviveOffers(_))
@@ -1624,6 +1640,13 @@ public:
   MOCK_METHOD4(recoverResources, void(
       const FrameworkID&,
       const SlaveID&,
+      const Resources&,
+      const Option<Filters>& filters));
+
+  MOCK_METHOD5(recoverUnusedResources, void(
+      const FrameworkID&,
+      const SlaveID&,
+      const Resources&,
       const Resources&,
       const Option<Filters>& filters));
 

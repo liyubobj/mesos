@@ -315,16 +315,34 @@ public:
     getInverseOfferStatuses() = 0;
 
   /**
-   * Recovers resources.
+   * Recovers the offered resources.
    *
    * Used to update the set of available resources for a specific agent. This
-   * method is invoked to inform the allocator about allocated resources that
-   * have been refused or are no longer in use.
+   * method is invoked to inform the allocator about the offered resources that
+   * have been totally returned.
    */
   virtual void recoverResources(
       const FrameworkID& frameworkId,
       const SlaveID& slaveId,
       const Resources& resources,
+      const Option<Filters>& filters) = 0;
+
+  /**
+   * Recovers the unused resources.
+   *
+   * Used to update the set of available resources for a specific agent. This
+   * method is invoked to inform the allocator about the real used resources
+   * of a framework that have been changed(launch tasks, task terminated, etc.).
+   *
+   * @param recoveredResources is the no longer used resources.
+   * @param usedResources is the real using resource of the framework(frameworkId)
+   *     on the specified agent(slaveId).
+   */
+  virtual void recoverUnusedResources(
+      const FrameworkID& frameworkId,
+      const SlaveID& slaveId,
+      const Resources& recoveredResources,
+      const Resources& usedResources,
       const Option<Filters>& filters) = 0;
 
   /**

@@ -703,6 +703,16 @@ HierarchicalAllocatorProcess::resolveConflicts(
   return Nothing();
 }
 
+void HierarchicalAllocatorProcess::recoverUnusedResources(
+    const FrameworkID& frameworkId,
+    const SlaveID& slaveId,
+    const Resources& recoveredResources,
+    const Resources& usedResources,
+    const Option<Filters>& filters)
+{
+  recoverResources(frameworkId, slaveId, recoveredResources, filters);
+}
+
 void HierarchicalAllocatorProcess::recoverResources(
     const FrameworkID& frameworkId,
     const SlaveID& slaveId,

@@ -2634,6 +2634,17 @@ void Master::suppress(Framework* framework)
 }
 
 
+Resources Master::usedResources(
+    const SlaveID& slaveId,
+    const FrameworkID& frameworkId)
+{
+  Slave* slave = slaves.registered.get(slaveId);
+  CHECK_NOTNULL(slave);
+
+  return slave->usedResources[frameworkId];
+}
+
+
 void Master::launchTasks(
     const UPID& from,
     const FrameworkID& frameworkId,
@@ -3307,10 +3318,11 @@ void Master::_accept(
 
   if (!_offeredResources.empty()) {
     // Tell the allocator about the unused (e.g., refused) resources.
-    allocator->recoverResources(
+    allocator->recoverUnusedResources(
         frameworkId,
         slaveId,
         _offeredResources,
+        usedResources(slaveId, frameworkId),
         accept.filters());
   }
 }
@@ -6111,11 +6123,6 @@ void Master::updateTask(Task* task, const StatusUpdate& update)
 
   // Once the task becomes terminal, we recover the resources.
   if (terminated) {
-    allocator->recoverResources(
-        task->framework_id(),
-        task->slave_id(),
-        task->resources(),
-        None());
 
     // The slave owns the Task object and cannot be NULL.
     Slave* slave = slaves.registered.get(task->slave_id());
@@ -6127,6 +6134,13 @@ void Master::updateTask(Task* task, const StatusUpdate& update)
     if (framework != NULL) {
       framework->taskTerminated(task);
     }
+
+    allocator->recoverUnusedResources(
+        task->framework_id(),
+        task->slave_id(),
+        task->resources(),
+        usedResources(task->slave_id(), task->framework_id()),
+        None());
 
     switch (status.state()) {
       case TASK_FINISHED: ++metrics->tasks_finished; break;
@@ -6173,10 +6187,11 @@ void Master::removeTask(Task* task)
 
     // If the task is not terminal, then the resources have
     // not yet been recovered.
-    allocator->recoverResources(
+    allocator->recoverUnusedResources(
         task->framework_id(),
         task->slave_id(),
         task->resources(),
+        usedResources(task->slave_id(), task->framework_id()),
         None());
   } else {
     LOG(INFO) << "Removed task " << task->task_id()
@@ -6210,8 +6225,12 @@ void Master::removeExecutor(
 
   slave->removeExecutor(frameworkId, executorId);
 
-  allocator->recoverResources(
-    frameworkId, slave->id, executor.resources(), None());
+  allocator->recoverUnusedResources(
+      frameworkId,
+      slave->id,
+      executor.resources(),
+      usedResources(slave->id, frameworkId),
+      None());
 }
 
 

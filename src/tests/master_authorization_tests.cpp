@@ -265,7 +265,7 @@ TEST_F(MasterAuthorizationTest, KillTask)
   EXPECT_EQ(TASK_KILLED, status.get().state());
 
   Future<Nothing> recoverResources =
-    FUTURE_DISPATCH(_, &MesosAllocatorProcess::recoverResources);
+    FUTURE_DISPATCH(_, &MesosAllocatorProcess::recoverUnusedResources);
 
   // Now complete authorization.
   promise.set(true);

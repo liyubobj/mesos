@@ -170,6 +170,13 @@ public:
       const Resources& resources,
       const Option<Filters>& filters);
 
+  void recoverUnusedResources(
+      const FrameworkID& frameworkId,
+      const SlaveID& slaveId,
+      const Resources& recoveredResources,
+      const Resources& usedResources,
+      const Option<Filters>& filters);
+
   void suppressOffers(
       const FrameworkID& frameworkId);
 

@@ -134,6 +134,13 @@ public:
       const Resources& resources,
       const Option<Filters>& filters);
 
+  void recoverUnusedResources(
+      const FrameworkID& frameworkId,
+      const SlaveID& slaveId,
+      const Resources& recoveredResources,
+      const Resources& usedResources,
+      const Option<Filters>& filters);
+
   void suppressOffers(
       const FrameworkID& frameworkId);
 
@@ -249,6 +256,13 @@ public:
       const FrameworkID& frameworkId,
       const SlaveID& slaveId,
       const Resources& resources,
+      const Option<Filters>& filters) = 0;
+
+  virtual void recoverUnusedResources(
+      const FrameworkID& frameworkId,
+      const SlaveID& slaveId,
+      const Resources& recoveredResources,
+      const Resources& usedResources,
       const Option<Filters>& filters) = 0;
 
   virtual void suppressOffers(
@@ -549,6 +563,23 @@ inline void MesosAllocator<AllocatorProcess>::recoverResources(
       filters);
 }
 
+template <typename AllocatorProcess>
+inline void MesosAllocator<AllocatorProcess>::recoverUnusedResources(
+    const FrameworkID& frameworkId,
+    const SlaveID& slaveId,
+    const Resources& recoveredResources,
+    const Resources& usedResources,
+    const Option<Filters>& filters)
+{
+  process::dispatch(
+      process,
+      &MesosAllocatorProcess::recoverUnusedResources,
+      frameworkId,
+      slaveId,
+      recoveredResources,
+      usedResources,
+      filters);
+}
 
 template <typename AllocatorProcess>
 inline void MesosAllocator<AllocatorProcess>::suppressOffers(
