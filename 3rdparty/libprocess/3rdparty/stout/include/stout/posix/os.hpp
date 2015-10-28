@@ -107,26 +107,6 @@ inline void unsetenv(const std::string& key)
 }
 
 
-inline Try<Nothing> touch(const std::string& path)
-{
-  if (!exists(path)) {
-    Try<int> fd = open(
-        path,
-        O_RDWR | O_CREAT,
-        S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-
-    if (fd.isError()) {
-      return Error("Failed to open file: " + fd.error());
-    }
-
-    return close(fd.get());
-  }
-
-  // Update the access and modification times.
-  return utime(path);
-}
-
-
 // Creates a temporary directory using the specified path
 // template. The template may be any path with _6_ `Xs' appended to
 // it, for example /tmp/temp.XXXXXX. The trailing `Xs' are replaced
@@ -306,16 +286,6 @@ inline Try<Nothing> chmod(const std::string& path, int mode)
 }
 
 
-inline Try<Nothing> chdir(const std::string& directory)
-{
-  if (::chdir(directory.c_str()) < 0) {
-    return ErrnoError();
-  }
-
-  return Nothing();
-}
-
-
 inline Try<Nothing> chroot(const std::string& directory)
 {
   if (::chroot(directory.c_str()) < 0) {
@@ -477,30 +447,6 @@ inline Try<Nothing> su(const std::string& user)
   }
 
   return Nothing();
-}
-
-
-inline std::string getcwd()
-{
-  size_t size = 100;
-
-  while (true) {
-    char* temp = new char[size];
-    if (::getcwd(temp, size) == temp) {
-      std::string result(temp);
-      delete[] temp;
-      return result;
-    } else {
-      if (errno != ERANGE) {
-        delete[] temp;
-        return std::string();
-      }
-      size *= 2;
-      delete[] temp;
-    }
-  }
-
-  return std::string();
 }
 
 

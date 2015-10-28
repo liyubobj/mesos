@@ -56,12 +56,6 @@ inline void unsetenv(const std::string& key)
 }
 
 
-inline Try<Nothing> touch(const std::string& path)
-{
-  UNIMPLEMENTED;
-}
-
-
 // Creates a temporary directory using the specified path
 // template. The template may be any path with _6_ `Xs' appended to
 // it, for example /tmp/temp.XXXXXX. The trailing `Xs' are replaced
@@ -132,12 +126,6 @@ inline Try<Nothing> chmod(const std::string& path, int mode)
 }
 
 
-inline Try<Nothing> chdir(const std::string& directory)
-{
-  UNIMPLEMENTED;
-}
-
-
 inline Try<Nothing> chroot(const std::string& directory)
 {
   UNIMPLEMENTED;
@@ -166,12 +154,6 @@ inline Result<gid_t> getgid(const Option<std::string>& user = None())
 
 
 inline Try<Nothing> su(const std::string& user)
-{
-  UNIMPLEMENTED;
-}
-
-
-inline std::string getcwd()
 {
   UNIMPLEMENTED;
 }
