@@ -686,7 +686,7 @@ TEST_F(RegistryClientTest, SimpleGetManifest)
 
   ASSERT_SOME(registryClient);
 
-  Future<ManifestResponse> manifestResponseFuture =
+  Future<Manifest> manifestResponseFuture =
     registryClient.get()->getManifest("library/busybox", "latest", None());
 
   const string unauthResponseHeaders = "Www-Authenticate: Bearer"
@@ -816,21 +816,22 @@ TEST_F(RegistryClientTest, SimpleGetManifest)
   AWAIT_ASSERT_READY(manifestResponseFuture);
 
   ASSERT_EQ(
-      manifestResponseFuture.get().fsLayerInfoList[0].layerId,
+      manifestResponseFuture.get().fsLayerInfos[0].layerId,
       "1ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea");
 
   ASSERT_EQ(
-      manifestResponseFuture.get().fsLayerInfoList[1].layerId,
+      manifestResponseFuture.get().fsLayerInfos[1].layerId,
       "2ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea");
 
   ASSERT_EQ(
-      manifestResponseFuture.get().fsLayerInfoList[2].layerId,
+      manifestResponseFuture.get().fsLayerInfos[2].layerId,
       "3ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea");
 }
 
 
 // Tests docker registry's getBlob API.
-TEST_F(RegistryClientTest, SimpleGetBlob)
+// TODO(jojy): Re-enable this test when MESOS-3798 is resolved.
+TEST_F(RegistryClientTest, DISABLED_SimpleGetBlob)
 {
   Try<Socket> server = setup_server({
       {"SSL_ENABLED", "true"},

@@ -859,6 +859,10 @@ private:
     process::Future<process::http::Response> flags(
         const process::http::Request& request) const;
 
+    // /master/frameworks
+    process::Future<process::http::Response> frameworks(
+        const process::http::Request& request) const;
+
     // /master/health
     process::Future<process::http::Response> health(
         const process::http::Request& request) const;
@@ -921,6 +925,7 @@ private:
 
     static std::string SCHEDULER_HELP();
     static std::string FLAGS_HELP();
+    static std::string FRAMEWORKS();
     static std::string HEALTH_HELP();
     static std::string OBSERVE_HELP();
     static std::string REDIRECT_HELP();
