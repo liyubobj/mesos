@@ -3304,6 +3304,12 @@ void Master::_accept(
                     TaskStatus::REASON_TASK_INVALID);
 
                 forward(update, UPID(), framework);
+
+                // Remove this task when failed to request resource
+                Task* task = framework->getTask(task_.task_id());
+                if (task != NULL) {
+                  removeTask(task);
+                }
               });
           }
         }
