@@ -31,6 +31,8 @@
 #include <process/http.hpp>
 #include <process/process.hpp>
 
+#include "slave/containerizer/mesos/provisioner/docker/message.hpp"
+
 namespace mesos {
 namespace internal {
 namespace slave {
@@ -56,12 +58,14 @@ struct FileSystemLayerInfo
 /**
  * Response for a "GET Manifest" request.
  *
- * Reference: https://docs.docker.com/registry/spec/api
+ * Reference:
+ * https://github.com/docker/distribution/blob/master/docs/spec/manifest-v2-1.md
  */
 struct Manifest
 {
+  static Try<Manifest> create(const std::string& jsonString);
+
   const std::string name;
-  const std::string digest;
   const std::vector<FileSystemLayerInfo> fsLayerInfos;
 };
 
@@ -84,31 +88,26 @@ public:
    * Factory method for creating RegistryClient objects.
    *
    * @param registryServer URL of docker registry server.
-   * @param authServer URL of authorization server.
+   * @param authorizationServer URL of authorization server.
    * @param credentials credentials for client session (optional).
    * @return RegistryClient on Success.
    *         Error on failure.
    */
   static Try<process::Owned<RegistryClient>> create(
       const process::http::URL& registryServer,
-      const process::http::URL& authServer,
+      const process::http::URL& authorizationServer,
       const Option<Credentials>& credentials);
 
   /**
    * Fetches manifest for a repository from the client's remote registry server.
    *
-   * @param path path of the repository on the registry.
-   * @param tag unique tag that identifies the repository. Will default to
-   *    latest.
-   * @param timeout Maximum time ater which the request will timeout and return
-   *    a failure. Will default to RESPONSE_TIMEOUT.
-   * @return JSON object on success.
+   * @param imageName Image information(Name, tag).
+   * @return Manifest on success.
    *         Failure on process failure.
    */
   process::Future<Manifest> getManifest(
-      const std::string& path,
-      const Option<std::string>& tag,
-      const Option<Duration>& timeout);
+      const Image::Name& imageName);
+
 
   /**
    * Fetches blob for a repository from the client's remote registry server.
@@ -116,8 +115,6 @@ public:
    * @param path path of the repository on the registry.
    * @param digest digest of the blob (from manifest).
    * @param filePath file path to store the fetched blob.
-   * @param timeout Maximum time ater which the request will timeout and return
-   *    a failure. Will default to RESPONSE_TIMEOUT.
    * @param maxSize Maximum size of the response thats acceptable. Will default
    *    to MAX_RESPONSE_SIZE.
    * @return size of downloaded blob on success.
@@ -126,24 +123,19 @@ public:
   process::Future<size_t> getBlob(
       const std::string& path,
       const Option<std::string>& digest,
-      const Path& filePath,
-      const Option<Duration>& timeout,
-      const Option<size_t>& maxSize);
+      const Path& filePath);
 
   ~RegistryClient();
 
 private:
   RegistryClient(
     const process::http::URL& registryServer,
-    const process::http::URL& authServer,
+    const process::http::URL& authorizationServer,
     const Option<Credentials>& credentials,
     const process::Owned<RegistryClientProcess>& process);
 
-  static const Duration DEFAULT_MANIFEST_TIMEOUT_SECS;
-  static const size_t DEFAULT_MANIFEST_MAXSIZE_BYTES;
-
   const process::http::URL registryServer_;
-  const process::http::URL authServer_;
+  const process::http::URL authorizationServer_;
   const Option<Credentials> credentials_;
   process::Owned<RegistryClientProcess> process_;
 

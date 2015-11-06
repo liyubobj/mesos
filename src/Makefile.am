@@ -545,6 +545,7 @@ libmesos_no_3rdparty_la_SOURCES =						\
 	slave/containerizer/launcher.cpp					\
 	slave/containerizer/mesos/containerizer.cpp				\
 	slave/containerizer/mesos/launch.cpp					\
+	slave/containerizer/mesos/mount.cpp					\
 	slave/containerizer/mesos/isolators/filesystem/posix.cpp		\
 	slave/containerizer/mesos/isolators/posix/disk.cpp			\
 	slave/containerizer/mesos/provisioner/paths.cpp				\
@@ -856,6 +857,7 @@ libmesos_no_3rdparty_la_SOURCES +=						\
 	slave/containerizer/linux_launcher.hpp					\
 	slave/containerizer/mesos/containerizer.hpp				\
 	slave/containerizer/mesos/launch.hpp					\
+	slave/containerizer/mesos/mount.hpp					\
 	slave/containerizer/mesos/isolators/posix.hpp				\
 	slave/containerizer/mesos/isolators/posix/disk.hpp			\
 	slave/containerizer/mesos/isolators/cgroups/constants.hpp		\
@@ -900,7 +902,6 @@ libmesos_no_3rdparty_la_SOURCES +=						\
 	tests/containerizer/isolator.hpp					\
 	tests/containerizer/launcher.hpp					\
 	tests/containerizer/memory_test_helper.hpp				\
-	tests/containerizer/provisioner.hpp					\
 	tests/containerizer/rootfs.hpp						\
 	tests/containerizer/setns_test_helper.hpp				\
 	usage/usage.hpp								\
