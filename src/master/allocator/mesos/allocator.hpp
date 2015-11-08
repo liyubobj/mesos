@@ -138,7 +138,7 @@ public:
       const FrameworkID& frameworkId,
       const SlaveID& slaveId,
       const Resources& recoveredResources,
-      const Resources& usedResources,
+      const Option<TaskID>& taskId,
       const Option<Filters>& filters);
 
   void suppressOffers(
@@ -149,7 +149,7 @@ public:
 
   process::Future<Nothing> resolveConflicts(
       const FrameworkID& frameworkId,
-      const SlaveID& slaveId);
+      const TaskInfo& task);
 
 private:
   MesosAllocator();
@@ -262,7 +262,7 @@ public:
       const FrameworkID& frameworkId,
       const SlaveID& slaveId,
       const Resources& recoveredResources,
-      const Resources& usedResources,
+      const Option<TaskID>& taskId,
       const Option<Filters>& filters) = 0;
 
   virtual void suppressOffers(
@@ -273,7 +273,7 @@ public:
 
   virtual process::Future<Nothing> resolveConflicts(
       const FrameworkID& frameworkId,
-      const SlaveID& slaveId) = 0;
+      const TaskInfo& task) = 0;
 };
 
 
@@ -568,7 +568,7 @@ inline void MesosAllocator<AllocatorProcess>::recoverUnusedResources(
     const FrameworkID& frameworkId,
     const SlaveID& slaveId,
     const Resources& recoveredResources,
-    const Resources& usedResources,
+    const Option<TaskID>& taskId,
     const Option<Filters>& filters)
 {
   process::dispatch(
@@ -577,7 +577,7 @@ inline void MesosAllocator<AllocatorProcess>::recoverUnusedResources(
       frameworkId,
       slaveId,
       recoveredResources,
-      usedResources,
+      taskId,
       filters);
 }
 
@@ -607,13 +607,13 @@ template <typename AllocatorProcess>
 inline process::Future<Nothing>
 MesosAllocator<AllocatorProcess>::resolveConflicts(
     const FrameworkID& frameworkId,
-    const SlaveID& slaveId)
+    const TaskInfo& task)
 {
   return process::dispatch(
       process,
       &MesosAllocatorProcess::resolveConflicts,
       frameworkId,
-      slaveId);
+      task);
 }
 
 } // namespace allocator {

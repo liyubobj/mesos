@@ -342,7 +342,7 @@ public:
       const FrameworkID& frameworkId,
       const SlaveID& slaveId,
       const Resources& recoveredResources,
-      const Resources& usedResources,
+      const Option<TaskID>& taskId,
       const Option<Filters>& filters) = 0;
 
   /**
@@ -372,7 +372,7 @@ public:
   */
   virtual process::Future<Nothing> resolveConflicts(
       const FrameworkID& frameworkId,
-      const SlaveID& slaveId) = 0;
+      const TaskInfo& task) = 0;
 };
 
 } // namespace allocator {

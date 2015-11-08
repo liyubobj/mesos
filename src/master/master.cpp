@@ -2634,17 +2634,6 @@ void Master::suppress(Framework* framework)
 }
 
 
-Resources Master::usedResources(
-    const SlaveID& slaveId,
-    const FrameworkID& frameworkId)
-{
-  Slave* slave = slaves.registered.get(slaveId);
-  CHECK_NOTNULL(slave);
-
-  return slave->usedResources[frameworkId];
-}
-
-
 void Master::launchTasks(
     const UPID& from,
     const FrameworkID& frameworkId,
@@ -3276,9 +3265,10 @@ void Master::_accept(
                       slave->info));
             }
 
+            // TODO(Liqiang Lin): Currently we did not allocate resources
+            // for task executor in EGO. Need further enhancement later.
             Future<Nothing> resolution = allocator->resolveConflicts(
-                frameworkId,
-                slaveId);
+                framework->id(), task_);
 
             resolution
               .onReady([=]() { send(slave->pid, message); })
@@ -3328,7 +3318,7 @@ void Master::_accept(
         frameworkId,
         slaveId,
         _offeredResources,
-        usedResources(slaveId, frameworkId),
+        None(),
         accept.filters());
   }
 }
@@ -6116,7 +6106,6 @@ void Master::updateTask(Task* task, const StatusUpdate& update)
 
   // Once the task becomes terminal, we recover the resources.
   if (terminated) {
-
     // The slave owns the Task object and cannot be NULL.
     Slave* slave = slaves.registered.get(task->slave_id());
     CHECK_NOTNULL(slave);
@@ -6132,7 +6121,7 @@ void Master::updateTask(Task* task, const StatusUpdate& update)
         task->framework_id(),
         task->slave_id(),
         task->resources(),
-        usedResources(task->slave_id(), task->framework_id()),
+        task->task_id(),
         None());
 
     switch (status.state()) {
@@ -6184,7 +6173,7 @@ void Master::removeTask(Task* task)
         task->framework_id(),
         task->slave_id(),
         task->resources(),
-        usedResources(task->slave_id(), task->framework_id()),
+        task->task_id(),
         None());
   } else {
     LOG(INFO) << "Removed task " << task->task_id()
@@ -6222,7 +6211,7 @@ void Master::removeExecutor(
       frameworkId,
       slave->id,
       executor.resources(),
-      usedResources(slave->id, frameworkId),
+      None(),
       None());
 }
 

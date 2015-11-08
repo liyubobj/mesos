@@ -698,7 +698,7 @@ HierarchicalAllocatorProcess::getInverseOfferStatuses()
 process::Future<Nothing>
 HierarchicalAllocatorProcess::resolveConflicts(
     const FrameworkID& frameworkId,
-    const SlaveID& slaveId)
+    const TaskInfo& task)
 {
   return Nothing();
 }
@@ -707,7 +707,7 @@ void HierarchicalAllocatorProcess::recoverUnusedResources(
     const FrameworkID& frameworkId,
     const SlaveID& slaveId,
     const Resources& recoveredResources,
-    const Resources& usedResources,
+    const Option<TaskID>& taskId,
     const Option<Filters>& filters)
 {
   recoverResources(frameworkId, slaveId, recoveredResources, filters);

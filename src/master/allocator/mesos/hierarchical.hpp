@@ -174,7 +174,7 @@ public:
       const FrameworkID& frameworkId,
       const SlaveID& slaveId,
       const Resources& recoveredResources,
-      const Resources& usedResources,
+      const Option<TaskID>& taskId,
       const Option<Filters>& filters);
 
   void suppressOffers(
@@ -185,7 +185,7 @@ public:
 
   process::Future<Nothing> resolveConflicts(
       const FrameworkID& frameworkId,
-      const SlaveID& slaveId);
+      const TaskInfo& task);
 
 protected:
   // Useful typedefs for dispatch/delay/defer to self()/this.
