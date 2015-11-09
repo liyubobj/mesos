@@ -16,46 +16,61 @@
  * limitations under the License.
  */
 
-#ifndef __PROVISIONER_DOCKER_LOCAL_PULLER_HPP__
-#define __PROVISIONER_DOCKER_LOCAL_PULLER_HPP__
+#ifndef __PROVISIONER_DOCKER_REGISTRY_PULLER_HPP__
+#define __PROVISIONER_DOCKER_REGISTRY_PULLER_HPP__
 
-#include "slave/containerizer/mesos/provisioner/store.hpp"
+#include <list>
+#include <string>
+#include <utility>
+
+#include <stout/duration.hpp>
+#include <stout/path.hpp>
+
+#include <process/future.hpp>
+#include <process/http.hpp>
+#include <process/process.hpp>
 
 #include "slave/containerizer/mesos/provisioner/docker/message.hpp"
 #include "slave/containerizer/mesos/provisioner/docker/puller.hpp"
-
-#include "slave/flags.hpp"
 
 namespace mesos {
 namespace internal {
 namespace slave {
 namespace docker {
 
-// Forward declaration.
-class LocalPullerProcess;
+// Forward declarations.
+class RegistryPullerProcess;
 
-
-/**
- * LocalPuller assumes Docker images are stored in a local directory
- * (configured with flags.docker_local_archives_dir), with all the
- * images saved as tars with file names in the form of <repo>:<tag>.tar.
+/*
+ * Pulls an image from Docker registry.
  */
-class LocalPuller : public Puller
+class RegistryPuller : public Puller
 {
 public:
-  explicit LocalPuller(const Flags& flags);
+  /**
+   * Factory method for creating RegistryPuller.
+   */
+  static Try<process::Owned<Puller>> create(const Flags& flags);
 
-  ~LocalPuller();
+  ~RegistryPuller();
 
+  /**
+   * Pulls an image into a download directory.
+   *
+   * @param imageName local name of the image.
+   * @param downloadDirectory path to which the layers should be downloaded.
+   */
   process::Future<std::list<std::pair<std::string, std::string>>> pull(
-      const Image::Name& name,
-      const Path& directory);
+      const Image::Name& imageName,
+      const Path& downloadDirectory);
 
 private:
-  LocalPuller& operator=(const LocalPuller&) = delete; // Not assignable.
-  LocalPuller(const LocalPuller&) = delete; // Not copyable.
+  RegistryPuller(const process::Owned<RegistryPullerProcess>& process);
 
-  process::Owned<LocalPullerProcess> process;
+  process::Owned<RegistryPullerProcess> process_;
+
+  RegistryPuller(const RegistryPuller&) = delete;
+  RegistryPuller& operator=(const RegistryPuller&) = delete;
 };
 
 } // namespace docker {
@@ -63,4 +78,4 @@ private:
 } // namespace internal {
 } // namespace mesos {
 
-#endif // __PROVISIONER_DOCKER_LOCAL_PULLER_HPP__
+#endif //  __PROVISIONER_DOCKER_REGISTRY_PULLER_HPP__

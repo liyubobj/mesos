@@ -99,7 +99,7 @@ public:
       const Option<Credentials>& credentials);
 
   /**
-   * Fetches manifest for a repository from the client's remote registry server.
+   * Fetches manifest for a repository from the client's docker registry server.
    *
    * @param imageName Image information(Name, tag).
    * @return Manifest on success.
@@ -110,13 +110,11 @@ public:
 
 
   /**
-   * Fetches blob for a repository from the client's remote registry server.
+   * Fetches blob for a repository from the client's docker registry server.
    *
    * @param path path of the repository on the registry.
    * @param digest digest of the blob (from manifest).
    * @param filePath file path to store the fetched blob.
-   * @param maxSize Maximum size of the response thats acceptable. Will default
-   *    to MAX_RESPONSE_SIZE.
    * @return size of downloaded blob on success.
    *         Failure in case of any errors.
    */
