@@ -3265,14 +3265,14 @@ void Master::_accept(
                       slave->info));
             }
 
-            // TODO(Liqiang Lin): Currently we did not allocate resources
+            // TODO(Liqiang Lin): Currently we do not allocate resources
             // for task executor in EGO. Need further enhancement later.
             Future<Nothing> resolution = allocator->resolveConflicts(
                 framework->id(), task_);
 
             resolution
               .onReady([=]() { send(slave->pid, message); })
-              .onFailed([=]() {
+              .onFailed([=](const string& failure) {
                 // TODO(qiujian): We set reason to REASON_TASK_INVALID
                 // if fail to resolve conflict. A new reason may need
                 // to be added.
@@ -3283,7 +3283,7 @@ void Master::_accept(
                     TASK_ERROR,
                     TaskStatus::SOURCE_MASTER,
                     None(),
-                    validationError.get().message,
+                    failure,
                     TaskStatus::REASON_TASK_INVALID);
 
                 metrics->tasks_error++;

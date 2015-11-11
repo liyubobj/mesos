@@ -1659,8 +1659,8 @@ public:
   MOCK_METHOD1(suppressOffers, void(const FrameworkID&));
 
   MOCK_METHOD2(resolveConflicts, process::Future<Nothing>(
-      const FrameworkID& frameworkId,
-      const TaskInfo& task));
+      const FrameworkID&,
+      const TaskInfo&));
 
   process::Owned<mesos::master::allocator::Allocator> real;
 };

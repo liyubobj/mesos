@@ -335,7 +335,7 @@ public:
    * of a framework that have been changed(launch tasks, task terminated, etc.).
    *
    * @param recoveredResources is the no longer used resources.
-   * @param usedResources is the real using resource of the framework(frameworkId)
+   * @param taskId is the task ID which is terminated.
    *     on the specified agent(slaveId).
    */
   virtual void recoverUnusedResources(

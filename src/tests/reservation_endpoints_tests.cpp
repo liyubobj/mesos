@@ -166,8 +166,8 @@ TEST_F(ReservationEndpointsTest, AvailableResources)
   EXPECT_TRUE(Resources(offer.resources()).contains(dynamicallyReserved));
 
   Future<Nothing> recoverResources;
-  EXPECT_CALL(allocator, recoverUnusedResources(_, _, _, _, _))
-    .WillOnce(DoAll(InvokeRecoverUnusedResources(&allocator),
+  EXPECT_CALL(allocator, recoverResources(_, _, _, _))
+    .WillOnce(DoAll(InvokeRecoverResources(&allocator),
                     FutureSatisfy(&recoverResources)));
 
   // The filter to decline the offer "forever".
