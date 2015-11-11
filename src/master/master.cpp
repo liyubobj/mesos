@@ -5076,6 +5076,10 @@ void Master::inverseOffer(
     inverseOffer->mutable_url()->CopyFrom(url);
     inverseOffer->mutable_unavailability()->CopyFrom(
         unavailableResources.unavailability);
+    if (!unavailableResources.resources.empty()) {
+      inverseOffer->mutable_resources()->CopyFrom(
+          unavailableResources.resources);
+    }
 
     inverseOffers[inverseOffer->id()] = inverseOffer;
 
