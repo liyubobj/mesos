@@ -29,8 +29,8 @@ PROTOC_TO_INCLUDE_DIR(V1_EXECUTOR      mesos/v1/executor/executor)
 PROTOC_TO_INCLUDE_DIR(FETCHER          mesos/fetcher/fetcher)
 PROTOC_TO_INCLUDE_DIR(MAINTENANCE      mesos/maintenance/maintenance)
 PROTOC_TO_INCLUDE_DIR(ALLOCATOR        mesos/master/allocator)
-PROTOC_TO_INCLUDE_DIR(QUOTA            mesos/master/quota)
 PROTOC_TO_INCLUDE_DIR(MODULE           mesos/module/module)
+PROTOC_TO_INCLUDE_DIR(QUOTA            mesos/quota/quota)
 PROTOC_TO_INCLUDE_DIR(SCHEDULER        mesos/scheduler/scheduler)
 PROTOC_TO_INCLUDE_DIR(V1_SCHEDULER     mesos/v1/scheduler/scheduler)
 PROTOC_TO_INCLUDE_DIR(ISOLATOR         mesos/slave/isolator)
@@ -55,8 +55,8 @@ set(MESOS_PROTOBUF_SRC
   ${FETCHER_PROTO_CC}
   ${MAINTENANCE_PROTO_CC}
   ${ALLOCATOR_PROTO_CC}
-  ${QUOTA_PROTO_CC}
   ${MODULE_PROTO_CC}
+  ${QUOTA_PROTO_CC}
   ${SCHEDULER_PROTO_CC}
   ${V1_SCHEDULER_PROTO_CC}
   ${OVERSUBSCRIPTION_PROTO_CC}
@@ -192,12 +192,12 @@ if (NOT WIN32)
     slave/containerizer/external_containerizer.cpp
     slave/containerizer/fetcher.cpp
     slave/containerizer/isolator.cpp
-    slave/containerizer/mesos/isolators/filesystem/posix.cpp
-    slave/containerizer/mesos/isolators/posix/disk.cpp
-    slave/containerizer/launcher.cpp
     slave/containerizer/mesos/containerizer.cpp
     slave/containerizer/mesos/launch.cpp
+    slave/containerizer/mesos/launcher.cpp
     slave/containerizer/mesos/mount.cpp
+    slave/containerizer/mesos/isolators/filesystem/posix.cpp
+    slave/containerizer/mesos/isolators/posix/disk.cpp
     slave/containerizer/mesos/provisioner/paths.cpp
     slave/containerizer/mesos/provisioner/provisioner.cpp
     slave/containerizer/mesos/provisioner/store.cpp

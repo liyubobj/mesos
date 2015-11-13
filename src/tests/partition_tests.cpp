@@ -16,9 +16,9 @@
  * limitations under the License.
  */
 
-#include <gmock/gmock.h>
-
 #include <vector>
+
+#include <gmock/gmock.h>
 
 #include <process/clock.hpp>
 #include <process/future.hpp>
@@ -31,6 +31,8 @@
 #include "common/protobuf_utils.hpp"
 
 #include "master/master.hpp"
+
+#include "master/allocator/mesos/allocator.hpp"
 
 #include "slave/constants.hpp"
 #include "slave/flags.hpp"

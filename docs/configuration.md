@@ -998,10 +998,82 @@ file:///path/to/file (where file contains one of the above)</code></pre>
   </tr>
   <tr>
     <td>
+      --docker_auth_server=VALUE
+    </td>
+    <td>
+      Docker authentication server.
+      (default: auth.docker.io)
+    </td>
+  </tr>
+  <tr>
+    <td>
+      --docker_auth_server_port=VALUE
+    </td>
+    <td>
+      Docker authentication server port.
+      (default: 443)
+    </td>
+  </tr>
+  <tr>
+    <td>
+      --docker_local_archives_dir=VALUE
+    </td>
+    <td>
+      Directory for docker local puller to look in for image archives.
+      (default: /tmp/mesos/images/docker)
+    </td>
+  </tr>
+  <tr>
+    <td>
+      --docker_puller=VALUE
+    </td>
+    <td>
+      Strategy for docker puller to fetch images.
+      (default: local)
+    </td>
+  </tr>
+  <tr>
+    <td>
+      --docker_puller_timeout_secs=VALUE
+    </td>
+    <td>
+      Timeout in seconds for pulling images from the Docker registry.
+      (default: 60)
+    </td>
+  </tr>
+  <tr>
+    <td>
+      --docker_registry=VALUE
+    </td>
+    <td>
+      Default Docker image registry server host.
+      (default: registry-1.docker.io)
+    </td>
+  </tr>
+  <tr>
+    <td>
+      --docker_registry_port=VALUE
+    </td>
+    <td>
+      Default Docker registry server port.
+      (default: 443)
+    </td>
+  </tr>
+  <tr>
+    <td>
+      --docker_store_dir=VALUE
+    </td>
+    <td>
+      Directory the Docker provisioner will store images in.
+      (default: /tmp/mesos/store/docker)
+    </td>
+  </tr>
+  <tr>
+    <td>
       --docker_remove_delay=VALUE
     </td>
     <td>
-      The amount of time to wait before removing docker containers
+      The amount of time to wait before removing Docker containers
       (e.g., 3days, 2weeks, etc).
       (default: 6hrs)
     </td>
@@ -1394,9 +1466,41 @@ file:///path/to/file (where file contains one of the above)</code></pre>
       --resources=VALUE
     </td>
     <td>
-      Total consumable resources per slave, in the form
+      <p>
+      Total consumable resources per slave. Can be provided in JSON format or as
+      a semicolon-delimited list of key:value pairs, with the role optionally
+      specified.
+      </p><p>
+      As a key:value list:
+      </p><p>
+      <code>name(role):value;name:value...</code>
+      </p><p>
+      To use JSON, pass a JSON-formatted string or use --resources=filepath to
+      specify the resources via a file containing a JSON-formatted string.
+      'filepath' can be of the form 'file:///path/to/file' or '/path/to/file'.
+      </p><p>
+      Example JSON:
+</p><pre><code>[
+  {
+    "name": "cpus",
+    "type": "SCALAR",
+    "scalar": {
+      "value": 24
+    }
+  },
+  {
+    "name": "mem",
+    "type": "SCALAR",
+    "scalar": {
+      "value": 24576
+    }
+  }
+]</code></pre>
+      <p>
+      See the documentation on
+      <a href="/documentation/latest/attributes-resources/">Attributes and
+      Resources</a> for more information.
       </p>
-      <code>name(role):value;name(role):value...</code>.
     </td>
   </tr>
   <tr>

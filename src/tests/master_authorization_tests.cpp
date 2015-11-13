@@ -16,9 +16,9 @@
  * limitations under the License.
  */
 
-#include <gmock/gmock.h>
-
 #include <vector>
+
+#include <gmock/gmock.h>
 
 #include <mesos/executor.hpp>
 #include <mesos/scheduler.hpp>
@@ -34,6 +34,8 @@
 #include <stout/try.hpp>
 
 #include "master/master.hpp"
+
+#include "master/allocator/mesos/allocator.hpp"
 
 #include "messages/messages.hpp"
 

@@ -16,13 +16,13 @@
  * limitations under the License.
  */
 
-#include <gmock/gmock.h>
-
 #include <atomic>
 #include <iostream>
 #include <string>
 #include <queue>
 #include <vector>
+
+#include <gmock/gmock.h>
 
 #include <mesos/master/allocator.hpp>
 
@@ -45,6 +45,7 @@
 
 #include "master/allocator/mesos/hierarchical.hpp"
 
+#include "tests/allocator.hpp"
 #include "tests/mesos.hpp"
 
 using mesos::internal::master::MIN_CPUS;

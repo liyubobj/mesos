@@ -42,7 +42,7 @@ namespace docker {
 class RegistryPullerProcess;
 
 /*
- * Pulls an image from Docker registry.
+ * Pulls an image from registry.
  */
 class RegistryPuller : public Puller
 {
@@ -55,14 +55,15 @@ public:
   ~RegistryPuller();
 
   /**
-   * Pulls an image into a download directory.
+   * Pulls an image into a download directory. This image could consist
+   * multiple layers of blobs.
    *
    * @param imageName local name of the image.
-   * @param downloadDirectory path to which the layers should be downloaded.
+   * @param downloadDir path to which the layers should be downloaded.
    */
   process::Future<std::list<std::pair<std::string, std::string>>> pull(
       const Image::Name& imageName,
-      const Path& downloadDirectory);
+      const Path& downloadDir);
 
 private:
   RegistryPuller(const process::Owned<RegistryPullerProcess>& process);

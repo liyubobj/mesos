@@ -16,10 +16,10 @@
  * limitations under the License.
  */
 
-#include <gmock/gmock.h>
-
 #include <string>
 #include <vector>
+
+#include <gmock/gmock.h>
 
 #include <mesos/executor.hpp>
 #include <mesos/mesos.hpp>
@@ -46,6 +46,8 @@
 #include "common/protobuf_utils.hpp"
 
 #include "master/master.hpp"
+
+#include "master/allocator/mesos/allocator.hpp"
 
 #include "sched/constants.hpp"
 

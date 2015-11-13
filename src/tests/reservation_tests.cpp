@@ -16,13 +16,13 @@
  * limitations under the License.
  */
 
-#include <gmock/gmock.h>
-
 #include <iostream>
 #include <limits>
 #include <map>
 #include <string>
 #include <vector>
+
+#include <gmock/gmock.h>
 
 #include <mesos/executor.hpp>
 #include <mesos/scheduler.hpp>
@@ -44,6 +44,7 @@
 
 #include "master/allocator/mesos/hierarchical.hpp"
 
+#include "tests/allocator.hpp"
 #include "tests/containerizer.hpp"
 #include "tests/mesos.hpp"
 

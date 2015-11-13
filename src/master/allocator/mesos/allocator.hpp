@@ -150,6 +150,13 @@ public:
   process::Future<Nothing> resolveConflicts(
       const FrameworkID& frameworkId,
       const TaskInfo& task);
+  
+  void setQuota(
+      const std::string& role,
+      const mesos::quota::QuotaInfo& quota);
+
+  void removeQuota(
+      const std::string& role);
 
 private:
   MesosAllocator();
@@ -274,6 +281,13 @@ public:
   virtual process::Future<Nothing> resolveConflicts(
       const FrameworkID& frameworkId,
       const TaskInfo& task) = 0;
+
+  virtual void setQuota(
+      const std::string& role,
+      const mesos::quota::QuotaInfo& quota) = 0;
+
+  virtual void removeQuota(
+      const std::string& role) = 0;
 };
 
 
@@ -614,6 +628,29 @@ MesosAllocator<AllocatorProcess>::resolveConflicts(
       &MesosAllocatorProcess::resolveConflicts,
       frameworkId,
       task);
+}
+
+template <typename AllocatorProcess>
+inline void MesosAllocator<AllocatorProcess>::setQuota(
+    const std::string& role,
+    const mesos::quota::QuotaInfo& quota)
+{
+  process::dispatch(
+      process,
+      &MesosAllocatorProcess::setQuota,
+      role,
+      quota);
+}
+
+
+template <typename AllocatorProcess>
+inline void MesosAllocator<AllocatorProcess>::removeQuota(
+    const std::string& role)
+{
+  process::dispatch(
+      process,
+      &MesosAllocatorProcess::removeQuota,
+      role);
 }
 
 } // namespace allocator {

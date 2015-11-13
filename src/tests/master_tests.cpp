@@ -18,11 +18,11 @@
 
 #include <unistd.h>
 
-#include <gmock/gmock.h>
-
 #include <memory>
 #include <string>
 #include <vector>
+
+#include <gmock/gmock.h>
 
 #include <mesos/executor.hpp>
 #include <mesos/scheduler.hpp>
@@ -52,6 +52,8 @@
 
 #include "master/flags.hpp"
 #include "master/master.hpp"
+
+#include "master/allocator/mesos/allocator.hpp"
 
 #include "slave/constants.hpp"
 #include "slave/gc.hpp"

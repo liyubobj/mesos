@@ -19,6 +19,7 @@
 #include <utility>
 
 #include <gmock/gmock.h>
+
 #include <gtest/gtest.h>
 
 #include <stout/duration.hpp>
@@ -856,7 +857,7 @@ TEST_F(RegistryClientTest, SimpleGetBlob)
 
   Future<size_t> result =
     registryClient.get()->getBlob(
-        "/blob",
+        parseImageName("blob"),
         "digest",
         blobPath);
 
@@ -961,7 +962,7 @@ TEST_F(RegistryClientTest, BadRequest)
 
   Future<size_t> result =
     registryClient.get()->getBlob(
-        "/blob",
+        parseImageName("blob"),
         "digest",
         blobPath);
 
@@ -988,8 +989,8 @@ TEST_F(RegistryClientTest, BadRequest)
 }
 
 
-// Tests Docker RegistryPuller component. It simulates pulling an image layer
-// from Docker registry and then verifies the content saved on disk.
+// Tests docker RegistryPuller component. It simulates pulling an image layer
+// from remote registry and then verifies the content saved on disk.
 TEST_F(RegistryClientTest, SimpleRegistryPuller)
 {
   Try<Socket> server = getServer();

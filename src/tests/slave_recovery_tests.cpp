@@ -19,9 +19,9 @@
 #include <stdint.h>
 #include <unistd.h>
 
-#include <gtest/gtest.h>
-
 #include <string>
+
+#include <gtest/gtest.h>
 
 #include <mesos/executor.hpp>
 #include <mesos/resources.hpp>
@@ -58,6 +58,7 @@
 
 #include "messages/messages.hpp"
 
+#include "tests/allocator.hpp"
 #include "tests/containerizer.hpp"
 #include "tests/mesos.hpp"
 #include "tests/utils.hpp"

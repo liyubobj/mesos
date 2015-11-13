@@ -142,98 +142,87 @@ endif
 
 # First, let's define necessary protocol buffer files.
 
+ALLOCATOR_PROTO = $(top_srcdir)/include/mesos/master/allocator.proto
+AUTHENTICATION_PROTO = $(top_srcdir)/include/mesos/authentication/authentication.proto
+AUTHORIZATION_PROTO = $(top_srcdir)/include/mesos/authorizer/authorizer.proto
+CONTAINERIZER_PROTO = $(top_srcdir)/include/mesos/containerizer/containerizer.proto
+EXECUTOR_PROTO = $(top_srcdir)/include/mesos/executor/executor.proto
+FETCHER_PROTO = $(top_srcdir)/include/mesos/fetcher/fetcher.proto
+MAINTENANCE_PROTO = $(top_srcdir)/include/mesos/maintenance/maintenance.proto
 MESOS_PROTO = $(top_srcdir)/include/mesos/mesos.proto
-
+MODULE_PROTO = $(top_srcdir)/include/mesos/module/module.proto
+QUOTA_PROTO = $(top_srcdir)/include/mesos/quota/quota.proto
+SCHEDULER_PROTO = $(top_srcdir)/include/mesos/scheduler/scheduler.proto
+ISOLATOR_PROTO = $(top_srcdir)/include/mesos/slave/isolator.proto
+OVERSUBSCRIPTION_PROTO = $(top_srcdir)/include/mesos/slave/oversubscription.proto
+V1_EXECUTOR_PROTO = $(top_srcdir)/include/mesos/v1/executor/executor.proto
 V1_MESOS_PROTO = $(top_srcdir)/include/mesos/v1/mesos.proto
+V1_SCHEDULER_PROTO = $(top_srcdir)/include/mesos/v1/scheduler/scheduler.proto
 
-AUTHENTICATION_PROTO =							\
-  $(top_srcdir)/include/mesos/authentication/authentication.proto
 
-AUTHORIZATION_PROTO =							\
-  $(top_srcdir)/include/mesos/authorizer/authorizer.proto
+LOG_PROTOS =								\
+  messages/log.pb.cc							\
+  messages/log.pb.h
 
-CONTAINERIZER_PROTO =							\
-  $(top_srcdir)/include/mesos/containerizer/containerizer.proto
+STATE_PROTOS =								\
+  messages/state.pb.cc							\
+  messages/state.pb.h
 
-EXECUTOR_PROTO =							\
-  $(top_srcdir)/include/mesos/executor/executor.proto
-
-V1_EXECUTOR_PROTO =							\
-  $(top_srcdir)/include/mesos/v1/executor/executor.proto
-
-FETCHER_PROTO =								\
-  $(top_srcdir)/include/mesos/fetcher/fetcher.proto
-
-MAINTENANCE_PROTO =							\
-  $(top_srcdir)/include/mesos/maintenance/maintenance.proto
-
-ALLOCATOR_PROTO =							\
-  $(top_srcdir)/include/mesos/master/allocator.proto
-
-QUOTA_PROTO =								\
-  $(top_srcdir)/include/mesos/master/quota.proto
-
-MODULE_PROTO =								\
-  $(top_srcdir)/include/mesos/module/module.proto
-
-SCHEDULER_PROTO =							\
-  $(top_srcdir)/include/mesos/scheduler/scheduler.proto
-
-V1_SCHEDULER_PROTO =							\
-  $(top_srcdir)/include/mesos/v1/scheduler/scheduler.proto
-
-ISOLATOR_PROTO =							\
-  $(top_srcdir)/include/mesos/slave/isolator.proto
-
-OVERSUBSCRIPTION_PROTO =						\
-  $(top_srcdir)/include/mesos/slave/oversubscription.proto
 
 CXX_PROTOS =								\
   ../include/mesos/mesos.pb.cc						\
   ../include/mesos/mesos.pb.h						\
-  authentication/authentication.pb.cc					\
+  ../include/mesos/authentication/authentication.pb.cc			\
   ../include/mesos/authentication/authentication.pb.h			\
-  authorizer/authorizer.pb.cc						\
+  ../include/mesos/authorizer/authorizer.pb.cc				\
   ../include/mesos/authorizer/authorizer.pb.h				\
-  containerizer/containerizer.pb.cc					\
+  ../include/mesos/containerizer/containerizer.pb.cc			\
   ../include/mesos/containerizer/containerizer.pb.h			\
-  executor/executor.pb.cc						\
+  ../include/mesos/executor/executor.pb.cc				\
   ../include/mesos/executor/executor.pb.h				\
-  fetcher/fetcher.pb.cc							\
+  ../include/mesos/fetcher/fetcher.pb.cc				\
   ../include/mesos/fetcher/fetcher.pb.h					\
-  maintenance/maintenance.pb.cc						\
+  ../include/mesos/maintenance/maintenance.pb.cc			\
   ../include/mesos/maintenance/maintenance.pb.h				\
-  master/allocator.pb.cc						\
+  ../include/mesos/master/allocator.pb.cc				\
   ../include/mesos/master/allocator.pb.h				\
-  master/quota.pb.cc							\
-  ../include/mesos/master/quota.pb.h					\
-  module/module.pb.cc							\
+  ../include/mesos/module/module.pb.cc					\
   ../include/mesos/module/module.pb.h					\
-  scheduler/scheduler.pb.cc						\
+  ../include/mesos/quota/quota.pb.cc					\
+  ../include/mesos/quota/quota.pb.h					\
+  ../include/mesos/scheduler/scheduler.pb.cc				\
   ../include/mesos/scheduler/scheduler.pb.h				\
-  slave/isolator.pb.cc							\
+  ../include/mesos/slave/isolator.pb.cc					\
   ../include/mesos/slave/isolator.pb.h					\
-  slave/oversubscription.pb.cc						\
+  ../include/mesos/slave/oversubscription.pb.cc				\
   ../include/mesos/slave/oversubscription.pb.h				\
   ../include/mesos/v1/mesos.pb.cc					\
   ../include/mesos/v1/mesos.pb.h					\
-  v1/executor/executor.pb.cc						\
+  ../include/mesos/v1/executor/executor.pb.cc				\
   ../include/mesos/v1/executor/executor.pb.h				\
-  v1/scheduler/scheduler.pb.cc						\
-  ../include/mesos/v1/scheduler/scheduler.pb.h
+  ../include/mesos/v1/scheduler/scheduler.pb.cc				\
+  ../include/mesos/v1/scheduler/scheduler.pb.h				\
+  master/registry.pb.cc							\
+  master/registry.pb.h							\
+  messages/flags.pb.cc							\
+  messages/flags.pb.h							\
+  messages/messages.pb.cc						\
+  messages/messages.pb.h						\
+  slave/containerizer/mesos/provisioner/docker/message.pb.cc		\
+  slave/containerizer/mesos/provisioner/docker/message.pb.h
 
 
 JAVA_PROTOS =								\
   java/generated/org/apache/mesos/Protos.java				\
   java/generated/org/apache/mesos/containerizer/Protos.java
 
-V1_JAVA_PROTOS =							\
-  java/generated/org/apache/mesos/v1/Protos.java			\
-  java/generated/org/apache/mesos/v1/scheduler/Protos.java
-
 PYTHON_PROTOS =								\
   python/interface/src/mesos/interface/mesos_pb2.py			\
   python/interface/src/mesos/interface/containerizer_pb2.py
+
+V1_JAVA_PROTOS =							\
+  java/generated/org/apache/mesos/v1/Protos.java			\
+  java/generated/org/apache/mesos/v1/scheduler/Protos.java
 
 V1_PYTHON_PROTOS =							\
   python/interface/src/mesos/v1/interface/mesos_pb2.py			\
@@ -242,133 +231,88 @@ V1_PYTHON_PROTOS =							\
 
 BUILT_SOURCES += 							\
   $(CXX_PROTOS) 							\
+  $(LOG_PROTOS)								\
   $(JAVA_PROTOS) 							\
-  $(V1_JAVA_PROTOS) 							\
   $(PYTHON_PROTOS) 							\
+  $(STATE_PROTOS)							\
+  $(V1_JAVA_PROTOS) 							\
   $(V1_PYTHON_PROTOS)
 
 CLEANFILES += 								\
   $(CXX_PROTOS) 							\
+  $(LOG_PROTOS)								\
   $(JAVA_PROTOS) 							\
-  $(V1_JAVA_PROTOS) 							\
   $(PYTHON_PROTOS) 							\
+  $(STATE_PROTOS)							\
+  $(V1_JAVA_PROTOS) 							\
   $(V1_PYTHON_PROTOS)
 
-FLAGS_PROTOS = messages/flags.pb.cc messages/flags.pb.h
-
-BUILT_SOURCES += $(FLAGS_PROTOS)
-CLEANFILES += $(FLAGS_PROTOS)
-
-MESSAGES_PROTOS = messages/messages.pb.cc messages/messages.pb.h
-
-BUILT_SOURCES += $(MESSAGES_PROTOS)
-CLEANFILES += $(MESSAGES_PROTOS)
-
-LOG_PROTOS = messages/log.pb.cc messages/log.pb.h
-
-BUILT_SOURCES += $(LOG_PROTOS)
-CLEANFILES += $(LOG_PROTOS)
-
-STATE_PROTOS = messages/state.pb.cc messages/state.pb.h
-
-BUILT_SOURCES += $(STATE_PROTOS)
-CLEANFILES += $(STATE_PROTOS)
-
-DOCKER_PROVISIONER_PROTOS =                                             \
-  slave/containerizer/mesos/provisioner/docker/message.pb.cc		\
-  slave/containerizer/mesos/provisioner/docker/message.pb.h
-
-BUILT_SOURCES += $(DOCKER_PROVISIONER_PROTOS)
-CLEANFILES += $(DOCKER_PROVISIONER_PROTOS)
-
-REGISTRY_PROTOS = master/registry.pb.cc master/registry.pb.h
-
-BUILT_SOURCES += $(REGISTRY_PROTOS)
-CLEANFILES += $(REGISTRY_PROTOS)
 
 # Targets for generating protocol buffer code.
-# For the include headers, place the header files in the include
-# directory and leave the cc files in src.
+# TODO(jieyu): Consolidate the following rules.
+../include/mesos/master/%.pb.cc ../include/mesos/master/%.pb.h: $(ALLOCATOR_PROTO)
+	$(MKDIR_P) $(@D)
+	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
+
+../include/mesos/authentication/%.pb.cc ../include/mesos/authentication/%.pb.h: $(AUTHENTICATION_PROTO)
+	$(MKDIR_P) $(@D)
+	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
+
+../include/mesos/authorizer/%.pb.cc ../include/mesos/authorizer/%.pb.h: $(AUTHORIZATION_PROTO)
+	$(MKDIR_P) $(@D)
+	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
+
+../include/mesos/containerizer/%.pb.cc ../include/mesos/containerizer/%.pb.h: $(CONTAINERIZER_PROTO)
+	$(MKDIR_P) $(@D)
+	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
+
+../include/mesos/executor/%.pb.cc ../include/mesos/executor/%.pb.h: $(EXECUTOR_PROTO)
+	$(MKDIR_P) $(@D)
+	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
+
+../include/mesos/fetcher/%.pb.cc ../include/mesos/fetcher/%.pb.h: $(FETCHER_PROTO)
+	$(MKDIR_P) $(@D)
+	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
+
+../include/mesos/maintenance/%.pb.cc ../include/mesos/maintenance/%.pb.h: $(MAINTENANCE_PROTO)
+	$(MKDIR_P) $(@D)
+	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
+
 ../include/mesos/mesos.pb.cc ../include/mesos/mesos.pb.h: $(MESOS_PROTO)
+	$(MKDIR_P) $(@D)
+	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
+
+../include/mesos/module/%.pb.cc ../include/mesos/module/%.pb.h: $(MODULE_PROTO)
+	$(MKDIR_P) $(@D)
+	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
+
+../include/mesos/quota/%.pb.cc ../include/mesos/quota/%.pb.h: $(QUOTA_PROTO)
+	$(MKDIR_P) $(@D)
+	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
+
+../include/mesos/scheduler/%.pb.cc ../include/mesos/scheduler/%.pb.h: $(SCHEDULER_PROTO)
+	$(MKDIR_P) $(@D)
+	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
+
+../include/mesos/slave/isolator.pb.cc ../include/mesos/slave/isolator.pb.h: $(ISOLATOR_PROTO)
+	$(MKDIR_P) $(@D)
+	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
+
+../include/mesos/slave/oversubscription.pb.cc ../include/mesos/slave/oversubscription.pb.h: $(OVERSUBSCRIPTION_PROTO)
+	$(MKDIR_P) $(@D)
+	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
+
+../include/mesos/v1/executor/%.pb.cc ../include/mesos/v1/executor/%.pb.h: $(V1_EXECUTOR_PROTO)
 	$(MKDIR_P) $(@D)
 	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
 
 ../include/mesos/v1/mesos.pb.cc ../include/mesos/v1/mesos.pb.h: $(V1_MESOS_PROTO)
 	$(MKDIR_P) $(@D)
-	$(MKDIR_P) ../include/mesos/v1
 	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
 
-authentication/%.pb.cc ../include/mesos/authentication/%.pb.h: $(AUTHENTICATION_PROTO)
+../include/mesos/v1/scheduler/%.pb.cc ../include/mesos/v1/scheduler/%.pb.h: $(V1_SCHEDULER_PROTO)
 	$(MKDIR_P) $(@D)
-	$(MKDIR_P) ../include/mesos/authentication
 	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
-	mv ../include/mesos/authentication/*.pb.cc $(@D)
-
-authorizer/%.pb.cc ../include/mesos/authorizer/%.pb.h: $(AUTHORIZATION_PROTO)
-	$(MKDIR_P) $(@D)
-	$(MKDIR_P) ../include/mesos/authorizer
-	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
-	mv ../include/mesos/authorizer/*.pb.cc $(@D)
-
-containerizer/%.pb.cc ../include/mesos/containerizer/%.pb.h: $(CONTAINERIZER_PROTO)
-	$(MKDIR_P) $(@D)
-	$(MKDIR_P) ../include/mesos/containerizer
-	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
-	mv ../include/mesos/containerizer/*.pb.cc $(@D)
-
-executor/%.pb.cc ../include/mesos/executor/%.pb.h: $(EXECUTOR_PROTO)
-	$(MKDIR_P) $(@D)
-	$(MKDIR_P) ../include/mesos/executor
-	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
-	mv ../include/mesos/executor/*.pb.cc $(@D)
-
-v1/executor/%.pb.cc ../include/mesos/v1/executor/%.pb.h: $(V1_EXECUTOR_PROTO)
-	$(MKDIR_P) $(@D)
-	$(MKDIR_P) ../include/mesos/v1/executor
-	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
-	mv ../include/mesos/v1/executor/*.pb.cc $(@D)
-
-fetcher/%.pb.cc ../include/mesos/fetcher/%.pb.h: $(FETCHER_PROTO)
-	$(MKDIR_P) $(@D)
-	$(MKDIR_P) ../include/mesos/fetcher
-	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
-	mv ../include/mesos/fetcher/*.pb.cc $(@D)
-
-maintenance/%.pb.cc ../include/mesos/maintenance/%.pb.h: $(MAINTENANCE_PROTO)
-	$(MKDIR_P) $(@D)
-	$(MKDIR_P) ../include/mesos/maintenance
-	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
-	mv ../include/mesos/maintenance/*.pb.cc $(@D)
-
-master/%.pb.cc ../include/mesos/master/%.pb.h: $(top_srcdir)/include/mesos/master/%.proto
-	$(MKDIR_P) $(@D)
-	$(MKDIR_P) ../include/mesos/master
-	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
-	mv ../include/mesos/master/$(*F).pb.cc $(@D)
-
-module/%.pb.cc ../include/mesos/module/%.pb.h: $(MODULE_PROTO)
-	$(MKDIR_P) $(@D)
-	$(MKDIR_P) ../include/mesos/module
-	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
-	mv ../include/mesos/module/*.pb.cc $(@D)
-
-scheduler/%.pb.cc ../include/mesos/scheduler/%.pb.h: $(SCHEDULER_PROTO)
-	$(MKDIR_P) $(@D)
-	$(MKDIR_P) ../include/mesos/scheduler
-	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
-	mv ../include/mesos/scheduler/*.pb.cc $(@D)
-
-v1/scheduler/%.pb.cc ../include/mesos/v1/scheduler/%.pb.h: $(V1_SCHEDULER_PROTO)
-	$(MKDIR_P) $(@D)
-	$(MKDIR_P) ../include/mesos/v1/scheduler
-	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
-	mv ../include/mesos/v1/scheduler/*.pb.cc $(@D)
-
-slave/%.pb.cc ../include/mesos/slave/%.pb.h: $(top_srcdir)/include/mesos/slave/%.proto
-	$(MKDIR_P) $(@D)
-	$(MKDIR_P) ../include/mesos/slave
-	$(PROTOC) $(PROTOCFLAGS) --cpp_out=../include $^
-	mv ../include/mesos/slave/$(*F).pb.cc $(@D)
 
 %.pb.cc %.pb.h: %.proto
 	$(MKDIR_P) $(@D)
@@ -463,12 +407,7 @@ python/interface/src/mesos/v1/interface/executor_pb2.py: $(V1_EXECUTOR_PROTO)
 # libraries themselves.
 noinst_LTLIBRARIES += libmesos_no_3rdparty.la
 
-nodist_libmesos_no_3rdparty_la_SOURCES =				\
-  $(CXX_PROTOS)								\
-  $(FLAGS_PROTOS)							\
-  $(MESSAGES_PROTOS)							\
-  $(DOCKER_PROVISIONER_PROTOS)		                                \
-  $(REGISTRY_PROTOS)
+nodist_libmesos_no_3rdparty_la_SOURCES = $(CXX_PROTOS)
 
 # TODO(tillt): Remove authentication/cram_md5/* which will enable us to
 # lose the immediate cyrus-sasl2 dependency.
@@ -542,9 +481,9 @@ libmesos_no_3rdparty_la_SOURCES =						\
 	slave/containerizer/external_containerizer.cpp				\
 	slave/containerizer/fetcher.cpp						\
 	slave/containerizer/isolator.cpp					\
-	slave/containerizer/launcher.cpp					\
 	slave/containerizer/mesos/containerizer.cpp				\
 	slave/containerizer/mesos/launch.cpp					\
+	slave/containerizer/mesos/launcher.cpp					\
 	slave/containerizer/mesos/mount.cpp					\
 	slave/containerizer/mesos/isolators/filesystem/posix.cpp		\
 	slave/containerizer/mesos/isolators/posix/disk.cpp			\
@@ -562,7 +501,7 @@ libmesos_no_3rdparty_la_SOURCES =						\
 	slave/containerizer/mesos/provisioner/docker/paths.cpp			\
 	slave/containerizer/mesos/provisioner/docker/puller.cpp			\
 	slave/containerizer/mesos/provisioner/docker/registry_client.cpp	\
-	slave/containerizer/mesos/provisioner/docker/registry_puller.cpp	\
+	slave/containerizer/mesos/provisioner/docker/registry_puller.cpp		\
 	slave/containerizer/mesos/provisioner/docker/spec.cpp			\
 	slave/containerizer/mesos/provisioner/docker/store.cpp			\
 	slave/containerizer/mesos/provisioner/docker/token_manager.cpp		\
@@ -644,13 +583,10 @@ masterdir = $(pkgincludedir)/master
 
 master_HEADERS =							\
   $(top_srcdir)/include/mesos/master/allocator.hpp			\
-  $(top_srcdir)/include/mesos/master/allocator.proto			\
-  $(top_srcdir)/include/mesos/master/quota.hpp				\
-  $(top_srcdir)/include/mesos/master/quota.proto
+  $(top_srcdir)/include/mesos/master/allocator.proto
 
 nodist_master_HEADERS =							\
-  ../include/mesos/master/allocator.pb.h				\
-  ../include/mesos/master/quota.pb.h
+  ../include/mesos/master/allocator.pb.h
 
 moduledir = $(pkgincludedir)/module
 
@@ -668,6 +604,14 @@ module_HEADERS =							\
   $(top_srcdir)/include/mesos/module/resource_estimator.hpp
 
 nodist_module_HEADERS = ../include/mesos/module/module.pb.h
+
+quotadir = $(pkgincludedir)/quota
+
+quota_HEADERS =								\
+$(top_srcdir)/include/mesos/quota/quota.hpp				\
+$(top_srcdir)/include/mesos/quota/quota.proto
+
+nodist_quota_HEADERS = ../include/mesos/quota/quota.pb.h
 
 schedulerdir = $(pkgincludedir)/scheduler
 
@@ -733,7 +677,7 @@ if OS_LINUX
   libmesos_no_3rdparty_la_SOURCES += linux/fs.cpp
   libmesos_no_3rdparty_la_SOURCES += linux/perf.cpp
   libmesos_no_3rdparty_la_SOURCES += linux/systemd.cpp
-  libmesos_no_3rdparty_la_SOURCES += slave/containerizer/linux_launcher.cpp
+  libmesos_no_3rdparty_la_SOURCES += slave/containerizer/mesos/linux_launcher.cpp
   libmesos_no_3rdparty_la_SOURCES += slave/containerizer/mesos/isolators/cgroups/cpushare.cpp
   libmesos_no_3rdparty_la_SOURCES += slave/containerizer/mesos/isolators/cgroups/mem.cpp
   libmesos_no_3rdparty_la_SOURCES += slave/containerizer/mesos/isolators/cgroups/perf_event.cpp
@@ -854,10 +798,10 @@ libmesos_no_3rdparty_la_SOURCES +=						\
 	slave/containerizer/external_containerizer.hpp				\
 	slave/containerizer/fetcher.hpp						\
 	slave/containerizer/isolator.hpp					\
-	slave/containerizer/launcher.hpp					\
-	slave/containerizer/linux_launcher.hpp					\
 	slave/containerizer/mesos/containerizer.hpp				\
 	slave/containerizer/mesos/launch.hpp					\
+	slave/containerizer/mesos/launcher.hpp					\
+	slave/containerizer/mesos/linux_launcher.hpp				\
 	slave/containerizer/mesos/mount.hpp					\
 	slave/containerizer/mesos/isolators/posix.hpp				\
 	slave/containerizer/mesos/isolators/cgroups/constants.hpp		\
@@ -884,12 +828,13 @@ libmesos_no_3rdparty_la_SOURCES +=						\
 	slave/containerizer/mesos/provisioner/docker/paths.hpp			\
 	slave/containerizer/mesos/provisioner/docker/puller.hpp			\
 	slave/containerizer/mesos/provisioner/docker/registry_client.hpp	\
-	slave/containerizer/mesos/provisioner/docker/registry_puller.hpp	\
+	slave/containerizer/mesos/provisioner/docker/registry_puller.hpp		\
 	slave/containerizer/mesos/provisioner/docker/spec.hpp			\
 	slave/containerizer/mesos/provisioner/docker/store.hpp			\
 	slave/containerizer/mesos/provisioner/docker/token_manager.hpp		\
 	slave/qos_controllers/noop.hpp						\
 	slave/resource_estimators/noop.hpp					\
+	tests/allocator.hpp							\
 	tests/cluster.hpp							\
 	tests/containerizer.hpp							\
 	tests/environment.hpp							\
@@ -1028,14 +973,16 @@ lib_LTLIBRARIES += libmesos.la
 # Include as part of the distribution.
 libmesos_la_SOURCES =							\
   $(ALLOCATOR_PROTO)							\
-  $(QUOTA_PROTO)							\
+  $(AUTHENTICATION_PROTO)						\
+  $(AUTHORIZATION_PROTO)						\
   $(CONTAINERIZER_PROTO)						\
+  $(EXECUTOR_PROTO)							\
   $(FETCHER_PROTO)							\
   $(MAINTENANCE_PROTO)							\
   $(MESOS_PROTO)							\
   $(MODULE_PROTO)							\
+  $(QUOTA_PROTO)							\
   $(SCHEDULER_PROTO)							\
-  $(EXECUTOR_PROTO)							\
   $(ISOLATOR_PROTO)							\
   $(OVERSUBSCRIPTION_PROTO)						\
   $(V1_EXECUTOR_PROTO)							\
@@ -1740,6 +1687,7 @@ mesos_tests_SOURCES =						\
   tests/attributes_tests.cpp					\
   tests/authentication_tests.cpp				\
   tests/authorization_tests.cpp					\
+  tests/cluster.cpp						\
   tests/containerizer.cpp					\
   tests/cram_md5_authentication_tests.cpp			\
   tests/credentials_tests.cpp					\
