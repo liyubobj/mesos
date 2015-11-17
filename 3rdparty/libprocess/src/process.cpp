@@ -89,6 +89,7 @@
 #include <stout/numify.hpp>
 #include <stout/option.hpp>
 #include <stout/os.hpp>
+#include <stout/os/strerror.hpp>
 #include <stout/path.hpp>
 #include <stout/strings.hpp>
 #include <stout/synchronized.hpp>
@@ -383,7 +384,7 @@ public:
 
   ProcessReference use(const UPID& pid);
 
-  bool handle(
+  void handle(
       const Socket& socket,
       Request* request);
 
@@ -1101,14 +1102,14 @@ bool HttpProxy::process(const Future<Response>& future, const Request& request)
           VLOG(1) << "Returning '404 Not Found' for path '" << path << "'";
           socket_manager->send(NotFound(), request, socket);
       } else {
-        const char* error = strerror(errno);
+        const string error = os::strerror(errno);
         VLOG(1) << "Failed to send file at '" << path << "': " << error;
         socket_manager->send(InternalServerError(), request, socket);
       }
     } else {
       struct stat s; // Need 'struct' because of function named 'stat'.
       if (fstat(fd, &s) != 0) {
-        const char* error = strerror(errno);
+        const string error = os::strerror(errno);
         VLOG(1) << "Failed to send file at '" << path << "': " << error;
         socket_manager->send(InternalServerError(), request, socket);
       } else if (S_ISDIR(s.st_mode)) {
@@ -2198,7 +2199,7 @@ ProcessReference ProcessManager::use(const UPID& pid)
 }
 
 
-bool ProcessManager::handle(
+void ProcessManager::handle(
     const Socket& socket,
     Request* request)
 {
@@ -2235,7 +2236,7 @@ bool ProcessManager::handle(
       }
 
       delete request;
-      return accepted;
+      return;
     }
 
     VLOG(1) << "Failed to handle libprocess message: "
@@ -2243,7 +2244,7 @@ bool ProcessManager::handle(
             << " (User-Agent: " << request->headers["User-Agent"] << ")";
 
     delete request;
-    return false;
+    return;
   }
 
   // Treat this as an HTTP request. Start by checking that the path
@@ -2260,7 +2261,7 @@ bool ProcessManager::handle(
 
     // Cleanup request.
     delete request;
-    return false;
+    return;
   }
 
   // Ignore requests with relative paths (i.e., contain "/..").
@@ -2277,7 +2278,7 @@ bool ProcessManager::handle(
 
     // Cleanup request.
     delete request;
-    return false;
+    return;
   }
 
   // Split the path by '/'.
@@ -2330,7 +2331,7 @@ bool ProcessManager::handle(
 
         // Cleanup request.
         delete request;
-        return false;
+        return;
       }
     }
   }
@@ -2338,7 +2339,8 @@ bool ProcessManager::handle(
   if (receiver) {
     // TODO(benh): Use the sender PID in order to capture
     // happens-before timing relationships for testing.
-    return deliver(receiver, new HttpEvent(socket, request));
+    deliver(receiver, new HttpEvent(socket, request, promise));
+    return;
   }
 
   // This has no receiver, send error response.
@@ -2353,7 +2355,6 @@ bool ProcessManager::handle(
 
   // Cleanup request.
   delete request;
-  return false;
 }
 
 

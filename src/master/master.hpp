@@ -38,6 +38,8 @@
 
 #include <mesos/module/authenticator.hpp>
 
+#include <mesos/quota/quota.hpp>
+
 #include <mesos/scheduler/scheduler.hpp>
 
 #include <process/limiter.hpp>
@@ -834,12 +836,75 @@ private:
     return leader.isSome() && leader.get() == info_;
   }
 
+  /**
+   * Inner class used to namespace the handling of quota requests.
+   *
+   * It operates inside the Master actor. It is responsible for validating
+   * and persisting quota requests, and exposing quota status.
+   * @see master/quota_handler.cpp for implementations.
+   */
+  class QuotaHandler
+  {
+  public:
+    explicit QuotaHandler(Master* _master) : master(_master)
+    {
+      CHECK_NOTNULL(master);
+    }
+
+    process::Future<process::http::Response> status(
+        const process::http::Request& request) const
+    {
+      // TODO(joerg84): For now this is just a stub. It will be filled as
+      // part of MESOS-1791.
+      return process::http::NotImplemented();
+    }
+
+    process::Future<process::http::Response> set(
+        const process::http::Request& request) const;
+
+    process::Future<process::http::Response> remove(
+        const process::http::Request& request) const
+    {
+      // TODO(joerg84): For now this is just a stub. It will be filled as
+      // part of MESOS-1791.
+      return process::http::NotImplemented();
+    }
+
+  private:
+    // Heuristically tries to determine whether a quota request could
+    // reasonably be satisfied given the current cluster capacity. The
+    // goal is to determine whether a user may accidentally request an
+    // amount of resources that would prevent frameworks without quota
+    // from getting any offers. A force flag will allow users to bypass
+    // this check.
+    //
+    // The heuristic tests whether the total quota, including the new
+    // request, does not exceed the sum of non-static cluster resources,
+    // i.e. the following inequality holds:
+    //   total - statically reserved >= total quota + quota request
+    //
+    // Please be advised that:
+    //   * It is up to an allocator how to satisfy quota (for example,
+    //     what resources to account towards quota, as well as which
+    //     resources to consider allocatable for quota).
+    //   * Even if there are enough resources at the moment of this check,
+    //     agents may terminate at any time, rendering the cluster under
+    //     quota.
+    Option<Error> capacityHeuristic(
+        const mesos::quota::QuotaInfo& request) const;
+
+    // To perform actions related to quota management, we require access to the
+    // master data structures. No synchronization primitives are needed here
+    // since `QuotaHandler`'s functions are invoked in the Master's actor.
+    Master* master;
+  };
+
   // Inner class used to namespace HTTP route handlers (see
   // master/http.cpp for implementations).
   class Http
   {
   public:
-    explicit Http(Master* _master) : master(_master) {}
+    explicit Http(Master* _master) : master(_master), quotaHandler(_master) {}
 
     // Logs the request, route handlers can compose this with the
     // desired request handler to get consistent request logging.
@@ -917,6 +982,10 @@ private:
     process::Future<process::http::Response> unreserve(
         const process::http::Request& request) const;
 
+    // /master/quota
+    process::Future<process::http::Response> quota(
+        const process::http::Request& request) const;
+
     static std::string SCHEDULER_HELP();
     static std::string FLAGS_HELP();
     static std::string FRAMEWORKS();
@@ -935,6 +1004,7 @@ private:
     static std::string MACHINE_UP_HELP();
     static std::string RESERVE_HELP();
     static std::string UNRESERVE_HELP();
+    static std::string QUOTA_HELP();
 
   private:
     // Helper for doing authentication, returns the credential used if
@@ -972,6 +1042,10 @@ private:
         const Offer::Operation& operation) const;
 
     Master* master;
+
+    // NOTE: The quota specific pieces of the Operator API are factored
+    // out into this separate class.
+    QuotaHandler quotaHandler;
   };
 
   Master(const Master&);              // No copying.
@@ -1176,6 +1250,15 @@ private:
   hashmap<OfferID, process::Timer> inverseOfferTimers;
 
   hashmap<std::string, Role*> roles;
+
+  struct Quota
+  {
+    // Holds the quota protobuf, as constructed from an operator's request.
+    mesos::quota::QuotaInfo info;
+  };
+
+  // We store quotas by role because we set them at the role level.
+  hashmap<std::string, Quota> quotas;
 
   // Authenticator names as supplied via flags.
   std::vector<std::string> authenticatorNames;
@@ -1911,6 +1994,10 @@ struct Role
   }
 
   mesos::master::RoleInfo info;
+
+  // NOTE: The quota for this role is stored in the master. This avoids
+  // duplication of this information and prevents a strict association of quota
+  // with roles in the future.
 
   hashmap<FrameworkID, Framework*> frameworks;
 };
