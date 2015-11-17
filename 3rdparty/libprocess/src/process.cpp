@@ -187,7 +187,7 @@ public:
   // Enqueues a future to a response that will get waited on (up to
   // some timeout) and then sent once all previously enqueued
   // responses have been processed (e.g., waited for and sent).
-  void handle(Future<Response>* future, const Request& request);
+  void handle(const Future<Response>& future, const Request& request);
 
 private:
   // Starts "waiting" on the next available future response.
@@ -210,16 +210,11 @@ private:
   // are acceptable and whether to persist the connection.
   struct Item
   {
-    Item(const Request& _request, Future<Response>* _future)
+    Item(const Request& _request, const Future<Response>& _future)
       : request(_request), future(_future) {}
 
-    ~Item()
-    {
-      delete future;
-    }
-
     const Request request; // Make a copy.
-    Future<Response>* future;
+    Future<Response> future; // Make a copy.
   };
 
   queue<Item*> items;
@@ -1011,12 +1006,12 @@ HttpProxy::~HttpProxy()
     Item* item = items.front();
 
     // Attempt to discard the future.
-    item->future->discard();
+    item->future.discard();
 
     // But it might have already been ready. In general, we need to
     // wait until this future is potentially ready in order to attempt
     // to close a pipe if one exists.
-    item->future->onReady([](const Response& response) {
+    item->future.onReady([](const Response& response) {
       // Cleaning up a response (i.e., closing any open Pipes in the
       // event Response::type is PIPE).
       if (response.type == Response::PIPE) {
@@ -1034,11 +1029,11 @@ HttpProxy::~HttpProxy()
 
 void HttpProxy::enqueue(const Response& response, const Request& request)
 {
-  handle(new Future<Response>(response), request);
+  handle(Future<Response>(response), request);
 }
 
 
-void HttpProxy::handle(Future<Response>* future, const Request& request)
+void HttpProxy::handle(const Future<Response>& future, const Request& request)
 {
   items.push(new Item(request, future));
 
@@ -1052,7 +1047,7 @@ void HttpProxy::next()
 {
   if (items.size() > 0) {
     // Wait for any transition of the future.
-    items.front()->future->onAny(
+    items.front()->future.onAny(
         defer(self(), &HttpProxy::waited, lambda::_1));
   }
 }
@@ -1063,11 +1058,11 @@ void HttpProxy::waited(const Future<Response>& future)
   CHECK(items.size() > 0);
   Item* item = items.front();
 
-  CHECK(future == *item->future);
+  CHECK(future == item->future);
 
   // Process the item and determine if we're done or not (so we know
   // whether to start waiting on the next responses).
-  bool processed = process(*item->future, item->request);
+  bool processed = process(item->future, item->request);
 
   items.pop();
   delete item;
@@ -2337,6 +2332,16 @@ void ProcessManager::handle(
   }
 
   if (receiver) {
+    // The promise is created here but its ownership is passed
+    // into the HttpEvent created below.
+    Promise<Response>* promise(new Promise<Response>());
+
+    PID<HttpProxy> proxy = socket_manager->proxy(socket);
+
+    // Enqueue the response with the HttpProxy so that it respects the
+    // order of requests to account for HTTP/1.1 pipelining.
+    dispatch(proxy, &HttpProxy::handle, promise->future(), *request);
+
     // TODO(benh): Use the sender PID in order to capture
     // happens-before timing relationships for testing.
     deliver(receiver, new HttpEvent(socket, request, promise));
@@ -3094,20 +3099,8 @@ void ProcessBase::visit(const HttpEvent& event)
 
   while (Path(name).dirname() != name) {
     if (handlers.http.count(name) > 0) {
-      // Create the promise to link with whatever gets returned, as well
-      // as a future to wait for the response.
-      std::shared_ptr<Promise<Response>> promise(new Promise<Response>());
-
-      Future<Response>* future = new Future<Response>(promise->future());
-
-      // Get the HttpProxy pid for this socket.
-      PID<HttpProxy> proxy = socket_manager->proxy(event.socket);
-
-      // Let the HttpProxy know about this request (via the future).
-      dispatch(proxy, &HttpProxy::handle, future, *event.request);
-
       // Now call the handler and associate the response with the promise.
-      promise->associate(handlers.http[name](*event.request));
+      event.response->associate(handlers.http[name](*event.request));
 
       return;
     }
@@ -3142,12 +3135,7 @@ void ProcessBase::visit(const HttpEvent& event)
     // extension or we don't have a mapping for? It might be better to
     // just let the browser guess (or do it's own default).
 
-    // Get the HttpProxy pid for this socket.
-    PID<HttpProxy> proxy = socket_manager->proxy(event.socket);
-
-    // Enqueue the response with the HttpProxy so that it respects the
-    // order of requests to account for HTTP/1.1 pipelining.
-    dispatch(proxy, &HttpProxy::enqueue, response, *event.request);
+    event.response->associate(response);
 
     return;
   }
@@ -3155,12 +3143,7 @@ void ProcessBase::visit(const HttpEvent& event)
   VLOG(1) << "Returning '404 Not Found' for"
           << " '" << event.request->url.path << "'";
 
-  // Get the HttpProxy pid for this socket.
-  PID<HttpProxy> proxy = socket_manager->proxy(event.socket);
-
-  // Enqueue the response with the HttpProxy so that it respects the
-  // order of requests to account for HTTP/1.1 pipelining.
-  dispatch(proxy, &HttpProxy::enqueue, NotFound(), *event.request);
+  event.response->associate(NotFound());
 }
 
 
