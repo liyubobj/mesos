@@ -45,7 +45,7 @@ namespace tests {
 
 ACTION_P(InvokeInitialize, allocator)
 {
-  allocator->real->initialize(arg0, arg1, arg2, arg3);
+  allocator->real->initialize(arg0, arg1, arg2, arg3, arg4);
 }
 
 
@@ -243,9 +243,9 @@ public:
     // to get the best of both worlds: the ability to use 'DoDefault'
     // and no warnings when expectations are not explicit.
 
-    ON_CALL(*this, initialize(_, _, _, _))
+    ON_CALL(*this, initialize(_, _, _, _, _))
       .WillByDefault(InvokeInitialize(this));
-    EXPECT_CALL(*this, initialize(_, _, _, _))
+    EXPECT_CALL(*this, initialize(_, _, _, _, _))
       .WillRepeatedly(DoDefault());
 
     ON_CALL(*this, recover(_, _))
@@ -376,7 +376,7 @@ public:
 
   virtual ~TestAllocator() {}
 
-  MOCK_METHOD4(initialize, void(
+  MOCK_METHOD5(initialize, void(
       const Duration&,
       const lambda::function<
           void(const FrameworkID&,
@@ -384,6 +384,9 @@ public:
       const lambda::function<
           void(const FrameworkID&,
                const hashmap<SlaveID, UnavailableResources>&)>&,
+      const lambda::function<
+          void(const FrameworkID&,
+               const SlaveID&)>&,
       const hashmap<std::string, mesos::master::RoleInfo>&));
 
   MOCK_METHOD2(recover, void(

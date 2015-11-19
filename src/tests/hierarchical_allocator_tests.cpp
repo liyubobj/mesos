@@ -145,10 +145,14 @@ protected:
         };
     }
 
+    lambda::function<
+        void(const FrameworkID&, const SlaveID&)> enforceReclaimCallback;
+
     allocator->initialize(
         flags.allocation_interval,
         offerCallback.get(),
         inverseOfferCallback.get(),
+        enforceReclaimCallback,
         roles);
   }
 

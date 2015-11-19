@@ -85,6 +85,8 @@ public:
    *     to the frameworks.
    * @param inverseOfferCallback A callback the allocator uses to send reclaim
    *     allocations from the frameworks.
+   * @param enforceReclaimCallback A callback the allocator uses to ask the
+   *     master to enforce reclaim the executor after a grace period.
    * @param roles The roles are actually checked by the master (see
    *     Master::subscribe). All frameworks that are added to the allocator
    *     will fall into one of these roles.
@@ -98,6 +100,9 @@ public:
           void(const FrameworkID&,
                const hashmap<SlaveID, UnavailableResources>&)>&
         inverseOfferCallback,
+      const lambda::function<
+          void(const FrameworkID&, const SlaveID&)>&
+        enforceReclaimCallback,
       const hashmap<std::string, RoleInfo>& roles) = 0;
 
   /**
@@ -388,9 +393,9 @@ public:
    * to defer the master sending taskLaunch message to the agent until
    * the conflict is resolved.
    */
-   virtual process::Future<Nothing> resolveConflicts(
-       const FrameworkID& frameworkId,
-       const TaskInfo& task) = 0;
+  virtual process::Future<Nothing> resolveConflicts(
+      const FrameworkID& frameworkId,
+      const TaskInfo& task) = 0;
 
   /**
    * Informs the allocator to set quota for the given role.

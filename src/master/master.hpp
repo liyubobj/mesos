@@ -512,6 +512,10 @@ public:
       const FrameworkID& framework,
       const hashmap<SlaveID, UnavailableResources>& resources);
 
+  void enforceReclaim(
+      const FrameworkID& framework,
+      const SlaveID& slave);
+
   // Invoked when there is a newly elected leading master.
   // Made public for testing purposes.
   void detected(const process::Future<Option<MasterInfo>>& pid);

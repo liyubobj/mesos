@@ -607,6 +607,7 @@ void Master::initialize()
       flags.allocation_interval,
       defer(self(), &Master::offer, lambda::_1, lambda::_2),
       defer(self(), &Master::inverseOffer, lambda::_1, lambda::_2),
+      defer(self(), &Master::enforceReclaim, lambda::_1, lambda::_2),
       roleInfos);
 
   // Parse the whitelist. Passing Allocator::updateWhitelist()
@@ -5129,6 +5130,14 @@ void Master::inverseOffer(
             << " inverse offers to framework " << *framework;
 
   framework->send(message);
+}
+
+
+void Master::enforceReclaim(
+      const FrameworkID& framework,
+      const SlaveID& slave)
+{
+  return;
 }
 
 

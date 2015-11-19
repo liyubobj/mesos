@@ -55,6 +55,9 @@ public:
           void(const FrameworkID&,
                const hashmap<SlaveID, UnavailableResources>&)>&
         inverseOfferCallback,
+      const lambda::function<
+          void(const FrameworkID&, const SlaveID&)>&
+        enforceReclaimCallback,
       const hashmap<std::string, mesos::master::RoleInfo>& roles);
 
   void recover(
@@ -152,7 +155,7 @@ public:
   process::Future<Nothing> resolveConflicts(
       const FrameworkID& frameworkId,
       const TaskInfo& task);
-  
+
   void setQuota(
       const std::string& role,
       const mesos::quota::QuotaInfo& quota);
@@ -333,6 +336,9 @@ inline void MesosAllocator<AllocatorProcess>::initialize(
         void(const FrameworkID&,
               const hashmap<SlaveID, UnavailableResources>&)>&
       inverseOfferCallback,
+    const lambda::function<
+          void(const FrameworkID&, const SlaveID&)>&
+        enforceReclaimCallback,
     const hashmap<std::string, mesos::master::RoleInfo>& roles)
 {
   process::dispatch(
