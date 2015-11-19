@@ -799,8 +799,10 @@ TYPED_TEST(MasterAllocatorTest, SlaveAdded)
   // immediately and will get combined with slave2's
   // resources for a single offer.
   EXPECT_CALL(allocator, recoverUnusedResources(_, _, _, _, _))
-    .WillOnce(InvokeRecoverUsedResourcesWithFilters(&allocator, 0.1))
-    .WillRepeatedly(InvokeRecoverUsedResourcesWithFilters(&allocator, 0));
+    .WillOnce(InvokeRecoverUsedResourcesWithFilters(&allocator, 0.1));
+
+  EXPECT_CALL(allocator, recoverResources(_, _, _, _))
+    .WillRepeatedly(InvokeRecoverResourcesWithFilters(&allocator, 0));
 
   EXPECT_CALL(exec, registered(_, _, _, _));
 
