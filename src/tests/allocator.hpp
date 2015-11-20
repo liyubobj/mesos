@@ -198,7 +198,7 @@ ACTION_P(InvokeRecoverUnusedResources, allocator)
 }
 
 
-ACTION_P2(InvokeRecoverUsedResourcesWithFilters, allocator, timeout)
+ACTION_P2(InvokeRecoverUnusedResourcesWithFilters, allocator, timeout)
 {
   Filters filters;
   filters.set_refuse_seconds(timeout);
