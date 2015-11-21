@@ -155,6 +155,7 @@ QUOTA_PROTO = $(top_srcdir)/include/mesos/quota/quota.proto
 SCHEDULER_PROTO = $(top_srcdir)/include/mesos/scheduler/scheduler.proto
 ISOLATOR_PROTO = $(top_srcdir)/include/mesos/slave/isolator.proto
 OVERSUBSCRIPTION_PROTO = $(top_srcdir)/include/mesos/slave/oversubscription.proto
+URI_PROTO = $(top_srcdir)/include/mesos/uri/uri.proto
 V1_EXECUTOR_PROTO = $(top_srcdir)/include/mesos/v1/executor/executor.proto
 V1_MESOS_PROTO = $(top_srcdir)/include/mesos/v1/mesos.proto
 V1_SCHEDULER_PROTO = $(top_srcdir)/include/mesos/v1/scheduler/scheduler.proto
@@ -187,6 +188,8 @@ CXX_PROTOS =								\
   ../include/mesos/slave/isolator.pb.h					\
   ../include/mesos/slave/oversubscription.pb.cc				\
   ../include/mesos/slave/oversubscription.pb.h				\
+  ../include/mesos/uri/uri.pb.cc					\
+  ../include/mesos/uri/uri.pb.h						\
   ../include/mesos/v1/mesos.pb.cc					\
   ../include/mesos/v1/mesos.pb.h					\
   ../include/mesos/v1/executor/executor.pb.cc				\
@@ -468,6 +471,16 @@ nodist_slave_HEADERS =							\
   ../include/mesos/slave/isolator.pb.h					\
   ../include/mesos/slave/oversubscription.pb.h
 
+uridir = $(pkgincludedir)/uri
+
+uri_HEADERS =								\
+  $(top_srcdir)/include/mesos/uri/fetcher.hpp				\
+  $(top_srcdir)/include/mesos/uri/uri.hpp				\
+  $(top_srcdir)/include/mesos/uri/uri.proto
+
+nodist_uri_HEADERS =							\
+  ../include/mesos/uri/uri.pb.h
+
 v1dir = $(pkgincludedir)/v1
 
 v1_HEADERS =								\
@@ -534,6 +547,7 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   docker/docker.cpp							\
   exec/exec.cpp								\
   files/files.cpp							\
+  hdfs/hdfs.cpp								\
   hook/manager.cpp							\
   internal/devolve.cpp							\
   internal/evolve.cpp							\
@@ -605,6 +619,9 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   slave/containerizer/mesos/provisioner/docker/store.cpp		\
   slave/containerizer/mesos/provisioner/docker/token_manager.cpp	\
   slave/resource_estimators/noop.cpp					\
+  uri/fetcher.cpp							\
+  uri/utils.cpp								\
+  uri/fetchers/curl.cpp							\
   usage/usage.cpp							\
   v1/attributes.cpp							\
   v1/mesos.cpp								\
@@ -729,6 +746,10 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   tests/containerizer/rootfs.hpp					\
   tests/containerizer/setns_test_helper.hpp				\
   tests/containerizer/store.hpp						\
+  uri/utils.hpp								\
+  uri/fetchers/curl.hpp							\
+  uri/schemes/file.hpp							\
+  uri/schemes/http.hpp							\
   usage/usage.hpp							\
   version/version.hpp							\
   watcher/whitelist_watcher.hpp						\
@@ -943,6 +964,7 @@ libmesos_la_SOURCES =							\
   $(SCHEDULER_PROTO)							\
   $(ISOLATOR_PROTO)							\
   $(OVERSUBSCRIPTION_PROTO)						\
+  $(URI_PROTO)								\
   $(V1_EXECUTOR_PROTO)							\
   $(V1_MESOS_PROTO)							\
   $(V1_SCHEDULER_PROTO)
@@ -1703,6 +1725,8 @@ mesos_tests_SOURCES =						\
   tests/state_tests.cpp						\
   tests/status_update_manager_tests.cpp				\
   tests/teardown_tests.cpp					\
+  tests/uri_tests.cpp						\
+  tests/uri_fetcher_tests.cpp					\
   tests/utils.cpp						\
   tests/values_tests.cpp					\
   tests/zookeeper_url_tests.cpp					\

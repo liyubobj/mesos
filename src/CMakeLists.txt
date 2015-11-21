@@ -35,6 +35,7 @@ PROTOC_TO_INCLUDE_DIR(SCHEDULER        mesos/scheduler/scheduler)
 PROTOC_TO_INCLUDE_DIR(V1_SCHEDULER     mesos/v1/scheduler/scheduler)
 PROTOC_TO_INCLUDE_DIR(ISOLATOR         mesos/slave/isolator)
 PROTOC_TO_INCLUDE_DIR(OVERSUBSCRIPTION mesos/slave/oversubscription)
+PROTOC_TO_INCLUDE_DIR(URI              mesos/uri/uri)
 
 PROTOC_TO_SRC_DIR(REGISTRY master/registry)
 
@@ -66,6 +67,7 @@ set(MESOS_PROTOBUF_SRC
   ${ISOLATOR_PROTO_CC}
   ${REGISTRY_PROTO_CC}
   ${MESSAGE_PROTO_CC}
+  ${URI_PROTO_CC}
   )
 
 # Configure Mesos files.
@@ -217,6 +219,12 @@ if (NOT WIN32)
     )
 endif (NOT WIN32)
 
+set(URI_SRC
+  uri/fetcher.cpp
+  uri/utils.cpp
+  uri/fetchers/curl.cpp
+  )
+
 set(USAGE_SRC
   usage/usage.cpp
   )
@@ -266,6 +274,7 @@ if (NOT WIN32)
     ${MODULE_SRC}
     ${SCHED_SRC}
     ${SCHEDULER_SRC}
+    ${URI_SRC}
     ${USAGE_SRC}
     ${V1_SRC}
     ${VERSION_SRC}
