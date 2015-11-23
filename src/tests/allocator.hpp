@@ -51,6 +51,12 @@ ACTION_P(InvokeInitialize, allocator)
 }
 
 
+ACTION_P(InvokeRecover, allocator)
+{
+  allocator->real->recover(arg0, arg1);
+}
+
+
 ACTION_P(InvokeAddFramework, allocator)
 {
   allocator->real->addFramework(arg0, arg1, arg2);
@@ -244,6 +250,11 @@ public:
     EXPECT_CALL(*this, initialize(_, _, _, _))
       .WillRepeatedly(DoDefault());
 
+    ON_CALL(*this, recover(_, _))
+      .WillByDefault(InvokeRecover(this));
+    EXPECT_CALL(*this, recover(_, _))
+      .WillRepeatedly(DoDefault());
+
     ON_CALL(*this, addFramework(_, _, _))
       .WillByDefault(InvokeAddFramework(this));
     EXPECT_CALL(*this, addFramework(_, _, _))
@@ -376,6 +387,10 @@ public:
           void(const FrameworkID&,
                const hashmap<SlaveID, UnavailableResources>&)>&,
       const hashmap<std::string, mesos::master::RoleInfo>&));
+
+  MOCK_METHOD2(recover, void(
+      const int expectedAgentCount,
+      const hashmap<std::string, Quota>&));
 
   MOCK_METHOD3(addFramework, void(
       const FrameworkID&,

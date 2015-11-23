@@ -95,6 +95,10 @@ public:
         inverseOfferCallback,
       const hashmap<std::string, mesos::master::RoleInfo>& roles);
 
+  void recover(
+      const int expectedAgentCount,
+      const hashmap<std::string, Quota>& quotas);
+
   void addFramework(
       const FrameworkID& frameworkId,
       const FrameworkInfo& frameworkInfo,
@@ -361,9 +365,17 @@ protected:
   hashmap<SlaveID, Slave> slaves;
 
   // Represents a role and data associated with it.
+  // NOTE: We currently associate quota with roles, but this may change in
+  // the future.
   struct Role
   {
     mesos::master::RoleInfo info;
+
+    // Setting quota for a role changes the order that the role's frameworks
+    // are offered resources. Quota comes before fair share, hence setting
+    // quota moves the role's frameworks towards the front of the allocation
+    // queue.
+    Option<mesos::quota::QuotaInfo> quota;
   };
 
   hashmap<std::string, Role> roles;
@@ -387,6 +399,12 @@ protected:
   // oversubscribed resources.
   const std::function<Sorter*()> roleSorterFactory;
   const std::function<Sorter*()> frameworkSorterFactory;
+
+  // A dedicated sorter for roles for which quota is set. Quota'ed roles
+  // belong to an extra allocation group and have resources allocated up
+  // to their alloted quota prior to non-quota'ed roles.
+  Sorter* quotaRoleSorter;
+
   Sorter* roleSorter;
   hashmap<std::string, Sorter*> frameworkSorters;
 };
