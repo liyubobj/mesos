@@ -1,20 +1,18 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <errno.h>
 #include <signal.h>
@@ -1343,6 +1341,9 @@ void Slave::runTask(
 
     framework = new Framework(this, frameworkInfo, frameworkPid);
     frameworks[frameworkId] = framework;
+    if (frameworkInfo.checkpoint()) {
+      framework->checkpointFramework();
+    }
 
     // Is this same framework in completedFrameworks? If so, move the completed
     // executors to this framework and remove it from that list.
@@ -4333,7 +4334,18 @@ void Slave::recoverFramework(const FrameworkState& state)
 
   CHECK_SOME(state.info);
   FrameworkInfo frameworkInfo = state.info.get();
+
+  // Mesos 0.22 and earlier didn't write the FrameworkID into the FrameworkInfo.
+  // In this case, we we update FrameworkInfo.framework_id from directory name,
+  // and rewrite the new format when we are done.
+  bool recheckpoint = false;
+  if (!frameworkInfo.has_id()) {
+    frameworkInfo.mutable_id()->CopyFrom(state.id);
+    recheckpoint = true;
+  }
+
   CHECK(frameworkInfo.has_id());
+  CHECK(frameworkInfo.checkpoint());
 
   // In 0.24.0, HTTP schedulers are supported and these do not
   // have a 'pid'. In this case, the slave will checkpoint UPID().
@@ -4347,6 +4359,10 @@ void Slave::recoverFramework(const FrameworkState& state)
 
   Framework* framework = new Framework(this, frameworkInfo, pid);
   frameworks[framework->id()] = framework;
+
+  if (recheckpoint) {
+    framework->checkpointFramework();
+  }
 
   // Now recover the executors for this framework.
   foreachvalue (const ExecutorState& executorState, state.executors) {
@@ -4910,30 +4926,31 @@ Framework::Framework(
     slave(_slave),
     info(_info),
     pid(_pid),
-    completedExecutors(MAX_COMPLETED_EXECUTORS_PER_FRAMEWORK)
+    completedExecutors(MAX_COMPLETED_EXECUTORS_PER_FRAMEWORK) {}
+
+
+void Framework::checkpointFramework() const
 {
-  if (info.checkpoint() && slave->state != slave->RECOVERING) {
-    // Checkpoint the framework info.
-    string path = paths::getFrameworkInfoPath(
-        slave->metaDir, slave->info.id(), id());
+  // Checkpoint the framework info.
+  string path = paths::getFrameworkInfoPath(
+      slave->metaDir, slave->info.id(), id());
 
-    VLOG(1) << "Checkpointing FrameworkInfo to '" << path << "'";
+  VLOG(1) << "Checkpointing FrameworkInfo to '" << path << "'";
 
-    CHECK_SOME(state::checkpoint(path, info));
+  CHECK_SOME(state::checkpoint(path, info));
 
-    // Checkpoint the framework pid, note that we checkpoint a
-    // UPID() when it is None (for HTTP schedulers) because
-    // 0.23.x slaves consider a missing pid file to be an
-    // error.
-    path = paths::getFrameworkPidPath(
-        slave->metaDir, slave->info.id(), id());
+  // Checkpoint the framework pid, note that we checkpoint a
+  // UPID() when it is None (for HTTP schedulers) because
+  // 0.23.x slaves consider a missing pid file to be an
+  // error.
+  path = paths::getFrameworkPidPath(
+      slave->metaDir, slave->info.id(), id());
 
-    VLOG(1) << "Checkpointing framework pid"
-            << " '" << pid.getOrElse(UPID()) << "'"
-            << " to '" << path << "'";
+  VLOG(1) << "Checkpointing framework pid"
+          << " '" << pid.getOrElse(UPID()) << "'"
+          << " to '" << path << "'";
 
-    CHECK_SOME(state::checkpoint(path, pid.getOrElse(UPID())));
-  }
+  CHECK_SOME(state::checkpoint(path, pid.getOrElse(UPID())));
 }
 
 

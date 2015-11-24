@@ -221,40 +221,72 @@ s += "world"; // THIS IS A DANGLING REFERENCE!
 
 * Mesos source files must contain the "ASF" header:
 
-        /**
-         * Licensed to the Apache Software Foundation (ASF) under one
-         * or more contributor license agreements.  See the NOTICE file
-         * distributed with this work for additional information
-         * regarding copyright ownership.  The ASF licenses this file
-         * to you under the Apache License, Version 2.0 (the
-         * "License"); you may not use this file except in compliance
-         * with the License.  You may obtain a copy of the License at
-         *
-         *     http://www.apache.org/licenses/LICENSE-2.0
-         *
-         * Unless required by applicable law or agreed to in writing, software
-         * distributed under the License is distributed on an "AS IS" BASIS,
-         * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-         * See the License for the specific language governing permissions and
-         * limitations under the License.
-         */
+         // Licensed to the Apache Software Foundation (ASF) under one
+         // or more contributor license agreements.  See the NOTICE file
+         // distributed with this work for additional information
+         // regarding copyright ownership.  The ASF licenses this file
+         // to you under the Apache License, Version 2.0 (the
+         // "License"); you may not use this file except in compliance
+         // with the License.  You may obtain a copy of the License at
+         //
+         //     http://www.apache.org/licenses/LICENSE-2.0
+         //
+         // Unless required by applicable law or agreed to in writing, software
+         // distributed under the License is distributed on an "AS IS" BASIS,
+         // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+         // See the License for the specific language governing permissions and
+         // limitations under the License.
 
 
 * Stout and libprocess source files must contain the "Apache License Version 2.0" header:
 
-        /**
-         * Licensed under the Apache License, Version 2.0 (the "License");
-         * you may not use this file except in compliance with the License.
-         * You may obtain a copy of the License at
-         *
-         *     http://www.apache.org/licenses/LICENSE-2.0
-         *
-         * Unless required by applicable law or agreed to in writing, software
-         * distributed under the License is distributed on an "AS IS" BASIS,
-         * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-         * See the License for the specific language governing permissions and
-         * limitations under the License
-         */
+         // Licensed under the Apache License, Version 2.0 (the "License");
+         // you may not use this file except in compliance with the License.
+         // You may obtain a copy of the License at
+         //
+         //     http://www.apache.org/licenses/LICENSE-2.0
+         //
+         // Unless required by applicable law or agreed to in writing, software
+         // distributed under the License is distributed on an "AS IS" BASIS,
+         // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+         // See the License for the specific language governing permissions and
+         // limitations under the License
+
+## Order of includes
+
+In addition to the ordering rules from the Google style guide, Mesos related headers are separated into sections. Newline to separate each section.
+Mesos related headers in `include` directories are partitioned by their subfolders, sorted alphabetically, and included using brackets.
+Header in `src` directories are included afterwards, using the same rules but with quotes instead of brackets.
+
+Example for `src/common/foo.cpp`:
+~~~{.cpp}
+#include "common/foo.hpp"
+
+#include <stdint.h>
+
+#include <string>
+#include <vector>
+
+#include <boost/circular_buffer.hpp>
+
+#include <mesos/mesos.hpp>
+#include <mesos/type_utils.hpp>
+
+#include <mesos/module/authenticator.hpp>
+
+#include <mesos/scheduler/scheduler.hpp>
+
+#include <process/http.hpp>
+#include <process/protobuf.hpp>
+
+#include <stout/foreach.hpp>
+#include <stout/hashmap.hpp>
+
+#include "common/build.hpp"
+#include "common/protobuf_utils.hpp"
+
+#include "master/flags.hpp"
+~~~
 
 ## C++11
 
