@@ -1022,7 +1022,7 @@ private:
 
     /**
      * Continuation for operations: /reserve, /unreserve, /create and
-     * /destroy. First tries to recover 'remaining' amount of
+     * /destroy. First tries to recover 'required' amount of
      * resources by rescinding outstanding offers, then tries to apply
      * the operation by calling 'master->apply' and propagates the
      * 'Future<Nothing>' as 'Future<Response>' where 'Nothing' -> 'OK'
@@ -1030,7 +1030,7 @@ private:
      *
      * @param slaveId The ID of the slave that the operation is
      *     updating.
-     * @param remaining The resources needed to satisfy the operation.
+     * @param required The resources needed to satisfy the operation.
      *     This is used for an optimization where we try to only
      *     rescind offers that would contribute to satisfying the
      *     operation.
@@ -1040,7 +1040,7 @@ private:
      */
     process::Future<process::http::Response> _operation(
         const SlaveID& slaveId,
-        Resources remaining,
+        Resources required,
         const Offer::Operation& operation) const;
 
     Master* master;

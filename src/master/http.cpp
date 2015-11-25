@@ -676,7 +676,7 @@ Future<Response> Master::Http::observe(const Request& request) const
 
   hashmap<string, string> values = decode.get();
 
-  // Build up a JSON object of the values we recieved and send them back
+  // Build up a JSON object of the values we received and send them back
   // down the wire as JSON for validation / confirmation.
   JSON::Object response;
 
@@ -1532,7 +1532,7 @@ Future<Response> Master::Http::tasks(const Request& request) const
   // TODO(nnielsen): Currently, formatting errors in offset and/or limit
   // will silently be ignored. This could be reported to the user instead.
 
-  // Construct framework list with both active and completed framwworks.
+  // Construct framework list with both active and completed frameworks.
   vector<const Framework*> frameworks;
   foreachvalue (Framework* framework, master->frameworks.registered) {
     frameworks.push_back(framework);
@@ -2106,7 +2106,7 @@ Result<Credential> Master::Http::authenticate(const Request& request) const
 
 Future<Response> Master::Http::_operation(
     const SlaveID& slaveId,
-    Resources remaining,
+    Resources required,
     const Offer::Operation& operation) const
 {
   Slave* slave = master->slaves.registered.get(slaveId);
@@ -2122,16 +2122,16 @@ Future<Response> Master::Http::_operation(
   // the race between the allocator scheduling an 'allocate' call to
   // itself vs master's request to schedule 'updateAvailable'.
   // We greedily rescind one offer at time until we've rescinded
-  // enough offers to cover for 'resources'.
+  // enough offers to cover 'operation'.
   foreach (Offer* offer, utils::copy(slave->offers)) {
     // If rescinding the offer would not contribute to satisfying
-    // the remaining resources, skip it.
-    if (remaining == remaining - offer->resources()) {
+    // the required resources, skip it.
+    if (required == required - offer->resources()) {
       continue;
     }
 
     recovered += offer->resources();
-    remaining -= offer->resources();
+    required -= offer->resources();
 
     // We explicitly pass 'Filters()' which has a default 'refuse_sec'
     // of 5 seconds rather than 'None()' here, so that we can
@@ -2144,15 +2144,14 @@ Future<Response> Master::Http::_operation(
 
     master->removeOffer(offer, true); // Rescind!
 
-    // If we've rescinded enough offers to cover for 'resources',
-    // we're done.
+    // If we've rescinded enough offers to cover 'operation', we're done.
     Try<Resources> updatedRecovered = recovered.apply(operation);
     if (updatedRecovered.isSome()) {
       break;
     }
   }
 
-  // Propogate the 'Future<Nothing>' as 'Future<Response>' where
+  // Propagate the 'Future<Nothing>' as 'Future<Response>' where
   // 'Nothing' -> 'OK' and Failed -> 'Conflict'.
   return master->apply(slave, operation)
     .then([]() -> Response { return OK(); })
