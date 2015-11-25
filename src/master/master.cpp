@@ -607,7 +607,11 @@ void Master::initialize()
       flags.allocation_interval,
       defer(self(), &Master::offer, lambda::_1, lambda::_2),
       defer(self(), &Master::inverseOffer, lambda::_1, lambda::_2),
-      defer(self(), &Master::enforceReclaim, lambda::_1, lambda::_2),
+      defer(self(),
+            &Master::enforceReclaim,
+            lambda::_1,
+            lambda::_2,
+            lambda::_3),
       roleInfos);
 
   // Parse the whitelist. Passing Allocator::updateWhitelist()
@@ -5134,10 +5138,47 @@ void Master::inverseOffer(
 
 
 void Master::enforceReclaim(
-      const FrameworkID& framework,
-      const SlaveID& slave)
+      const FrameworkID& frameworkId,
+      const SlaveID& slaveId,
+      const Resources& resources)
 {
-  return;
+  Slave* slave = slaves.registered.get(slaveId);
+  Resources reclaimed = resources;
+  CHECK_NOTNULL(slave);
+
+  if (!slave->executors.contains(frameworkId)) {
+    return;
+  }
+
+  // Caculate resources under each executor, if it is larger than
+  // the resources to reclaim, kill the executor and exit. Otherwise, kill
+  // the executor and checks the next executor.
+  foreachvalue (const ExecutorInfo& executor, slave->executors[frameworkId]) {
+    if (reclaimed.empty()) {
+      break;
+    }
+
+    Resources res = executor.resources();
+    if (slave->tasks.contains(frameworkId)) {
+      foreachvalue (Task* task, slave->tasks[frameworkId]) {
+        if (!task->has_executor_id()) {
+          continue;
+        }
+        if (task->executor_id() == executor.executor_id()) {
+          res += task->resources();
+        }
+      }
+    }
+
+    ShutdownExecutorMessage message;
+    message.mutable_executor_id()->CopyFrom(executor.executor_id());
+    message.mutable_framework_id()->CopyFrom(frameworkId);
+    send(slave->pid, message);
+    if (res.contains(reclaimed)) {
+      break;
+    }
+    reclaimed -= res;
+  }
 }
 
 

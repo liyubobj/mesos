@@ -101,7 +101,7 @@ public:
                const hashmap<SlaveID, UnavailableResources>&)>&
         inverseOfferCallback,
       const lambda::function<
-          void(const FrameworkID&, const SlaveID&)>&
+          void(const FrameworkID&, const SlaveID&, const Resources&)>&
         enforceReclaimCallback,
       const hashmap<std::string, RoleInfo>& roles) = 0;
 

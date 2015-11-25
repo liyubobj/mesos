@@ -513,8 +513,9 @@ public:
       const hashmap<SlaveID, UnavailableResources>& resources);
 
   void enforceReclaim(
-      const FrameworkID& framework,
-      const SlaveID& slave);
+      const FrameworkID& frameworkId,
+      const SlaveID& slaveId,
+      const Resources& resources);
 
   // Invoked when there is a newly elected leading master.
   // Made public for testing purposes.

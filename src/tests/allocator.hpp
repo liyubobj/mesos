@@ -386,7 +386,8 @@ public:
                const hashmap<SlaveID, UnavailableResources>&)>&,
       const lambda::function<
           void(const FrameworkID&,
-               const SlaveID&)>&,
+               const SlaveID&,
+               const Resources&)>&,
       const hashmap<std::string, mesos::master::RoleInfo>&));
 
   MOCK_METHOD2(recover, void(
