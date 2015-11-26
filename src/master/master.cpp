@@ -5158,7 +5158,9 @@ void Master::enforceReclaim(
       break;
     }
 
-    Resources res = executor.resources();
+    // NOTE: We currently do not add executor resources since it is not
+    // considered in eviction in allocator.
+    Resources res;
     if (slave->tasks.contains(frameworkId)) {
       foreachvalue (Task* task, slave->tasks[frameworkId]) {
         if (!task->has_executor_id()) {
