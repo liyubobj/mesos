@@ -866,12 +866,7 @@ private:
         const process::http::Request& request) const;
 
     process::Future<process::http::Response> remove(
-        const process::http::Request& request) const
-    {
-      // TODO(joerg84): For now this is just a stub. It will be filled as
-      // part of MESOS-1791.
-      return process::http::NotImplemented();
-    }
+        const process::http::Request& request) const;
 
   private:
     // Heuristically tries to determine whether a quota request could
@@ -895,6 +890,28 @@ private:
     //     quota.
     Option<Error> capacityHeuristic(
         const mesos::quota::QuotaInfo& request) const;
+
+    // We always want to rescind offers after the capacity heuristic. The
+    // reason for this is the race between the allocator and the master:
+    // it can happen that there are not enough free resources at the
+    // allocator's disposal when it is notified about the quota request,
+    // but at this point it's too late to rescind.
+    //
+    // While rescinding, we adhere to the following rules:
+    //   * Rescind at least as many resources as there are in the quota request.
+    //   * Rescind all offers from an agent in order to make the potential
+    //     offer bigger, which increases the chances that a quota'ed framework
+    //     will be able to use the offer.
+    //   * Rescind offers from at least `numF` agents to make it possible
+    //     (but not guaranteed, due to fair sharing) that each framework in
+    //     the role for which quota is set gets an offer (`numF` is the
+    //     number of frameworks in the quota'ed role). Though this is not
+    //     strictly necessary, we think this will increase the debugability
+    //     and will improve user experience.
+    //
+    // TODO(alexr): Consider removing this function once offer management
+    // (including rescinding) is moved to allocator.
+    void rescindOffers(const mesos::quota::QuotaInfo& request) const;
 
     // To perform actions related to quota management, we require access to the
     // master data structures. No synchronization primitives are needed here
@@ -1992,9 +2009,12 @@ struct Role
 
   mesos::master::RoleInfo info;
 
-  // NOTE: The quota for this role is stored in the master. This avoids
-  // duplication of this information and prevents a strict association of quota
-  // with roles in the future.
+  // NOTE: The dynamic role/quota relation is stored in and administrated
+  // by the master. There is no direct representation of quota information
+  // here to avoid duplication and to support that an operator can associate
+  // quota with a role before the role is created. Such ordering of operator
+  // requests prevents a race of premature unbounded allocation that setting
+  // quota first is intended to contain.
 
   hashmap<FrameworkID, Framework*> frameworks;
 };

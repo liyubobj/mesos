@@ -73,6 +73,7 @@ public:
       metrics(*this),
       roleSorterFactory(_roleSorterFactory),
       frameworkSorterFactory(_frameworkSorterFactory),
+      quotaRoleSorter(NULL),
       roleSorter(NULL) {}
 
   virtual ~HierarchicalAllocatorProcess() {}
@@ -377,7 +378,6 @@ protected:
   };
 
   hashmap<std::string, Role> roles;
-
 
   // Slaves to send offers for.
   Option<hashset<std::string>> whitelist;
