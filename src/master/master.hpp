@@ -934,6 +934,14 @@ private:
     process::Future<process::http::Response> scheduler(
         const process::http::Request& request) const;
 
+    // /master/create-volumes
+    process::Future<process::http::Response> createVolumes(
+        const process::http::Request& request) const;
+
+    // /master/destroy-volumes
+    process::Future<process::http::Response> destroyVolumes(
+        const process::http::Request& request) const;
+
     // /master/flags
     process::Future<process::http::Response> flags(
         const process::http::Request& request) const;
@@ -1022,6 +1030,8 @@ private:
     static std::string MAINTENANCE_STATUS_HELP();
     static std::string MACHINE_DOWN_HELP();
     static std::string MACHINE_UP_HELP();
+    static std::string CREATE_VOLUMES_HELP();
+    static std::string DESTROY_VOLUMES_HELP();
     static std::string RESERVE_HELP();
     static std::string UNRESERVE_HELP();
     static std::string QUOTA_HELP();
@@ -1039,12 +1049,13 @@ private:
         bool authorized = true) const;
 
     /**
-     * Continuation for operations: /reserve, /unreserve, /create and
-     * /destroy. First tries to recover 'required' amount of
-     * resources by rescinding outstanding offers, then tries to apply
-     * the operation by calling 'master->apply' and propagates the
-     * 'Future<Nothing>' as 'Future<Response>' where 'Nothing' -> 'OK'
-     * and Failed -> 'Conflict'.
+     * Continuation for operations: /reserve, /unreserve,
+     * /create-volumes and /destroy-volumes. First tries to recover
+     * 'required' amount of resources by rescinding outstanding
+     * offers, then tries to apply the operation by calling
+     * 'master->apply' and propagates the 'Future<Nothing>' as
+     * 'Future<Response>' where 'Nothing' -> 'OK' and Failed ->
+     * 'Conflict'.
      *
      * @param slaveId The ID of the slave that the operation is
      *     updating.
