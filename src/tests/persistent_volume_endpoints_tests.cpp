@@ -118,7 +118,7 @@ TEST_F(PersistentVolumeEndpointsTest, StaticReservation)
 {
   TestAllocator<> allocator;
 
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   Try<PID<Master>> master = StartMaster(&allocator);
   ASSERT_SOME(master);
@@ -210,7 +210,7 @@ TEST_F(PersistentVolumeEndpointsTest, DynamicReservation)
 {
   TestAllocator<> allocator;
 
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   Try<PID<Master>> master = StartMaster(&allocator);
   ASSERT_SOME(master);
@@ -329,7 +329,7 @@ TEST_F(PersistentVolumeEndpointsTest, DynamicReservationRoleMismatch)
 {
   TestAllocator<> allocator;
 
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   Try<PID<Master>> master = StartMaster(&allocator);
   ASSERT_SOME(master);
@@ -409,7 +409,7 @@ TEST_F(PersistentVolumeEndpointsTest, UnreserveVolumeResources)
 {
   TestAllocator<> allocator;
 
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   Try<PID<Master>> master = StartMaster(&allocator);
   ASSERT_SOME(master);
@@ -473,7 +473,7 @@ TEST_F(PersistentVolumeEndpointsTest, VolumeExceedsReservedSize)
 {
   TestAllocator<> allocator;
 
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   Try<PID<Master>> master = StartMaster(&allocator);
   ASSERT_SOME(master);
@@ -513,7 +513,7 @@ TEST_F(PersistentVolumeEndpointsTest, DeleteNonExistentVolume)
 {
   TestAllocator<> allocator;
 
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   Try<PID<Master>> master = StartMaster(&allocator);
   ASSERT_SOME(master);
@@ -615,7 +615,7 @@ TEST_F(PersistentVolumeEndpointsTest, NoHeader)
 {
   TestAllocator<> allocator;
 
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   Try<PID<Master>> master = StartMaster(&allocator);
   ASSERT_SOME(master);
@@ -669,7 +669,7 @@ TEST_F(PersistentVolumeEndpointsTest, BadCredentials)
 {
   TestAllocator<> allocator;
 
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   Try<PID<Master>> master = StartMaster(&allocator);
   ASSERT_SOME(master);
@@ -722,7 +722,7 @@ TEST_F(PersistentVolumeEndpointsTest, NoSlaveId)
 {
   TestAllocator<> allocator;
 
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   Try<PID<Master>> master = StartMaster(&allocator);
   ASSERT_SOME(master);
@@ -779,7 +779,7 @@ TEST_F(PersistentVolumeEndpointsTest, NoVolumes)
 {
   TestAllocator<> allocator;
 
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   Try<PID<Master>> master = StartMaster(&allocator);
   ASSERT_SOME(master);
