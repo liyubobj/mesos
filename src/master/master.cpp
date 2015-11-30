@@ -3348,15 +3348,15 @@ void Master::_accept(
     }
   }
 
-  if (!_offeredResources.empty()) {
-    // Tell the allocator about the unused (e.g., refused) resources.
-    allocator->recoverUnusedResources(
-        frameworkId,
-        slaveId,
-        _offeredResources,
-        None(),
-        accept.filters());
-  }
+  // Get allocation from EGO for tasks to be ran and release unused resources.
+  // Even _offeredResources is empty, we still need to call allocator to
+  // allocate task resources from EGO.
+  allocator->recoverUnusedResources(
+      frameworkId,
+      slaveId,
+      _offeredResources,
+      None(),
+      accept.filters());
 }
 
 
