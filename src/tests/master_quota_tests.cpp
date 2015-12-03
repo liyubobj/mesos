@@ -26,7 +26,6 @@
 
 #include <mesos/quota/quota.hpp>
 
-#include <process/clock.hpp>
 #include <process/future.hpp>
 #include <process/http.hpp>
 #include <process/id.hpp>
@@ -55,7 +54,6 @@ using mesos::internal::slave::Slave;
 
 using mesos::quota::QuotaInfo;
 
-using process::Clock;
 using process::Future;
 using process::PID;
 
@@ -137,7 +135,6 @@ protected:
     return request;
   }
 
-
 protected:
   const std::string ROLE1{"role1"};
   const std::string ROLE2{"role2"};
@@ -195,7 +192,7 @@ TEST_F(MasterQuotaTest, SetInvalidRequest)
   // We do not need an agent since a request should be rejected before
   // we start looking at available resources.
 
-  // We wrap the `http::post` into a lambda for readability of the tests.
+  // Wrap the `http::post` into a lambda for readability of the test.
   auto postQuota = [this, &master](const string& request) {
     return process::http::post(
         master.get(),
@@ -444,12 +441,17 @@ TEST_F(MasterQuotaTest, RemoveSingleQuota)
   AWAIT_READY(agentTotalResources);
   EXPECT_EQ(defaultAgentResources, agentTotalResources.get());
 
+  // Wrap the `http::requestDelete` into a lambda for readability of the test.
+  auto removeQuota = [this, &master](const string& path) {
+    return process::http::requestDelete(
+        master.get(),
+        path,
+        createBasicAuthHeaders(DEFAULT_CREDENTIAL));
+  };
+
   // Ensure that we can't remove quota for a role that is unknown to the master.
   {
-    Future<Response> response = process::http::requestDelete(
-        master.get(),
-        "quota/" + UNKNOWN_ROLE,
-        createBasicAuthHeaders(DEFAULT_CREDENTIAL));
+    Future<Response> response = removeQuota("quota/" + UNKNOWN_ROLE);
 
     AWAIT_EXPECT_RESPONSE_STATUS_EQ(BadRequest().status, response)
       << response.get().body;
@@ -457,17 +459,15 @@ TEST_F(MasterQuotaTest, RemoveSingleQuota)
 
   // Ensure that we can't remove quota for a role that has no quota set.
   {
-    Future<Response> response = process::http::requestDelete(
-        master.get(),
-        "quota/" + ROLE1,
-        createBasicAuthHeaders(DEFAULT_CREDENTIAL));
+    Future<Response> response = removeQuota("quota/" + ROLE1);
 
     AWAIT_EXPECT_RESPONSE_STATUS_EQ(BadRequest().status, response)
       << response.get().body;
   }
 
-  // We request quota for a portion of the resources available on the agent.
+  // Ensure we can remove the quota we have requested before.
   {
+    // Request quota for a portion of the resources available on the agent.
     Resources quotaResources = Resources::parse("cpus:1;mem:512", ROLE1).get();
     EXPECT_TRUE(agentTotalResources.get().contains(quotaResources.flatten()));
 
@@ -479,25 +479,19 @@ TEST_F(MasterQuotaTest, RemoveSingleQuota)
 
     AWAIT_EXPECT_RESPONSE_STATUS_EQ(OK().status, response)
       << response.get().body;
-  }
 
-  // Ensure we can remove the quota.
-  {
+    // Remove the previously requested quota.
     Future<Nothing> receivedRemoveRequest;
     EXPECT_CALL(allocator, removeQuota(Eq(ROLE1)))
-      .WillOnce(FutureSatisfy(&receivedRemoveRequest));
+      .WillOnce(DoAll(InvokeRemoveQuota(&allocator),
+                      FutureSatisfy(&receivedRemoveRequest)));
 
-    Future<Response> response = process::http::requestDelete(
-        master.get(),
-        "quota/" + ROLE1,
-        createBasicAuthHeaders(DEFAULT_CREDENTIAL));
+    response = removeQuota("quota/" + ROLE1);
 
-    // TODO(joerg84): Add more detailed error message.
     AWAIT_EXPECT_RESPONSE_STATUS_EQ(OK().status, response)
-      << "Quota remove request failed:";
+      << response.get().body;
 
-    // Quota request is granted and reached the allocator. Make sure nothing
-    // got lost in-between.
+    // Ensure that the quota remove request has reached the allocator.
     AWAIT_READY(receivedRemoveRequest);
   }
 
@@ -904,11 +898,8 @@ TEST_F(MasterQuotaTest, AvailableResourcesAfterRescinding)
   AWAIT_READY(registered3);
 
   // There should be no offers made to `framework2` and `framework3`
-  // at this point since there are no free resources.
-  EXPECT_CALL(sched2, resourceOffers(&framework2, _))
-    .Times(0);
-  EXPECT_CALL(sched3, resourceOffers(&framework3, _))
-    .Times(0);
+  // after they are started, since there are no free resources. They
+  // may receive offers once we set the quota.
 
   // Total cluster resources (3 identical agents): cpus=6, mem=3072.
   // role1 share = 1 (cpus=6, mem=3072)
@@ -934,16 +925,6 @@ TEST_F(MasterQuotaTest, AvailableResourcesAfterRescinding)
     .WillOnce(DoAll(InvokeSetQuota(&allocator),
                     FutureArg<1>(&receivedQuotaRequest)));
 
-  // We pause the clock to avoid any further batch allocations.
-  // `Clock::settle()` ensures that all pending allocations fire. When we
-  // rescind offers, resources are recovered ​and​ become available for
-  // allocation. This prevents a batch allocation from sneaking in right
-  // after the rescind calls, allowing us to ensure that the expectation
-  // we set above (that there will be no resource offers made to quota'ed
-  // frameworks) is not violated.
-  Clock::pause();
-  Clock::settle();
-
   Future<Response> response = process::http::post(
       master.get(),
       "quota",
@@ -962,9 +943,6 @@ TEST_F(MasterQuotaTest, AvailableResourcesAfterRescinding)
   //   framework3 share = 0
 
   AWAIT_EXPECT_RESPONSE_STATUS_EQ(OK().status, response) << response.get().body;
-
-  Clock::settle();
-  Clock::resume();
 
   // The quota request is granted and reached the allocator. Make sure nothing
   // got lost in-between.

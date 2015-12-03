@@ -2761,6 +2761,70 @@ Future<bool> Master::authorizeTask(
 }
 
 
+Future<bool> Master::authorizeReserveResources(
+    const Offer::Operation::Reserve& reserve,
+    const Option<string>& principal)
+{
+  if (authorizer.isNone()) {
+    return true; // Authorization is disabled.
+  }
+
+  mesos::ACL::ReserveResources request;
+
+  if (principal.isSome()) {
+    request.mutable_principals()->add_values(principal.get());
+  } else {
+    request.mutable_principals()->set_type(ACL::Entity::ANY);
+  }
+
+  // TODO(mpark): Determine what kinds of constraints we may want to
+  // enforce on resources. Currently, we simply use ANY.
+  request.mutable_resources()->set_type(ACL::Entity::ANY);
+
+  LOG(INFO) << "Authorizing principal '"
+            << (principal.isSome() ? principal.get() : "ANY")
+            << "' to reserve resources '" << reserve.resources() << "'";
+
+  return authorizer.get()->authorize(request);
+}
+
+
+Future<bool> Master::authorizeUnreserveResources(
+    const Offer::Operation::Unreserve& unreserve,
+    const Option<string>& principal)
+{
+  if (authorizer.isNone()) {
+    return true; // Authorization is disabled.
+  }
+
+  mesos::ACL::UnreserveResources request;
+
+  if (principal.isSome()) {
+    request.mutable_principals()->add_values(principal.get());
+  } else {
+    request.mutable_principals()->set_type(ACL::Entity::ANY);
+  }
+
+  foreach (const Resource& resource, unreserve.resources()) {
+    // NOTE: Since validation of this operation is performed after
+    // authorization, we must check here that this resource is
+    // dynamically reserved. If it isn't, the error will be caught
+    // during validation.
+    if (Resources::isDynamicallyReserved(resource)) {
+      request.mutable_reserver_principals()->add_values(
+          resource.reservation().principal());
+    }
+  }
+
+  LOG(INFO)
+    << "Authorizing principal '"
+    << (principal.isSome() ? principal.get() : "ANY")
+    << "' to unreserve resources '" << unreserve.resources() << "'";
+
+  return authorizer.get()->authorize(request);
+}
+
+
 Resources Master::addTask(
     const TaskInfo& task,
     Framework* framework,
@@ -2951,34 +3015,64 @@ void Master::accept(
   LOG(INFO) << "Processing ACCEPT call for offers: " << accept.offer_ids()
             << " on slave " << *slave << " for framework " << *framework;
 
-  // If LAUNCH operation is included, authorize the tasks. A task is
-  // in 'framework->pendingTasks' before it is authorized.
-  //
-  // TODO(jieyu): Currently, we only do authorization for the LAUNCH
-  // operation. In the future, we might want to introduce
-  // authorizations for other offer operations as well.
-  //
-  // TODO(mpark): Add authorization logic for RESERVE and UNRESERVE
-  // when "reserve" and "unreserve" ACLs are being introduced.
   list<Future<bool>> futures;
   foreach (const Offer::Operation& operation, accept.operations()) {
-    if (operation.type() != Offer::Operation::LAUNCH) {
-      continue;
-    }
+    switch (operation.type()) {
+      case Offer::Operation::LAUNCH: {
+        // Authorize the tasks. A task is in 'framework->pendingTasks'
+        // before it is authorized.
+        foreach (const TaskInfo& task, operation.launch().task_infos()) {
+          futures.push_back(authorizeTask(task, framework));
 
-    foreach (const TaskInfo& task, operation.launch().task_infos()) {
-      futures.push_back(authorizeTask(task, framework));
-
-      // Add to pending tasks.
-      //
-      // NOTE: The task ID here hasn't been validated yet, but it
-      // doesn't matter. If the task ID is not valid, the task won't
-      // be launched anyway. If two tasks have the same ID, the second
-      // one will not be put into 'framework->pendingTasks', therefore
-      // will not be launched.
-      if (!framework->pendingTasks.contains(task.task_id())) {
-        framework->pendingTasks[task.task_id()] = task;
+          // Add to pending tasks.
+          //
+          // NOTE: The task ID here hasn't been validated yet, but it
+          // doesn't matter. If the task ID is not valid, the task won't
+          // be launched anyway. If two tasks have the same ID, the second
+          // one will not be put into 'framework->pendingTasks', therefore
+          // will not be launched.
+          if (!framework->pendingTasks.contains(task.task_id())) {
+            framework->pendingTasks[task.task_id()] = task;
+          }
+        }
+        break;
       }
+
+      // NOTE: When handling RESERVE and UNRESERVE operations, authorization
+      // will proceed even if no principal is specified, although currently
+      // resources cannot be reserved or unreserved unless a principal is
+      // provided. Any RESERVE/UNRESERVE operation with no associated principal
+      // will be found invalid when `validate()` is called in `_accept()` below.
+
+      // The RESERVE operation allows a principal to reserve resources.
+      case Offer::Operation::RESERVE: {
+        Option<string> principal = framework->info.has_principal()
+          ? framework->info.principal()
+          : Option<string>::none();
+
+        futures.push_back(
+            authorizeReserveResources(
+                operation.reserve(), principal));
+
+        break;
+      }
+
+      // The UNRESERVE operation allows a principal to unreserve resources.
+      case Offer::Operation::UNRESERVE: {
+        Option<string> principal = framework->info.has_principal()
+          ? framework->info.principal()
+          : Option<string>::none();
+
+        futures.push_back(
+            authorizeUnreserveResources(
+                operation.unreserve(), principal));
+
+        break;
+      }
+      case Offer::Operation::CREATE:
+      case Offer::Operation::DESTROY:
+        // TODO(mpark): Implement authorization for Create/Destroy.
+        break;
     }
   }
 
@@ -3068,16 +3162,33 @@ void Master::_accept(
   // launched, we remove its resource from offered resources.
   Resources _offeredResources = offeredResources;
 
+  // The order of `authorizations` must match the order of the operations in
+  // `accept.operations()`, as they are iterated through simultaneously.
   CHECK_READY(_authorizations);
   list<Future<bool>> authorizations = _authorizations.get();
 
   foreach (const Offer::Operation& operation, accept.operations()) {
     switch (operation.type()) {
+      // The RESERVE operation allows a principal to reserve resources.
       case Offer::Operation::RESERVE: {
+        Future<bool> authorization = authorizations.front();
+        authorizations.pop_front();
+
+        CHECK(!authorization.isDiscarded() && !authorization.isFailed());
+
+        if (!authorization.get()) {
+          drop(framework,
+               operation,
+               "Not authorized to reserve resources as '" +
+                 framework->info.principal() + "'");
+          continue;
+        }
+
         Option<string> principal = framework->info.has_principal()
           ? framework->info.principal()
           : Option<string>::none();
 
+        // Make sure this reserve operation is valid.
         Option<Error> error = validation::operation::validate(
             operation.reserve(), framework->info.role(), principal);
 
@@ -3086,6 +3197,7 @@ void Master::_accept(
           continue;
         }
 
+        // Test the given operation on the included resources.
         Try<Resources> resources = _offeredResources.apply(operation);
         if (resources.isError()) {
           drop(framework, operation, resources.error());
@@ -3102,7 +3214,22 @@ void Master::_accept(
         break;
       }
 
+      // The UNRESERVE operation allows a principal to unreserve resources.
       case Offer::Operation::UNRESERVE: {
+        Future<bool> authorization = authorizations.front();
+        authorizations.pop_front();
+
+        CHECK(!authorization.isDiscarded() && !authorization.isFailed());
+
+        if (!authorization.get()) {
+          drop(framework,
+               operation,
+               "Not authorized to unreserve resources as '" +
+                 framework->info.principal() + "'");
+          continue;
+        }
+
+        // Make sure this unreserve operation is valid.
         Option<Error> error = validation::operation::validate(
             operation.unreserve(), framework->info.has_principal());
 
@@ -3111,6 +3238,7 @@ void Master::_accept(
           continue;
         }
 
+        // Test the given operation on the included resources.
         Try<Resources> resources = _offeredResources.apply(operation);
         if (resources.isError()) {
           drop(framework, operation, resources.error());
@@ -3195,7 +3323,6 @@ void Master::_accept(
           // Remove from pending tasks.
           framework->pendingTasks.erase(task.task_id());
 
-          // Check authorization result.
           CHECK(!authorization.isDiscarded());
 
           if (authorization.isFailed() || !authorization.get()) {
