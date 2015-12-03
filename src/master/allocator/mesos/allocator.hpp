@@ -56,7 +56,7 @@ public:
                const hashmap<SlaveID, UnavailableResources>&)>&
         inverseOfferCallback,
       const lambda::function<
-          void(const FrameworkID&, const SlaveID&, const Resources&)>&
+          void(const FrameworkID&, const SlaveID&, const TaskID&)>&
         enforceReclaimCallback,
       const hashmap<std::string, mesos::master::RoleInfo>& roles);
 
@@ -337,7 +337,7 @@ inline void MesosAllocator<AllocatorProcess>::initialize(
               const hashmap<SlaveID, UnavailableResources>&)>&
       inverseOfferCallback,
     const lambda::function<
-          void(const FrameworkID&, const SlaveID&, const Resources&)>&
+          void(const FrameworkID&, const SlaveID&, const TaskID&)>&
         enforceReclaimCallback,
     const hashmap<std::string, mesos::master::RoleInfo>& roles)
 {

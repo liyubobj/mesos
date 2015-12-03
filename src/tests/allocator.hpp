@@ -387,7 +387,7 @@ public:
       const lambda::function<
           void(const FrameworkID&,
                const SlaveID&,
-               const Resources&)>&,
+               const TaskID&)>&,
       const hashmap<std::string, mesos::master::RoleInfo>&));
 
   MOCK_METHOD2(recover, void(

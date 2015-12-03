@@ -515,7 +515,7 @@ public:
   void enforceReclaim(
       const FrameworkID& frameworkId,
       const SlaveID& slaveId,
-      const Resources& resources);
+      const TaskID& taskId);
 
   // Invoked when there is a newly elected leading master.
   // Made public for testing purposes.

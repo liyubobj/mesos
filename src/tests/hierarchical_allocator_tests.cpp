@@ -148,7 +148,7 @@ protected:
     lambda::function<
         void(const FrameworkID&,
              const SlaveID&,
-             const Resources&)> enforceReclaimCallback;
+             const TaskID&)> enforceReclaimCallback;
 
     allocator->initialize(
         flags.allocation_interval,

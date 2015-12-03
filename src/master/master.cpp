@@ -5279,47 +5279,22 @@ void Master::inverseOffer(
 void Master::enforceReclaim(
       const FrameworkID& frameworkId,
       const SlaveID& slaveId,
-      const Resources& resources)
+      const TaskID& taskId)
 {
-  Slave* slave = slaves.registered.get(slaveId);
-  Resources reclaimed = resources;
-  CHECK_NOTNULL(slave);
+  Framework* framework = getFramework(frameworkId);
 
-  if (!slave->executors.contains(frameworkId)) {
+  if (framework == NULL) {
+    LOG(WARNING)
+      << "Ignoring enforce killing task " << taskId << " of framework "
+      << frameworkId << " because the framework cannot be found";
     return;
   }
 
-  // Caculate resources under each executor, if it is larger than
-  // the resources to reclaim, kill the executor and exit. Otherwise, kill
-  // the executor and checks the next executor.
-  foreachvalue (const ExecutorInfo& executor, slave->executors[frameworkId]) {
-    if (reclaimed.empty()) {
-      break;
-    }
+  scheduler::Call::Kill call;
+  call.mutable_task_id()->CopyFrom(taskId);
+  call.mutable_slave_id()->CopyFrom(slaveId);
 
-    // NOTE: We currently do not add executor resources since it is not
-    // considered in eviction in allocator.
-    Resources res;
-    if (slave->tasks.contains(frameworkId)) {
-      foreachvalue (Task* task, slave->tasks[frameworkId]) {
-        if (!task->has_executor_id()) {
-          continue;
-        }
-        if (task->executor_id() == executor.executor_id()) {
-          res += task->resources();
-        }
-      }
-    }
-
-    ShutdownExecutorMessage message;
-    message.mutable_executor_id()->CopyFrom(executor.executor_id());
-    message.mutable_framework_id()->CopyFrom(frameworkId);
-    send(slave->pid, message);
-    if (res.contains(reclaimed)) {
-      break;
-    }
-    reclaimed -= res;
-  }
+  kill(framework, call);
 }
 
 
