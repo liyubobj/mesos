@@ -134,6 +134,7 @@ void HierarchicalAllocatorProcess::initialize(
   offerCallback = _offerCallback;
   inverseOfferCallback = _inverseOfferCallback;
   initialized = true;
+  paused = false;
 
   // Resources for quota'ed roles are allocated separately and prior to
   // non-quota'ed roles, hence a dedicated sorter for quota'ed roles is
@@ -166,12 +167,57 @@ void HierarchicalAllocatorProcess::initialize(
 
 
 void HierarchicalAllocatorProcess::recover(
-    const int expectedAgentCount,
+    const int _expectedAgentCount,
     const hashmap<string, Quota>& quotas)
 {
+  // Recovery should start before actual allocation starts.
   CHECK(initialized);
+  CHECK_EQ(0u, slaves.size());
+  CHECK_EQ(0, quotaRoleSorter->count());
+  CHECK(_expectedAgentCount >= 0);
 
-  LOG(INFO) << "Allocator recovery is not supported yet";
+  // If there are no quotas, no recovery is currently necessary.
+  if (quotas.empty()) {
+    VLOG(1) << "Skipping recovery of hierarchical allocator: "
+            << "nothing to recover";
+
+    return;
+  }
+
+  // TODO(alexr): Consider exposing these constants.
+  const Duration ALLOCATION_HOLD_OFF_RECOVERY_TIMEOUT = Minutes(10);
+  const double AGENT_RECOVERY_FACTOR = 0.8;
+
+  // Record the number of expected agents.
+  expectedAgentCount =
+    static_cast<int>(_expectedAgentCount * AGENT_RECOVERY_FACTOR);
+
+  // Skip recovery if there are no expected agents. This is not strictly
+  // necessary for the allocator to function correctly, but maps better
+  // to expected behavior by the user: the allocator is not paused until
+  // a new agent is added.
+  if (expectedAgentCount.get() == 0) {
+    VLOG(1) << "Skipping recovery of hierarchical allocator: "
+            << "no reconnecting slaves to wait for";
+
+    return;
+  }
+
+  // Pause allocation until after a sufficient amount of agents reregister
+  // or a timer expires.
+  pause();
+
+  // Setup recovery timer.
+  delay(ALLOCATION_HOLD_OFF_RECOVERY_TIMEOUT, self(), &Self::resume);
+
+  // NOTE: `quotaRoleSorter` is updated implicitly in `setQuota()`.
+  foreachpair (const string& role, const Quota& quota, quotas) {
+    setQuota(role, quota.info);
+  }
+
+  LOG(INFO) << "Triggered allocator recovery: waiting for "
+            << expectedAgentCount.get() << " slaves to reconnect or "
+            << ALLOCATION_HOLD_OFF_RECOVERY_TIMEOUT << " to pass";
 }
 
 
@@ -338,6 +384,7 @@ void HierarchicalAllocatorProcess::addSlave(
 {
   CHECK(initialized);
   CHECK(!slaves.contains(slaveId));
+  CHECK(!paused || expectedAgentCount.isSome());
 
   roleSorter->add(slaveId, total.unreserved());
   quotaRoleSorter->add(slaveId, total.unreserved());
@@ -375,6 +422,24 @@ void HierarchicalAllocatorProcess::addSlave(
   if (unavailability.isSome()) {
     slaves[slaveId].maintenance =
       typename Slave::Maintenance(unavailability.get());
+  }
+
+  // If we have just a number of recovered agents, we cannot distinguish
+  // between "old" agents from the registry and "new" ones joined after
+  // recovery has started. Because we do not persist enough information
+  // to base logical decisions on, any accounting algorithm here will be
+  // crude. Hence we opted for checking whether a certain amount of cluster
+  // capacity is back online, so that we are reasonably confident that we
+  // will not over-commit too many resources to quota that we will not be
+  // able to revoke.
+  if (paused &&
+      expectedAgentCount.isSome() &&
+      (static_cast<int>(slaves.size()) >= expectedAgentCount.get())) {
+    VLOG(1) << "Recovery complete: sufficient amount of slaves added; "
+            << slaves.size() << " slaves known to the allocator";
+
+    expectedAgentCount = None();
+    resume();
   }
 
   LOG(INFO) << "Added slave " << slaveId << " (" << slaves[slaveId].hostname
@@ -958,6 +1023,26 @@ void HierarchicalAllocatorProcess::removeQuota(
 }
 
 
+void HierarchicalAllocatorProcess::pause()
+{
+  CHECK(!paused);
+
+  VLOG(1) << "Allocation paused";
+
+  paused = true;
+}
+
+
+void HierarchicalAllocatorProcess::resume()
+{
+  CHECK(paused);
+
+  VLOG(1) << "Allocation resumed";
+
+  paused = false;
+}
+
+
 void HierarchicalAllocatorProcess::batch()
 {
   allocate();
@@ -967,6 +1052,12 @@ void HierarchicalAllocatorProcess::batch()
 
 void HierarchicalAllocatorProcess::allocate()
 {
+  if (paused) {
+    VLOG(1) << "Skipped allocation because the allocator is paused";
+
+    return;
+  }
+
   Stopwatch stopwatch;
   stopwatch.start();
 
@@ -980,6 +1071,12 @@ void HierarchicalAllocatorProcess::allocate()
 void HierarchicalAllocatorProcess::allocate(
     const SlaveID& slaveId)
 {
+  if (paused) {
+    VLOG(1) << "Skipped allocation because the allocator is paused";
+
+    return;
+  }
+
   Stopwatch stopwatch;
   stopwatch.start();
 
@@ -1013,22 +1110,25 @@ void HierarchicalAllocatorProcess::allocate(
   // make sure that we don't assume cluster knowledge when summing resources
   // from that set.
 
+  vector<SlaveID> slaveIds;
+  slaveIds.reserve(slaveIds_.size());
+
+  // Filter out non-whitelisted and deactivated slaves in order not to send
+  // offers for them.
+  foreach (const SlaveID& slaveId, slaveIds_) {
+    if (isWhitelisted(slaveId) && slaves[slaveId].activated) {
+      slaveIds.push_back(slaveId);
+    }
+  }
+
   // Randomize the order in which slaves' resources are allocated.
   // TODO(vinod): Implement a smarter sorting algorithm.
-  vector<SlaveID> slaveIds(slaveIds_.begin(), slaveIds_.end());
   std::random_shuffle(slaveIds.begin(), slaveIds.end());
 
   // Quota comes first and fair share second. Here we process only those
   // roles, for which quota is set (quota'ed roles). Such roles form a
   // special allocation group with a dedicated sorter.
   foreach (const SlaveID& slaveId, slaveIds) {
-    // Don't send offers for non-whitelisted and deactivated slaves.
-    // TODO(alexr): We skip non-whitelisted or deactivated agents in every
-    // loop. Consider doing it once at the beginning before shuffling.
-    if (!isWhitelisted(slaveId) || !slaves[slaveId].activated) {
-      continue;
-    }
-
     foreach (const string& role, quotaRoleSorter->sort()) {
       CHECK_SOME(roles[role].quota);
 
@@ -1109,11 +1209,6 @@ void HierarchicalAllocatorProcess::allocate(
   // ensure we do not over-allocate resources during the WDRF phase.
   Resources remainingClusterResources;
   foreach (const SlaveID& slaveId, slaveIds) {
-    // Don't consider non-whitelisted and deactivated agents.
-    if (!isWhitelisted(slaveId) || !slaves[slaveId].activated) {
-      continue;
-    }
-
     remainingClusterResources +=
       slaves[slaveId].total - slaves[slaveId].allocated;
   }
@@ -1155,11 +1250,6 @@ void HierarchicalAllocatorProcess::allocate(
   // At this point resources for quotas are allocated or accounted for.
   // Proceed with allocating the remaining free pool using WDRF.
   foreach (const SlaveID& slaveId, slaveIds) {
-    // Don't send offers for non-whitelisted and deactivated slaves.
-    if (!isWhitelisted(slaveId) || !slaves[slaveId].activated) {
-      continue;
-    }
-
     // If there are no resources available for the current WDRF stage, stop.
     if ((remainingClusterResources - allocatedForWDRF).empty()) {
       break;

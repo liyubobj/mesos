@@ -70,6 +70,7 @@ public:
       const std::function<Sorter*()>& _frameworkSorterFactory)
     : ProcessBase(process::ID::generate("hierarchical-allocator")),
       initialized(false),
+      paused(true),
       metrics(*this),
       roleSorterFactory(_roleSorterFactory),
       frameworkSorterFactory(_frameworkSorterFactory),
@@ -95,7 +96,7 @@ public:
       const hashmap<std::string, mesos::master::RoleInfo>& roles);
 
   void recover(
-      const int expectedAgentCount,
+      const int _expectedAgentCount,
       const hashmap<std::string, Quota>& quotas);
 
   void addFramework(
@@ -202,6 +203,10 @@ protected:
   typedef HierarchicalAllocatorProcess Self;
   typedef HierarchicalAllocatorProcess This;
 
+  // Helpers for pausing and resuming allocation.
+  void pause();
+  void resume();
+
   // Callback for doing batch allocations.
   void batch();
 
@@ -248,6 +253,10 @@ protected:
   bool allocatable(const Resources& resources);
 
   bool initialized;
+  bool paused;
+
+  // Recovery data.
+  Option<int> expectedAgentCount;
 
   Duration allocationInterval;
 
