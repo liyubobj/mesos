@@ -31,17 +31,25 @@ Try<T> numify(const std::string& s)
   try {
     return boost::lexical_cast<T>(s);
   } catch (const boost::bad_lexical_cast&) {
-    // Unfortunately boost::lexical_cast can not cast a hexadecimal
+    // Unfortunately boost::lexical_cast cannot cast a hexadecimal
     // number even with a "0x" prefix, we have to workaround this
     // issue here.
     if (strings::startsWith(s, "0x") || strings::startsWith(s, "0X")) {
-      T result;
-      std::stringstream ss;
-      ss << std::hex << s;
-      ss >> result;
-      // Make sure we really hit the end of the string.
-      if (!ss.fail() && ss.eof()) {
-        return result;
+      // NOTE: Hexadecimal floating-point constants (e.g., 0x1p-5,
+      // 0x10.0), are allowed in C99, but cannot be used as floating
+      // point literals in standard C++. Some C++ compilers might
+      // accept them as an extension; for consistency, we always
+      // disallow them.  See:
+      // https://gcc.gnu.org/onlinedocs/gcc/Hex-Floats.html
+      if (!strings::contains(s, ".") && !strings::contains(s, "p")) {
+        T result;
+        std::stringstream ss;
+        ss << std::hex << s;
+        ss >> result;
+        // Make sure we really hit the end of the string.
+        if (!ss.fail() && ss.eof()) {
+          return result;
+        }
       }
     }
 
