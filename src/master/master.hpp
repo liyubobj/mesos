@@ -1118,6 +1118,9 @@ private:
     // NOTE: The quota specific pieces of the Operator API are factored
     // out into this separate class.
     QuotaHandler quotaHandler;
+
+    // Access to `authenticate`.
+    friend class QuotaHandler;
   };
 
   Master(const Master&);              // No copying.
@@ -1135,6 +1138,8 @@ private:
       Master* master, const SlaveID& slaveId);
 
   const Flags flags;
+
+  Http http;
 
   Option<MasterInfo> leader; // Current leading master.
 

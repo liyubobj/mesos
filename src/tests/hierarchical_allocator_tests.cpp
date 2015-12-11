@@ -16,7 +16,6 @@
 
 #include <atomic>
 #include <iostream>
-#include <queue>
 #include <string>
 #include <utility>
 #include <vector>
@@ -28,7 +27,6 @@
 #include <process/clock.hpp>
 #include <process/future.hpp>
 #include <process/gtest.hpp>
-#include <process/shared.hpp>
 #include <process/queue.hpp>
 
 #include <stout/duration.hpp>
@@ -59,12 +57,10 @@ using mesos::quota::QuotaInfo;
 
 using process::Clock;
 using process::Future;
-using process::Shared;
 
 using std::atomic;
 using std::cout;
 using std::endl;
-using std::queue;
 using std::string;
 using std::vector;
 
@@ -81,6 +77,44 @@ struct Allocation
   hashmap<SlaveID, Resources> resources;
 };
 
+static Resource
+makePortRanges(const ::mesos::Value::Range& bounds, unsigned numRanges)
+{
+  unsigned numPorts = bounds.end() - bounds.begin();
+  unsigned step = numPorts / numRanges;
+  ::mesos::Value::Ranges ranges;
+
+  ranges.mutable_range()->Reserve(numRanges);
+
+  for (unsigned i = 0; i < numRanges; ++i) {
+    Value::Range *range = ranges.add_range();
+    unsigned start = bounds.begin() + (i * step);
+    unsigned end = start + 1;
+
+    range->set_begin(start);
+    range->set_end(end);
+  }
+
+  Value values;
+  Resource resource;
+
+  values.set_type(Value::RANGES);
+  values.mutable_ranges()->CopyFrom(ranges);
+  resource.set_type(Value::RANGES);
+  resource.set_role("*");
+  resource.set_name("ports");
+  resource.mutable_ranges()->CopyFrom(values.ranges());
+
+  return resource;
+}
+
+static ::mesos::Value::Range makeRange(unsigned begin, unsigned end)
+{
+  ::mesos::Value::Range range;
+  range.set_begin(begin);
+  range.set_end(end);
+  return range;
+}
 
 struct Deallocation
 {
@@ -1174,8 +1208,8 @@ TEST_F(HierarchicalAllocatorTest, QuotaProvidesQuarantee)
   // would slow down the test.
   Clock::pause();
 
-  const std::string QUOTA_ROLE{"quota-role"};
-  const std::string NO_QUOTA_ROLE{"no-quota-role"};
+  const string QUOTA_ROLE{"quota-role"};
+  const string NO_QUOTA_ROLE{"no-quota-role"};
 
   hashmap<FrameworkID, Resources> EMPTY;
 
@@ -1293,8 +1327,8 @@ TEST_F(HierarchicalAllocatorTest, RemoveQuota)
   // would slow down the test.
   Clock::pause();
 
-  const std::string QUOTA_ROLE{"quota-role"};
-  const std::string NO_QUOTA_ROLE{"no-quota-role"};
+  const string QUOTA_ROLE{"quota-role"};
+  const string NO_QUOTA_ROLE{"no-quota-role"};
 
   initialize(vector<string>{QUOTA_ROLE, NO_QUOTA_ROLE});
 
@@ -1388,8 +1422,8 @@ TEST_F(HierarchicalAllocatorTest, MultipleFrameworksInRoleWithQuota)
   // would slow down the test.
   Clock::pause();
 
-  const std::string QUOTA_ROLE{"quota-role"};
-  const std::string NO_QUOTA_ROLE{"no-quota-role"};
+  const string QUOTA_ROLE{"quota-role"};
+  const string NO_QUOTA_ROLE{"no-quota-role"};
 
   hashmap<FrameworkID, Resources> EMPTY;
 
@@ -1508,8 +1542,8 @@ TEST_F(HierarchicalAllocatorTest, QuotaAllocationGranularity)
   // would slow down the test.
   Clock::pause();
 
-  const std::string QUOTA_ROLE{"quota-role"};
-  const std::string NO_QUOTA_ROLE{"no-quota-role"};
+  const string QUOTA_ROLE{"quota-role"};
+  const string NO_QUOTA_ROLE{"no-quota-role"};
 
   hashmap<FrameworkID, Resources> EMPTY;
 
@@ -1562,8 +1596,8 @@ TEST_F(HierarchicalAllocatorTest, DRFWithQuota)
   // would slow down the test.
   Clock::pause();
 
-  const std::string QUOTA_ROLE{"quota-role"};
-  const std::string NO_QUOTA_ROLE{"no-quota-role"};
+  const string QUOTA_ROLE{"quota-role"};
+  const string NO_QUOTA_ROLE{"no-quota-role"};
 
   initialize(vector<string>{QUOTA_ROLE, NO_QUOTA_ROLE});
 
@@ -1661,8 +1695,8 @@ TEST_F(HierarchicalAllocatorTest, QuotaAgainstStarvation)
   // would slow down the test.
   Clock::pause();
 
-  const std::string QUOTA_ROLE{"quota-role"};
-  const std::string NO_QUOTA_ROLE{"no-quota-role"};
+  const string QUOTA_ROLE{"quota-role"};
+  const string NO_QUOTA_ROLE{"no-quota-role"};
 
   initialize(vector<string>{QUOTA_ROLE, NO_QUOTA_ROLE});
 
@@ -1778,6 +1812,51 @@ TEST_F(HierarchicalAllocatorTest, QuotaAgainstStarvation)
 }
 
 
+// This test checks that quota is respected even for roles that don't
+// have any frameworks currently registered.
+TEST_F(HierarchicalAllocatorTest, QuotaAbsentFramework)
+{
+  Clock::pause();
+
+  const string QUOTA_ROLE{"quota-role"};
+  const string NO_QUOTA_ROLE{"no-quota-role"};
+
+  hashmap<FrameworkID, Resources> EMPTY;
+
+  initialize(vector<string>{QUOTA_ROLE, NO_QUOTA_ROLE});
+
+  SlaveInfo agent1 = createSlaveInfo("cpus:2;mem:1024;disk:0");
+  SlaveInfo agent2 = createSlaveInfo("cpus:1;mem:512;disk:0");
+
+  allocator->addSlave(agent1.id(), agent1, None(), agent1.resources(), EMPTY);
+  allocator->addSlave(agent2.id(), agent2, None(), agent2.resources(), EMPTY);
+
+  // Set quota for the quota'ed role.
+  const QuotaInfo quota1 = createQuotaInfo(QUOTA_ROLE, "cpus:2;mem:1024");
+  allocator->setQuota(QUOTA_ROLE, quota1);
+
+  // Add `framework1` in the non-quota'ed role.
+  FrameworkInfo framework1 = createFrameworkInfo(NO_QUOTA_ROLE);
+  allocator->addFramework(
+      framework1.id(), framework1, hashmap<SlaveID, Resources>());
+
+  // `framework1` can only be allocated resources on `agent2`. This
+  // is due to the coarse-grained nature of the allocations. All the
+  // free resources on `agent1` would be considered to construct an
+  // offer, and that would exceed the resources allowed to be offered
+  // to the non-quota'ed role.
+  //
+  // NOTE: We would prefer to test that, without the presence of
+  // `agent2`, `framework` is not allocated anything. However, we
+  // can't easily test for the absence of an allocation from the
+  // framework side, so we make due with this instead.
+  Future<Allocation> allocation = allocations.get();
+  AWAIT_READY(allocation);
+  EXPECT_EQ(framework1.id(), allocation.get().frameworkId);
+  EXPECT_EQ(agent2.resources(), Resources::sum(allocation.get().resources));
+}
+
+
 class HierarchicalAllocator_BENCHMARK_Test
   : public HierarchicalAllocatorTestBase,
     public WithParamInterface<std::tr1::tuple<size_t, size_t>>
@@ -1886,6 +1965,123 @@ TEST_P(HierarchicalAllocator_BENCHMARK_Test, AddAndUpdateSlave)
   }
 
   cout << "Updated " << slaveCount << " slaves in " << watch.elapsed() << endl;
+}
+
+
+// This benchmark simulates a number of frameworks that have a fixed amount of
+// work to do. Once they have reached their targets, they start declining all
+// subsequent offers.
+TEST_F(HierarchicalAllocator_BENCHMARK_Test, DeclineOffers)
+{
+  unsigned frameworkCount = 200;
+  unsigned slaveCount = 2000;
+  master::Flags flags;
+
+  FLAGS_v = 5;
+  __sync_synchronize(); // Ensure 'FLAGS_v' visible in other threads.
+
+  // Choose an interval longer than the time we expect a single cycle to take so
+  // that we don't back up the process queue.
+  flags.allocation_interval = Hours(1);
+
+  // Pause the clock because we want to manually drive the allocations.
+  Clock::pause();
+
+  // Number of allocations. This is used to determine the termination
+  // condition.
+  atomic<size_t> offerCount(0);
+
+  struct OfferedResources {
+    FrameworkID   frameworkId;
+    SlaveID       slaveId;
+    Resources     resources;
+  };
+
+  std::vector<OfferedResources> offers;
+
+  auto offerCallback = [&offerCount, &offers](
+      const FrameworkID& frameworkId,
+      const hashmap<SlaveID, Resources>& resources_)
+  {
+    for (auto resources : resources_) {
+      offers.push_back(
+          OfferedResources{frameworkId, resources.first, resources.second});
+    }
+
+    offerCount++;
+  };
+
+  vector<SlaveInfo> slaves;
+  vector<FrameworkInfo> frameworks;
+
+  cout << "Using " << slaveCount << " slaves and "
+       << frameworkCount << " frameworks" << endl;
+
+  slaves.reserve(slaveCount);
+  frameworks.reserve(frameworkCount);
+
+  initialize({}, flags, offerCallback);
+
+  for (unsigned i = 0; i < frameworkCount; ++i) {
+    frameworks.push_back(createFrameworkInfo("*"));
+    allocator->addFramework(frameworks[i].id(), frameworks[i], {});
+  }
+
+  Resources resources = Resources::parse(
+      "cpus:16;mem:2014;disk:1024;").get();
+
+  Resources ports = makePortRanges(makeRange(31000, 32000), 16);
+
+  resources += ports;
+
+  for (unsigned i = 0; i < slaveCount; ++i) {
+    slaves.push_back(createSlaveInfo(
+        "cpus:24;mem:4096;disk:4096;ports:[31000-32000]"));
+
+    // Add some used resources on each slave. Let's say there are 16 tasks, each
+    // is allocated 1 cpu and a random port from the port range.
+    hashmap<FrameworkID, Resources> used;
+    used[frameworks[i % frameworkCount].id()] = resources;
+    allocator->addSlave(
+        slaves[i].id(), slaves[i], None(), slaves[i].resources(), used);
+  }
+
+  // Wait for all the 'addSlave' operations to be processed.
+  Clock::settle();
+
+  // Loop enough times for all the frameworks to get offerred all the resources.
+  for (unsigned count = 0; count < frameworkCount * 2; ++count) {
+    // Permanently decline any offered resources.
+    for (auto offer : offers) {
+      Filters filters;
+
+      filters.set_refuse_seconds(INT_MAX);
+      allocator->recoverResources(
+          offer.frameworkId, offer.slaveId, offer.resources, filters);
+    }
+
+    // Wait for the declined offers.
+    Clock::settle();
+    offers.clear();
+    offerCount = 0;
+
+    {
+      Stopwatch watch;
+
+      watch.start();
+
+      // Advance the clock and trigger a background allocation cycle.
+      Clock::advance(flags.allocation_interval);
+      Clock::settle();
+
+      cout << "round " << count
+           << " allocate took " << watch.elapsed()
+           << " to make " << offerCount.load() << " offers"
+           << endl;
+    }
+  }
+
+  Clock::resume();
 }
 
 } // namespace tests {
