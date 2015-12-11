@@ -3432,8 +3432,14 @@ void Master::_accept(
             Future<Nothing> resolution = allocator->resolveConflicts(
                 framework->id(), task_);
 
+            // Add task back to pending tasks.
+            framework->pendingTasks[task_.task_id()] = task;
+
             resolution
-              .onReady([=]() { send(slave->pid, message); })
+              .onReady([=]() {
+                framework->pendingTasks.erase(task_.task_id());
+
+                send(slave->pid, message); })
               .onFailed([=](const string& failure) {
                 // TODO(qiujian): We set reason to REASON_TASK_INVALID
                 // if fail to resolve conflict. A new reason may need
@@ -3462,6 +3468,7 @@ void Master::_accept(
                 if (task != NULL) {
                   removeTask(task);
                 }
+                framework->pendingTasks.erase(task_.task_id());
               });
           }
         }
@@ -3623,6 +3630,12 @@ void Master::kill(Framework* framework, const scheduler::Call::Kill& kill)
   if (framework->pendingTasks.contains(taskId)) {
     // Remove from pending tasks.
     framework->pendingTasks.erase(taskId);
+
+    // Remove task if it is already added
+    Task* task = framework->getTask(taskId);
+    if (task != NULL) {
+      removeTask(task);
+    }
 
     const StatusUpdate& update = protobuf::createStatusUpdate(
         framework->id(),
