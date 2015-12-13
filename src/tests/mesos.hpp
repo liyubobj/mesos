@@ -533,6 +533,17 @@ inline Resource createPersistentVolume(
 }
 
 
+inline process::http::Headers createBasicAuthHeaders(
+    const Credential& credential)
+{
+  return process::http::Headers{{
+      "Authorization",
+      "Basic " +
+        base64::encode(credential.principal() + ":" + credential.secret())
+  }};
+}
+
+
 // Helpers for creating reserve operations.
 inline Offer::Operation RESERVE(const Resources& resources)
 {
@@ -1175,7 +1186,7 @@ public:
 };
 
 
-// Definition of a MockAuthozier that can be used in tests with gmock.
+// Definition of a MockAuthorizer that can be used in tests with gmock.
 class MockAuthorizer : public Authorizer
 {
 public:
