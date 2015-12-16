@@ -15,7 +15,12 @@
 // limitations under the License
 
 #include <string>
+#include <tuple>
 #include <vector>
+
+#include <process/collect.hpp>
+#include <process/io.hpp>
+#include <process/subprocess.hpp>
 
 #include <stout/bytes.hpp>
 #include <stout/check.hpp>
@@ -35,6 +40,58 @@ using namespace process;
 
 using std::string;
 using std::vector;
+
+
+struct CommandResult
+{
+  Option<int> status;
+  string out;
+  string err;
+};
+
+
+static Future<CommandResult> result(const Subprocess& s)
+{
+  CHECK_SOME(s.out());
+  CHECK_SOME(s.err());
+
+  return await(
+      s.status(),
+      io::read(s.out().get()),
+      io::read(s.err().get()))
+    .then([](const std::tuple<
+        Future<Option<int>>,
+        Future<string>,
+        Future<string>>& t) -> Future<CommandResult> {
+      Future<Option<int>> status = std::get<0>(t);
+      if (!status.isReady()) {
+        return Failure(
+            "Failed to get the exit status of the subprocess: " +
+            (status.isFailed() ? status.failure() : "discarded"));
+      }
+
+      Future<string> output = std::get<1>(t);
+      if (!output.isReady()) {
+        return Failure(
+            "Failed to read stdout from the subprocess: " +
+            (output.isFailed() ? output.failure() : "discarded"));
+      }
+
+      Future<string> error = std::get<2>(t);
+      if (!error.isReady()) {
+        return Failure(
+            "Failed to read stderr from the subprocess: " +
+            (error.isFailed() ? error.failure() : "discarded"));
+      }
+
+      CommandResult result;
+      result.status = status.get();
+      result.out = output.get();
+      result.err = error.get();
+
+      return result;
+    });
+}
 
 
 Try<Owned<HDFS>> HDFS::create(const Option<string>& _hadoop)
@@ -65,126 +122,191 @@ Try<Owned<HDFS>> HDFS::create(const Option<string>& _hadoop)
 }
 
 
-Try<bool> HDFS::exists(const string& path)
+Future<bool> HDFS::exists(const string& path)
 {
-  Try<string> command = strings::format(
-      "%s fs -test -e '%s'", hadoop, absolutePath(path));
+  Try<Subprocess> s = subprocess(
+      hadoop,
+      {"hadoop", "fs", "-test", "-e", absolutePath(path)},
+      Subprocess::PATH("/dev/null"),
+      Subprocess::PIPE(),
+      Subprocess::PIPE());
 
-  CHECK_SOME(command);
-
-  // We are piping stderr to stdout so that we can see the error (if
-  // any) in the logs emitted by `os::shell()` in case of failure.
-  Try<string> out = os::shell(command.get() + " 2>&1");
-
-  if (out.isError()) {
-    return Error(out.error());
+  if (s.isError()) {
+    return Failure("Failed to execute the subprocess: " + s.error());
   }
 
-  return true;
+  return result(s.get())
+    .then([](const CommandResult& result) -> Future<bool> {
+      if (result.status.isNone()) {
+        return Failure("Failed to reap the subprocess");
+      }
+
+      if (WIFEXITED(result.status.get())) {
+        int exitCode = WEXITSTATUS(result.status.get());
+        if (exitCode == 0) {
+          return true;
+        } else if (exitCode == 1) {
+          return false;
+        }
+      }
+
+      return Failure(
+          "Unexpected result from the subprocess: "
+          "status='" + stringify(result.status.get()) + "', " +
+          "stdout='" + result.out + "', " +
+          "stderr='" + result.err + "'");
+    });
 }
 
 
-Try<Bytes> HDFS::du(const string& _path)
+Future<Bytes> HDFS::du(const string& _path)
 {
   const string path = absolutePath(_path);
 
-  Try<string> command = strings::format(
-      "%s fs -du '%s'", hadoop, path);
+  Try<Subprocess> s = subprocess(
+      hadoop,
+      {"hadoop", "fs", "-du", path},
+      Subprocess::PATH("/dev/null"),
+      Subprocess::PIPE(),
+      Subprocess::PIPE());
 
-  CHECK_SOME(command);
-
-  // We are piping stderr to stdout so that we can see the error (if
-  // any) in the logs emitted by `os::shell()` in case of failure.
-  //
-  // TODO(marco): this was the existing logic, but not sure it is
-  // actually needed.
-  Try<string> out = os::shell(command.get() + " 2>&1");
-
-  if (out.isError()) {
-    return Error("HDFS du failed: " + out.error());
+  if (s.isError()) {
+    return Failure("Failed to execute the subprocess: " + s.error());
   }
 
-  // We expect 2 space-separated output fields; a number of bytes then
-  // the name of the path we gave. The 'hadoop' command can emit
-  // various WARN or other log messages, so we make an effort to scan
-  // for the field we want.
-  foreach (const string& line, strings::tokenize(out.get(), "\n")) {
-    // Note that we use tokenize() rather than split() since fields
-    // can be delimited by multiple spaces.
-    vector<string> fields = strings::tokenize(line, " ");
-
-    if (fields.size() == 2 && fields[1] == path) {
-      Result<size_t> size = numify<size_t>(fields[0]);
-      if (size.isError()) {
-        return Error("HDFS du returned unexpected format: " + size.error());
-      } else if (size.isNone()) {
-        return Error("HDFS du returned unexpected format");
+  return result(s.get())
+    .then([path](const CommandResult& result) -> Future<Bytes> {
+      if (result.status.isNone()) {
+        return Failure("Failed to reap the subprocess");
       }
 
-      return Bytes(size.get());
-    }
-  }
+      if (result.status.get() != 0) {
+        return Failure(
+            "Unexpected result from the subprocess: "
+            "status='" + stringify(result.status.get()) + "', " +
+            "stdout='" + result.out + "', " +
+            "stderr='" + result.err + "'");
+      }
 
-  return Error("HDFS du returned an unexpected format: '" + out.get() + "'");
+      // We expect 2 space-separated output fields; a number of bytes
+      // then the name of the path we gave. The 'hadoop' command can
+      // emit various WARN or other log messages, so we make an effort
+      // to scan for the field we want.
+      foreach (const string& line, strings::tokenize(result.out, "\n")) {
+        // Note that we use tokenize() rather than split() since
+        // fields can be delimited by multiple spaces.
+        vector<string> fields = strings::tokenize(line, " \t");
+
+        if (fields.size() == 2 && fields[1] == path) {
+          Result<size_t> size = numify<size_t>(fields[0]);
+          if (size.isSome()) {
+            return Bytes(size.get());
+          }
+        }
+      }
+
+      return Failure("Unexpected output format: '" + result.out + "'");
+    });
 }
 
 
-Try<Nothing> HDFS::rm(const string& path)
+Future<Nothing> HDFS::rm(const string& path)
 {
-  Try<string> command = strings::format(
-      "%s fs -rm '%s'", hadoop, absolutePath(path));
+  Try<Subprocess> s = subprocess(
+      hadoop,
+      {"hadoop", "fs", "-rm", absolutePath(path)},
+      Subprocess::PATH("/dev/null"),
+      Subprocess::PIPE(),
+      Subprocess::PIPE());
 
-  CHECK_SOME(command);
-
-  Try<string> out = os::shell(command.get());
-
-  if (out.isError()) {
-    return Error(out.error());
+  if (s.isError()) {
+    return Failure("Failed to execute the subprocess: " + s.error());
   }
 
-  return Nothing();
+  return result(s.get())
+    .then([](const CommandResult& result) -> Future<Nothing> {
+      if (result.status.isNone()) {
+        return Failure("Failed to reap the subprocess");
+      }
+
+      if (result.status.get() != 0) {
+        return Failure(
+            "Unexpected result from the subprocess: "
+            "status='" + stringify(result.status.get()) + "', " +
+            "stdout='" + result.out + "', " +
+            "stderr='" + result.err + "'");
+      }
+
+      return Nothing();
+    });
 }
 
 
-Try<Nothing> HDFS::copyFromLocal(const string& from, const string& _to)
+Future<Nothing> HDFS::copyFromLocal(const string& from, const string& to)
 {
   if (!os::exists(from)) {
-    return Error("Failed to find " + from);
+    return Failure("Failed to find '" + from + "'");
   }
 
-  const string to = absolutePath(_to);
+  Try<Subprocess> s = subprocess(
+      hadoop,
+      {"hadoop", "fs", "-copyFromLocal", from, absolutePath(to)},
+      Subprocess::PATH("/dev/null"),
+      Subprocess::PIPE(),
+      Subprocess::PIPE());
 
-  Try<string> command = strings::format(
-      "%s fs -copyFromLocal '%s' '%s'", hadoop, from, to);
-
-  CHECK_SOME(command);
-
-  Try<string> out = os::shell(command.get());
-
-  if (out.isError()) {
-    return Error(out.error());
+  if (s.isError()) {
+    return Failure("Failed to execute the subprocess: " + s.error());
   }
 
-  return Nothing();
+  return result(s.get())
+    .then([](const CommandResult& result) -> Future<Nothing> {
+      if (result.status.isNone()) {
+        return Failure("Failed to reap the subprocess");
+      }
+
+      if (result.status.get() != 0) {
+        return Failure(
+            "Unexpected result from the subprocess: "
+            "status='" + stringify(result.status.get()) + "', " +
+            "stdout='" + result.out + "', " +
+            "stderr='" + result.err + "'");
+      }
+
+      return Nothing();
+    });
 }
 
 
-Try<Nothing> HDFS::copyToLocal(const string& _from, const string& to)
+Future<Nothing> HDFS::copyToLocal(const string& from, const string& to)
 {
-  const string from = absolutePath(_from);
+  Try<Subprocess> s = subprocess(
+      hadoop,
+      {"hadoop", "fs", "-copyToLocal", absolutePath(from), to},
+      Subprocess::PATH("/dev/null"),
+      Subprocess::PIPE(),
+      Subprocess::PIPE());
 
-  Try<string> command = strings::format(
-      "%s fs -copyToLocal '%s' '%s'", hadoop, from, to);
-
-  CHECK_SOME(command);
-
-  Try<string> out = os::shell(command.get());
-
-  if (out.isError()) {
-    return Error(out.error());
+  if (s.isError()) {
+    return Failure("Failed to execute the subprocess: " + s.error());
   }
 
-  return Nothing();
+  return result(s.get())
+    .then([](const CommandResult& result) -> Future<Nothing> {
+      if (result.status.isNone()) {
+        return Failure("Failed to reap the subprocess");
+      }
+
+      if (result.status.get() != 0) {
+        return Failure(
+            "Unexpected result from the subprocess: "
+            "status='" + stringify(result.status.get()) + "', " +
+            "stdout='" + result.out + "', " +
+            "stderr='" + result.err + "'");
+      }
+
+      return Nothing();
+    });
 }
 
 

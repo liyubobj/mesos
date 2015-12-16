@@ -19,6 +19,7 @@
 
 #include <string>
 
+#include <process/future.hpp>
 #include <process/owned.hpp>
 
 #include <stout/bytes.hpp>
@@ -48,11 +49,17 @@ public:
   static Try<process::Owned<HDFS>> create(
       const Option<std::string>& hadoop = None());
 
-  Try<bool> exists(const std::string& path);
-  Try<Bytes> du(const std::string& path);
-  Try<Nothing> rm(const std::string& path);
-  Try<Nothing> copyFromLocal(const std::string& from, const std::string& to);
-  Try<Nothing> copyToLocal(const std::string& from, const std::string& to);
+  process::Future<bool> exists(const std::string& path);
+  process::Future<Bytes> du(const std::string& path);
+  process::Future<Nothing> rm(const std::string& path);
+
+  process::Future<Nothing> copyFromLocal(
+      const std::string& from,
+      const std::string& to);
+
+  process::Future<Nothing> copyToLocal(
+      const std::string& from,
+      const std::string& to);
 
 private:
   explicit HDFS(const std::string& _hadoop)
