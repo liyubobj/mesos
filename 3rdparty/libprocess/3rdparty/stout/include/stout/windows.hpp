@@ -41,6 +41,49 @@
 //     that uses it (such as Mesos).
 
 
+// This code un-defines the global `GetMessage` macro defined by the Windows
+// headers, and replaces it with an inline function that is equivalent.
+//
+// There are two reasons for doing this. The first is because this macro
+// interferes with `google::protobufs::Reflection::GetMessage`. Replacing the
+// `GetMessage` macro with an inline function allows people calling the
+// `GetMessage` macro to carry on doing so with no code changes, but it will
+// also allow us to use `google::protobufs::Reflection::GetMessage` without
+// interference from the macro.
+//
+// The second is because we don't want to obliterate the `GetMessage` macro for
+// people who include this header, either on purpose, or incidentally as part
+// of some other Mesos header. The effect is that our need to call protobuf's
+// `GetMessage` function has no deleterious effect on customers of this API.
+//
+// NOTE: the Windows headers also don't use define-once semantics for the
+// `GetMessage` macro. In particular, this means that every time you include
+// `Winuser.h` and a `GetMessage` macro isn't defined, the Windows headers will
+// redefine it for you. The impact of this is that you should re-un-define the
+// macro every time you include `Windows.h`; since we should be including
+// `Windows.h` only from this file, we un-define it just after we include
+// `Windows.h`.
+#ifdef GetMessage
+inline BOOL GetMessageWindows(
+    LPMSG lpMsg,
+    HWND hWnd,
+    UINT wMsgFilterMin,
+    UINT wMsgFilterMax)
+{
+  return GetMessage(lpMsg, hWnd, wMsgFilterMin, wMsgFilterMax);
+}
+#undef GetMessage
+inline BOOL GetMessage(
+    LPMSG lpMsg,
+    HWND hWnd,
+    UINT wMsgFilterMin,
+    UINT wMsgFilterMax)
+{
+  return GetMessageWindows(lpMsg, hWnd, wMsgFilterMin, wMsgFilterMax);
+}
+#endif
+
+
 // Define constants used for Windows compat. Allows a lot of code on
 // Windows and POSIX systems to be the same, because we can pass the
 // same constants to functions we call to do things like file I/O.
@@ -77,6 +120,9 @@ typedef int mode_t;
 // including functions like `OpenProcess`.
 typedef DWORD pid_t;
 
+typedef int uid_t;
+typedef int gid_t;
+
 typedef SSIZE_T ssize_t;
 
 // Socket flags. Define behavior of a socket when it (e.g.) shuts down. We map
@@ -84,6 +130,14 @@ typedef SSIZE_T ssize_t;
 // have to change any socket code.
 constexpr int SHUT_RD = SD_RECEIVE;
 
+// Macros that test whether a `stat` struct represents a directory or a file.
+#define S_ISDIR(mode)  (((mode) & S_IFMT) == S_IFDIR)  // Directory.
+#define S_ISREG(mode)  (((mode) & S_IFMT) == S_IFREG)  // File.
+#define S_ISCHR(mode)  (((mode) & S_IFMT) == S_IFCHR)  // Character device.
+#define S_ISFIFO(mode) (((mode) & S_IFMT) == _S_IFIFO) // Pipe.
+#define S_ISBLK(mode)  0                               // Block special device.
+#define S_ISSOCK(mode) 0                               // Socket.
+#define S_ISLNK(mode)  0                               // Symbolic link.
 
 // Permissions API. (cf. MESOS-3176 to track ongoing permissions work.)
 //
