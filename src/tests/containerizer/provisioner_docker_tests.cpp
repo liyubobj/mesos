@@ -300,9 +300,137 @@ TEST_F(RegistryTokenTest, NotBeforeInFuture)
 
 class DockerSpecTest : public ::testing::Test {};
 
-TEST_F(DockerSpecTest, SerializeDockerManifest)
+
+TEST_F(DockerSpecTest, SerializeV1DockerManifest)
 {
-  JSON::Value manifest = JSON::parse(
+  JSON::Value manifestJson = JSON::parse(
+    "{"
+    "    \"container\": "
+    "\"7f652467f9e6d1b3bf51172868b9b0c2fa1c711b112f4e987029b1624dd6295f\","
+    "    \"parent\": "
+    "\"cfa753dfea5e68a24366dfba16e6edf573daa447abf65bc11619c1a98a3aff54\","
+    "    \"created\": \"2015-09-21T20:15:47.866196515Z\","
+    "    \"config\": {"
+    "        \"Hostname\": \"5f8e0e129ff1\","
+    "        \"Entrypoint\": null,"
+    "        \"Env\": null,"
+    "        \"OnBuild\": null,"
+    "        \"OpenStdin\": false,"
+    "        \"MacAddress\": \"\","
+    "        \"User\": \"\","
+    "        \"VolumeDriver\": \"\","
+    "        \"AttachStderr\": false,"
+    "        \"AttachStdout\": false,"
+    "        \"PublishService\": \"\","
+    "        \"NetworkDisabled\": false,"
+    "        \"StdinOnce\": false,"
+    "        \"Cmd\": ["
+    "            \"sh\""
+    "        ],"
+    "        \"WorkingDir\": \"\","
+    "        \"AttachStdin\": false,"
+    "        \"Volumes\": null,"
+    "        \"Tty\": false,"
+    "        \"Domainname\": \"\","
+    "        \"Image\": "
+    "\"cfa753dfea5e68a24366dfba16e6edf573daa447abf65bc11619c1a98a3aff54\","
+    "        \"Labels\": null,"
+    "        \"ExposedPorts\": null"
+    "    },"
+    "    \"container_config\": {"
+    "        \"Hostname\": \"5f8e0e129ff1\","
+    "        \"Entrypoint\": ["
+    "            \"./bin/start\""
+    "        ],"
+    "        \"Env\": ["
+    "            \"LANG=C.UTF-8\","
+    "            \"JAVA_VERSION=8u66\","
+    "            \"JAVA_DEBIAN_VERSION=8u66-b01-1~bpo8+1\","
+    "            \"CA_CERTIFICATES_JAVA_VERSION=20140324\""
+    "        ],"
+    "        \"OnBuild\": null,"
+    "        \"OpenStdin\": false,"
+    "        \"MacAddress\": \"\","
+    "        \"User\": \"\","
+    "        \"VolumeDriver\": \"\","
+    "        \"AttachStderr\": false,"
+    "        \"AttachStdout\": false,"
+    "        \"PublishService\": \"\","
+    "        \"NetworkDisabled\": false,"
+    "        \"StdinOnce\": false,"
+    "        \"Cmd\": ["
+    "            \"/bin/sh\","
+    "            \"-c\","
+    "            \"#(nop) CMD [\\\"sh\\\"]\""
+    "        ],"
+    "        \"WorkingDir\": \"/marathon\","
+    "        \"AttachStdin\": false,"
+    "        \"Volumes\": null,"
+    "        \"Tty\": false,"
+    "        \"Domainname\": \"\","
+    "        \"Image\": "
+    "\"cfa753dfea5e68a24366dfba16e6edf573daa447abf65bc11619c1a98a3aff54\","
+    "        \"Labels\": null,"
+    "        \"ExposedPorts\": null"
+    "    },"
+    "    \"architecture\": \"amd64\","
+    "    \"docker_version\": \"1.8.2\","
+    "    \"os\": \"linux\","
+    "    \"id\": "
+    "\"d7057cb020844f245031d27b76cb18af05db1cc3a96a29fa7777af75f5ac91a3\","
+    "    \"Size\": 0"
+    "}").get();
+
+  Try<JSON::Object> json = JSON::parse<JSON::Object>(stringify(manifestJson));
+  ASSERT_SOME(json);
+
+  Try<slave::docker::v1::ImageManifest> manifest =
+    spec::v1::parse(json.get());
+
+  ASSERT_SOME(manifest);
+
+  EXPECT_EQ(
+      "7f652467f9e6d1b3bf51172868b9b0c2fa1c711b112f4e987029b1624dd6295f",
+      manifest.get().container());
+  EXPECT_EQ(
+      "cfa753dfea5e68a24366dfba16e6edf573daa447abf65bc11619c1a98a3aff54",
+      manifest.get().parent());
+
+  EXPECT_EQ(
+      "./bin/start",
+      manifest.get().container_config().entrypoint(0));
+
+  EXPECT_EQ(
+      "LANG=C.UTF-8",
+      manifest.get().container_config().env(0));
+  EXPECT_EQ(
+      "JAVA_VERSION=8u66",
+      manifest.get().container_config().env(1));
+  EXPECT_EQ(
+      "JAVA_DEBIAN_VERSION=8u66-b01-1~bpo8+1",
+      manifest.get().container_config().env(2));
+  EXPECT_EQ(
+      "CA_CERTIFICATES_JAVA_VERSION=20140324",
+      manifest.get().container_config().env(3));
+
+  EXPECT_EQ("/bin/sh", manifest.get().container_config().cmd(0));
+  EXPECT_EQ("-c", manifest.get().container_config().cmd(1));
+  EXPECT_EQ(
+      "#(nop) CMD [\"sh\"]",
+      manifest.get().container_config().cmd(2));
+
+  EXPECT_EQ("sh", manifest.get().config().cmd(0));
+
+  EXPECT_EQ("1.8.2", manifest.get().docker_version());
+  EXPECT_EQ("amd64", manifest.get().architecture());
+  EXPECT_EQ("linux", manifest.get().os());
+  EXPECT_EQ(0u, manifest.get().size());
+}
+
+
+TEST_F(DockerSpecTest, SerializeV2DockerManifest)
+{
+  JSON::Value manifestJson = JSON::parse(
     "{"
     "   \"name\": \"dmcgowan/test-image\","
     "   \"tag\": \"latest\","
@@ -385,66 +513,67 @@ TEST_F(DockerSpecTest, SerializeDockerManifest)
     "   ]"
     "}").get();
 
-  Try<JSON::Object> json = JSON::parse<JSON::Object>(stringify(manifest));
+  Try<JSON::Object> json = JSON::parse<JSON::Object>(stringify(manifestJson));
   ASSERT_SOME(json);
 
-  Try<slave::docker::DockerImageManifest> dockerImageManifest =
-    spec::parse(json.get());
+  Try<slave::docker::v2::ImageManifest> manifest =
+    spec::v2::parse(json.get());
 
-  ASSERT_SOME(dockerImageManifest);
+  ASSERT_SOME(manifest);
 
-  EXPECT_EQ(dockerImageManifest.get().name(), "dmcgowan/test-image");
-  EXPECT_EQ(dockerImageManifest.get().tag(), "latest");
-  EXPECT_EQ(dockerImageManifest.get().architecture(), "amd64");
+  EXPECT_EQ(manifest.get().name(), "dmcgowan/test-image");
+  EXPECT_EQ(manifest.get().tag(), "latest");
+  EXPECT_EQ(manifest.get().architecture(), "amd64");
 
-  EXPECT_EQ(dockerImageManifest.get().fslayers(0).blobsum(),
+  EXPECT_EQ(manifest.get().fslayers(0).blobsum(),
     "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
-  EXPECT_EQ(dockerImageManifest.get().fslayers(1).blobsum(),
+  EXPECT_EQ(manifest.get().fslayers(1).blobsum(),
     "sha256:cea0d2071b01b0a79aa4a05ea56ab6fdf3fafa03369d9f4eea8d46ea33c43e5f");
-  EXPECT_EQ(dockerImageManifest.get().fslayers(2).blobsum(),
+  EXPECT_EQ(manifest.get().fslayers(2).blobsum(),
     "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
-  EXPECT_EQ(dockerImageManifest.get().fslayers(3).blobsum(),
+  EXPECT_EQ(manifest.get().fslayers(3).blobsum(),
     "sha256:2a7812e636235448785062100bb9103096aa6655a8f6bb9ac9b13fe8290f66df");
 
-  EXPECT_EQ(dockerImageManifest.get().history(1).v1compatibility().id(),
+  EXPECT_EQ(manifest.get().history(1).v1compatibility().id(),
     "2ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea");
-  EXPECT_EQ(dockerImageManifest.get().history(2).v1compatibility().parent(),
+  EXPECT_EQ(manifest.get().history(2).v1compatibility().parent(),
     "cf2616975b4a3cba083ca99bc3f0bf25f5f528c3c52be1596b30f60b0b1c37ff");
 
-  EXPECT_EQ(dockerImageManifest.get().schemaversion(), 1u);
+  EXPECT_EQ(manifest.get().schemaversion(), 1u);
 
-  EXPECT_EQ(dockerImageManifest.get().signatures(0).header().jwk().kid(),
+  EXPECT_EQ(manifest.get().signatures(0).header().jwk().kid(),
     "LYRA:YAG2:QQKS:376F:QQXY:3UNK:SXH7:K6ES:Y5AU:XUN5:ZLVY:KBYL");
-  EXPECT_EQ(dockerImageManifest.get().signatures(0).signature(),
+  EXPECT_EQ(manifest.get().signatures(0).signature(),
     "m3bgdBXZYRQ4ssAbrgj8Kjl7GNgrKQvmCSY-00yzQosKi-8"
     "UBrIRrn3Iu5alj82B6u_jNrkGCjEx3TxrfT1rig");
 }
 
 // Test invalid JSON object, expecting an error.
-TEST_F(DockerSpecTest, SerializeDockerInvalidManifest)
+TEST_F(DockerSpecTest, SerializeV2DockerInvalidManifest)
 {
   // This is an invalid manifest. The repeated fields 'history' and 'fsLayers'
   // must be >= 1. The 'signatures' and 'schemaVersion' are not set.
-  JSON::Value manifest = JSON::parse(
+  JSON::Value manifestJson = JSON::parse(
     "{"
     "   \"name\": \"dmcgowan/test-image\","
     "   \"tag\": \"latest\","
     "   \"architecture\": \"amd64\""
     "}").get();
 
-  Try<JSON::Object> json = JSON::parse<JSON::Object>(stringify(manifest));
+  Try<JSON::Object> json = JSON::parse<JSON::Object>(stringify(manifestJson));
   ASSERT_SOME(json);
 
-  Try<slave::docker::DockerImageManifest> dockerImageManifest =
-    spec::parse(json.get());
 
-  EXPECT_ERROR(dockerImageManifest);
+  Try<slave::docker::v2::ImageManifest> manifest =
+    spec::v2::parse(json.get());
+
+  EXPECT_ERROR(manifest);
 }
 
 // Test Manifest Validation with empty repeated 'fsLayers' field.
-TEST_F(DockerSpecTest, ValidationDockerManifestFsLayersNonEmpty)
+TEST_F(DockerSpecTest, ValidationV2DockerManifestFsLayersNonEmpty)
 {
-  JSON::Value manifest = JSON::parse(
+  JSON::Value manifestJson = JSON::parse(
     "{"
     "   \"name\": \"dmcgowan/test-image\","
     "   \"tag\": \"latest\","
@@ -471,19 +600,19 @@ TEST_F(DockerSpecTest, ValidationDockerManifestFsLayersNonEmpty)
     "   ]"
     "}").get();
 
-  Try<JSON::Object> json = JSON::parse<JSON::Object>(stringify(manifest));
+  Try<JSON::Object> json = JSON::parse<JSON::Object>(stringify(manifestJson));
   ASSERT_SOME(json);
 
-  Try<slave::docker::DockerImageManifest> dockerImageManifest =
-    spec::parse(json.get());
+  Try<slave::docker::v2::ImageManifest> manifest =
+    spec::v2::parse(json.get());
 
-  EXPECT_ERROR(dockerImageManifest);
+  EXPECT_ERROR(manifest);
 }
 
 // Test Manifest Validation with empty repeated 'signatures' field.
-TEST_F(DockerSpecTest, ValidationDockerManifestSignaturesNonEmpty)
+TEST_F(DockerSpecTest, ValidationV2DockerManifestSignaturesNonEmpty)
 {
-  JSON::Value manifest = JSON::parse(
+  JSON::Value manifestJson = JSON::parse(
     "{"
     "   \"name\": \"dmcgowan/test-image\","
     "   \"tag\": \"latest\","
@@ -497,13 +626,13 @@ TEST_F(DockerSpecTest, ValidationDockerManifestSignaturesNonEmpty)
     "   \"schemaVersion\": 1"
     "}").get();
 
-  Try<JSON::Object> json = JSON::parse<JSON::Object>(stringify(manifest));
+  Try<JSON::Object> json = JSON::parse<JSON::Object>(stringify(manifestJson));
   ASSERT_SOME(json);
 
-  Try<slave::docker::DockerImageManifest> dockerImageManifest =
-    spec::parse(json.get());
+  Try<slave::docker::v2::ImageManifest> manifest =
+    spec::v2::parse(json.get());
 
-  EXPECT_ERROR(dockerImageManifest);
+  EXPECT_ERROR(manifest);
 }
 
 
@@ -672,7 +801,7 @@ TEST_F(RegistryClientTest, SimpleGetManifest)
 
   ASSERT_SOME(registryClient);
 
-  Future<DockerImageManifest> manifestResponse =
+  Future<v2::ImageManifest> manifestResponse =
     registryClient.get()->getManifest(parseImageName("library/busybox"));
 
   const string unauthResponseHeaders = "Www-Authenticate: Bearer"
@@ -1228,7 +1357,7 @@ TEST_F(RegistryClientTest, SimpleRegistryPuller)
             "1ce2e90b0bc7224de3db1f0d646fe8e2c4dd37f1793928287f6074bc451a57ea");
 
   Try<string> blob = os::read(
-      path::join(layers.front().second, blobFile));
+      path::join(layers.front().second, "rootfs", blobFile));
   ASSERT_SOME(blob);
   ASSERT_EQ(blob.get(), blobResponse);
 }
@@ -1351,10 +1480,10 @@ TEST_F(ProvisionerDockerLocalStoreTest, LocalStoreTestWithTar)
   mesosImage.set_type(Image::DOCKER);
   mesosImage.mutable_docker()->set_name("abc");
 
-  Future<vector<string>> layers = store.get()->get(mesosImage);
-  AWAIT_READY(layers);
+  Future<slave::ImageInfo> imageInfo = store.get()->get(mesosImage);
+  AWAIT_READY(imageInfo);
 
-  verifyLocalDockerImage(flags, layers.get());
+  verifyLocalDockerImage(flags, imageInfo.get().layers);
 }
 
 
@@ -1374,8 +1503,8 @@ TEST_F(ProvisionerDockerLocalStoreTest, MetadataManagerInitialization)
   image.set_type(Image::DOCKER);
   image.mutable_docker()->set_name("abc");
 
-  Future<vector<string>> layers = store.get()->get(image);
-  AWAIT_READY(layers);
+  Future<slave::ImageInfo> imageInfo = store.get()->get(image);
+  AWAIT_READY(imageInfo);
 
   // Store is deleted and recreated. Metadata Manager is initialized upon
   // creation of the store.
@@ -1385,9 +1514,9 @@ TEST_F(ProvisionerDockerLocalStoreTest, MetadataManagerInitialization)
   Future<Nothing> recover = store.get()->recover();
   AWAIT_READY(recover);
 
-  layers = store.get()->get(image);
-  AWAIT_READY(layers);
-  verifyLocalDockerImage(flags, layers.get());
+  imageInfo = store.get()->get(image);
+  AWAIT_READY(imageInfo);
+  verifyLocalDockerImage(flags, imageInfo.get().layers);
 }
 
 
@@ -1449,7 +1578,7 @@ TEST_F(ProvisionerDockerLocalStoreTest, PullingSameImageSimutanuously)
   mesosImage.set_type(Image::DOCKER);
   mesosImage.mutable_docker()->set_name("abc");
 
-  Future<vector<string>> layers1 = store.get()->get(mesosImage);
+  Future<slave::ImageInfo> imageInfo1 = store.get()->get(mesosImage);
   AWAIT_READY(pull);
 
   const string rootfsPath1 = path::join(os::getcwd(), "rootfs1");
@@ -1460,20 +1589,20 @@ TEST_F(ProvisionerDockerLocalStoreTest, PullingSameImageSimutanuously)
   Try<Nothing> mkdir2 = os::mkdir(rootfsPath2);
   ASSERT_SOME(mkdir2);
 
-  ASSERT_TRUE(layers1.isPending());
-  Future<vector<string>> layers2 = store.get()->get(mesosImage);
+  ASSERT_TRUE(imageInfo1.isPending());
+  Future<slave::ImageInfo> imageInfo2 = store.get()->get(mesosImage);
 
   const std::list<std::pair<std::string, std::string>> result =
       {{"123", rootfsPath1},
        {"456", rootfsPath2}};
 
-  ASSERT_TRUE(layers2.isPending());
+  ASSERT_TRUE(imageInfo2.isPending());
   promise.set(result);
 
-  AWAIT_READY(layers1);
-  AWAIT_READY(layers2);
+  AWAIT_READY(imageInfo1);
+  AWAIT_READY(imageInfo2);
 
-  EXPECT_EQ(layers1.get(), layers2.get());
+  EXPECT_EQ(imageInfo1.get().layers, imageInfo2.get().layers);
 }
 
 } // namespace tests {

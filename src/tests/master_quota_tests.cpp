@@ -59,6 +59,7 @@ using process::http::BadRequest;
 using process::http::Conflict;
 using process::http::OK;
 using process::http::Response;
+using process::http::Unauthorized;
 
 using testing::_;
 using testing::DoAll;
@@ -74,7 +75,8 @@ namespace tests {
 //   * Request validation tests.
 //   * Sanity check tests.
 //   * Quota functionality tests.
-//   * Failover, and recovery tests.
+//   * Failover and recovery tests.
+//   * Authentication and authorization tests.
 
 // TODO(alexr): Once we have other allocators, convert this test into a
 // typed test over multiple allocators.
@@ -515,7 +517,7 @@ TEST_F(MasterQuotaTest, InsufficientResourcesSingleAgent)
   Try<PID<Master>> master = StartMaster(&allocator);
   ASSERT_SOME(master);
 
-  // Start an agent and wait until it registers.
+  // Start an agent and wait until its resources are available.
   Future<Resources> agentTotalResources;
   EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
     .WillOnce(DoAll(InvokeAddSlave(&allocator),
@@ -610,7 +612,7 @@ TEST_F(MasterQuotaTest, InsufficientResourcesMultipleAgents)
   Try<PID<Master>> master = StartMaster(&allocator);
   ASSERT_SOME(master);
 
-  // Start one agent and wait until it registers.
+  // Start one agent and wait until its resources are available.
   Future<Resources> agent1TotalResources;
   EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
     .WillOnce(DoAll(InvokeAddSlave(&allocator),
@@ -622,7 +624,7 @@ TEST_F(MasterQuotaTest, InsufficientResourcesMultipleAgents)
   AWAIT_READY(agent1TotalResources);
   EXPECT_EQ(defaultAgentResources, agent1TotalResources.get());
 
-  // Start another agent and wait until it registers.
+  // Start another agent and wait until its resources are available.
   Future<Resources> agent2TotalResources;
   EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
     .WillOnce(DoAll(InvokeAddSlave(&allocator),
@@ -672,7 +674,7 @@ TEST_F(MasterQuotaTest, AvailableResourcesSingleAgent)
   Try<PID<Master>> master = StartMaster(&allocator);
   ASSERT_SOME(master);
 
-  // Start an agent and wait until it registers.
+  // Start an agent and wait until its resources are available.
   Future<Resources> agentTotalResources;
   EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
     .WillOnce(DoAll(InvokeAddSlave(&allocator),
@@ -724,7 +726,7 @@ TEST_F(MasterQuotaTest, AvailableResourcesMultipleAgents)
   Try<PID<Master>> master = StartMaster(&allocator);
   ASSERT_SOME(master);
 
-  // Start one agent and wait until it registers.
+  // Start one agent and wait until its resources are available.
   Future<Resources> agent1TotalResources;
   EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
     .WillOnce(DoAll(InvokeAddSlave(&allocator),
@@ -736,7 +738,7 @@ TEST_F(MasterQuotaTest, AvailableResourcesMultipleAgents)
   AWAIT_READY(agent1TotalResources);
   EXPECT_EQ(defaultAgentResources, agent1TotalResources.get());
 
-  // Start another agent and wait until it registers.
+  // Start another agent and wait until its resources are available.
   Future<Resources> agent2TotalResources;
   EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
     .WillOnce(DoAll(InvokeAddSlave(&allocator),
@@ -797,7 +799,7 @@ TEST_F(MasterQuotaTest, AvailableResourcesAfterRescinding)
   Try<PID<Master>> master = StartMaster(&allocator);
   ASSERT_SOME(master);
 
-  // Start one agent and wait until it registers.
+  // Start one agent and wait until its resources are available.
   Future<Resources> agent1TotalResources;
   EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
     .WillOnce(DoAll(InvokeAddSlave(&allocator),
@@ -809,7 +811,7 @@ TEST_F(MasterQuotaTest, AvailableResourcesAfterRescinding)
   AWAIT_READY(agent1TotalResources);
   EXPECT_EQ(defaultAgentResources, agent1TotalResources.get());
 
-  // Start another agent and wait until it registers.
+  // Start another agent and wait until its resources are available.
   Future<Resources> agent2TotalResources;
   EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
     .WillOnce(DoAll(InvokeAddSlave(&allocator),
@@ -821,7 +823,7 @@ TEST_F(MasterQuotaTest, AvailableResourcesAfterRescinding)
   AWAIT_READY(agent2TotalResources);
   EXPECT_EQ(defaultAgentResources, agent2TotalResources.get());
 
-  // Start one more agent and wait until it registers.
+  // Start one more agent and wait until its resources are available.
   Future<Resources> agent3TotalResources;
   EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
     .WillOnce(DoAll(InvokeAddSlave(&allocator),
@@ -974,6 +976,272 @@ TEST_F(MasterQuotaTest, AvailableResourcesAfterRescinding)
 //     during the recovery (total quota sanity check).
 //   * Master fails simultaneously with multiple agents, rendering the cluster
 //     under quota (total quota sanity check).
+
+
+// These tests verify the authentication and authorization of quota requests.
+
+// Checks that quota set and remove requests succeed if both authentication
+// and authorization are disabled.
+TEST_F(MasterQuotaTest, NoAuthenticationNoAuthorization)
+{
+  TestAllocator<> allocator;
+  EXPECT_CALL(allocator, initialize(_, _, _, _));
+
+  // Disable authentication and authorization by providing neither
+  // credentials nor ACLs.
+  // TODO(alexr): Setting master `--acls` flag to `ACLs()` or `None()` seems
+  // to be semantically equal, however, the test harness currently does not
+  // allow `None()`. Once MESOS-4196 is resolved, use `None()` for clarity.
+  master::Flags masterFlags = CreateMasterFlags();
+  masterFlags.credentials = None();
+  masterFlags.acls = ACLs();
+
+  Try<PID<Master>> master = StartMaster(&allocator, masterFlags);
+  ASSERT_SOME(master);
+
+  // Start an agent and wait until its resources are available.
+  Future<Resources> agentTotalResources;
+  EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
+    .WillOnce(DoAll(InvokeAddSlave(&allocator),
+                    FutureArg<3>(&agentTotalResources)));
+
+  Try<PID<Slave>> agent = StartSlave();
+  ASSERT_SOME(agent);
+
+  AWAIT_READY(agentTotalResources);
+  EXPECT_EQ(defaultAgentResources, agentTotalResources.get());
+
+  // Check whether quota can be set.
+  {
+    // Request quota for a portion of the resources available on the agent.
+    Resources quotaResources = Resources::parse("cpus:1;mem:512", ROLE1).get();
+    EXPECT_TRUE(agentTotalResources.get().contains(quotaResources.flatten()));
+
+    Future<QuotaInfo> receivedSetRequest;
+    EXPECT_CALL(allocator, setQuota(Eq(ROLE1), _))
+      .WillOnce(DoAll(InvokeSetQuota(&allocator),
+                      FutureArg<1>(&receivedSetRequest)));
+
+    // Send a set quota request with absent credentials.
+    Future<Response> response = process::http::post(
+        master.get(),
+        "quota",
+        None(),
+        createRequestBody(quotaResources));
+
+    // Quota request succeeds and reaches the allocator.
+    AWAIT_READY(receivedSetRequest);
+    AWAIT_EXPECT_RESPONSE_STATUS_EQ(OK().status, response)
+      << response.get().body;
+  }
+
+  // Check whether quota can be removed.
+  {
+    Future<Nothing> receivedRemoveRequest;
+    EXPECT_CALL(allocator, removeQuota(Eq(ROLE1)))
+      .WillOnce(DoAll(InvokeRemoveQuota(&allocator),
+                      FutureSatisfy(&receivedRemoveRequest)));
+
+    // Send a remove quota request with absent credentials.
+    Future<Response> response = process::http::requestDelete(
+        master.get(),
+        "quota/" + ROLE1,
+        None());
+
+    // Quota request succeeds and reaches the allocator.
+    AWAIT_READY(receivedRemoveRequest);
+    AWAIT_EXPECT_RESPONSE_STATUS_EQ(OK().status, response)
+      << response.get().body;
+  }
+
+  Shutdown();
+}
+
+
+// Checks that a set quota request is rejected for unauthenticated principals.
+TEST_F(MasterQuotaTest, UnauthenticatedQuotaRequest)
+{
+  Try<PID<Master>> master = StartMaster();
+  ASSERT_SOME(master);
+
+  // We do not need an agent since a request should be rejected before
+  // we start looking at available resources.
+
+  // A request can contain any amount of resources because it will be rejected
+  // before we start looking at available resources.
+  Resources quotaResources = Resources::parse("cpus:1;mem:512", ROLE1).get();
+
+  // The master is configured so that only requests from `DEFAULT_CREDENTIAL`
+  // are authenticated.
+  Credential credential;
+  credential.set_principal("unknown-principal");
+  credential.set_secret("test-secret");
+
+  Future<Response> response1 = process::http::post(
+      master.get(),
+      "quota",
+      createBasicAuthHeaders(credential),
+      createRequestBody(quotaResources));
+
+  AWAIT_EXPECT_RESPONSE_STATUS_EQ(
+      Unauthorized("Mesos master").status, response1) << response1.get().body;
+
+  // The absense of credentials leads to authentication failure as well.
+  Future<Response> response2 = process::http::post(
+      master.get(),
+      "quota",
+      None(),
+      createRequestBody(quotaResources));
+
+  AWAIT_EXPECT_RESPONSE_STATUS_EQ(
+      Unauthorized("Mesos master").status, response2) << response2.get().body;
+
+  Shutdown();
+}
+
+
+// Checks that an authorized principal can set quota.
+TEST_F(MasterQuotaTest, AuthorizedQuotaSetRequest)
+{
+  TestAllocator<> allocator;
+  EXPECT_CALL(allocator, initialize(_, _, _, _));
+
+  // Setup ACLs so that the default principal can set quotas for `ROLE1`.
+  ACLs acls;
+  mesos::ACL::SetQuota* acl = acls.add_set_quotas();
+  acl->mutable_principals()->add_values(DEFAULT_CREDENTIAL.principal());
+  acl->mutable_roles()->add_values(ROLE1);
+
+  master::Flags masterFlags = CreateMasterFlags();
+  masterFlags.acls = acls;
+
+  Try<PID<Master>> master = StartMaster(&allocator, masterFlags);
+  ASSERT_SOME(master);
+
+  // Start an agent and wait until its resources are available.
+  Future<Resources> agentTotalResources;
+  EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
+    .WillOnce(DoAll(InvokeAddSlave(&allocator),
+                    FutureArg<3>(&agentTotalResources)));
+
+  Try<PID<Slave>> agent = StartSlave();
+  ASSERT_SOME(agent);
+
+  AWAIT_READY(agentTotalResources);
+  EXPECT_EQ(defaultAgentResources, agentTotalResources.get());
+
+  // Request quota for a portion of the resources available on the agent.
+  Resources quotaResources = Resources::parse("cpus:1;mem:512;", ROLE1).get();
+  EXPECT_TRUE(agentTotalResources.get().contains(quotaResources.flatten()));
+
+  Future<QuotaInfo> quotaInfo;
+  EXPECT_CALL(allocator, setQuota(Eq(ROLE1), _))
+    .WillOnce(DoAll(InvokeSetQuota(&allocator),
+                    FutureArg<1>(&quotaInfo)));
+
+  Future<Response> response = process::http::post(
+      master.get(),
+      "quota",
+      createBasicAuthHeaders(DEFAULT_CREDENTIAL),
+      createRequestBody(quotaResources));
+
+  AWAIT_EXPECT_RESPONSE_STATUS_EQ(OK().status, response) << response.get().body;
+
+  AWAIT_READY(quotaInfo);
+
+  // TODO(nfnt): Quota removal authorization will add a principal field to
+  // `QuotaInfo`. Check it for the correct principal value.
+  EXPECT_EQ(ROLE1, quotaInfo.get().role());
+  EXPECT_EQ(quotaResources.flatten(), quotaInfo.get().guarantee());
+
+  Shutdown();
+}
+
+
+// Checks that set quota requests can be authorized without authentication
+// if an authorization rule exists that applies to anyone. The authorizer
+// will map the absence of a principal to "ANY".
+TEST_F(MasterQuotaTest, AuthorizedQuotaSetRequestWithoutPrincipal)
+{
+  TestAllocator<> allocator;
+  EXPECT_CALL(allocator, initialize(_, _, _, _));
+
+  // Setup ACLs so that the default principal can set quotas for `ROLE1`.
+  ACLs acls;
+  mesos::ACL::SetQuota* acl = acls.add_set_quotas();
+  acl->mutable_principals()->set_type(mesos::ACL::Entity::ANY);
+  acl->mutable_roles()->add_values(ROLE1);
+
+  // Disable authentication by not providing credentials.
+  master::Flags masterFlags = CreateMasterFlags();
+  masterFlags.acls = acls;
+  masterFlags.credentials = None();
+
+  Try<PID<Master>> master = StartMaster(&allocator, masterFlags);
+  ASSERT_SOME(master);
+
+  // Start an agent and wait until its resources are available.
+  Future<Resources> agentTotalResources;
+  EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
+    .WillOnce(DoAll(InvokeAddSlave(&allocator),
+                    FutureArg<3>(&agentTotalResources)));
+
+  Try<PID<Slave>> agent = StartSlave();
+  ASSERT_SOME(agent);
+
+  AWAIT_READY(agentTotalResources);
+  EXPECT_EQ(defaultAgentResources, agentTotalResources.get());
+
+  // Request quota for a portion of the resources available on the agent.
+  Resources quotaResources = Resources::parse("cpus:1;mem:512;", ROLE1).get();
+  EXPECT_TRUE(agentTotalResources.get().contains(quotaResources.flatten()));
+
+  // Create a HTTP request without authorization headers.
+  Future<Response> response = process::http::post(
+      master.get(),
+      "quota",
+      None(),
+      createRequestBody(quotaResources));
+
+  AWAIT_EXPECT_RESPONSE_STATUS_EQ(OK().status, response) << response.get().body;
+
+  Shutdown();
+}
+
+
+// Checks that an unauthorized principal cannot set quota.
+TEST_F(MasterQuotaTest, UnauthorizedQuotaSetRequest)
+{
+  // Setup ACLs so that no principal can set quotas for `ROLE1`.
+  ACLs acls;
+  mesos::ACL::SetQuota* acl = acls.add_set_quotas();
+  acl->mutable_principals()->set_type(mesos::ACL::Entity::NONE);
+  acl->mutable_roles()->add_values(ROLE1);
+
+  master::Flags masterFlags = CreateMasterFlags();
+  masterFlags.acls = acls;
+
+  Try<PID<Master>> master = StartMaster(masterFlags);
+  ASSERT_SOME(master);
+
+  // We do not need an agent since a request should be rejected before
+  // we start looking at available resources.
+
+  // A request can contain any amount of resources because it will be rejected
+  // before we start looking at available resources.
+  Resources quotaResources = Resources::parse("cpus:1;mem:512", ROLE1).get();
+
+  Future<Response> response = process::http::post(
+      master.get(),
+      "quota",
+      createBasicAuthHeaders(DEFAULT_CREDENTIAL),
+      createRequestBody(quotaResources));
+
+  AWAIT_EXPECT_RESPONSE_STATUS_EQ(
+      Unauthorized("Mesos master").status, response) << response.get().body;
+
+  Shutdown();
+}
 
 } // namespace tests {
 } // namespace internal {

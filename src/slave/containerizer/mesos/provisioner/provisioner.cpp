@@ -122,7 +122,7 @@ Future<Nothing> Provisioner::recover(
 }
 
 
-Future<string> Provisioner::provision(
+Future<ProvisionInfo> Provisioner::provision(
     const ContainerID& containerId,
     const Image& image)
 {
@@ -250,7 +250,7 @@ Future<Nothing> ProvisionerProcess::recover(
 }
 
 
-Future<string> ProvisionerProcess::provision(
+Future<ProvisionInfo> ProvisionerProcess::provision(
     const ContainerID& containerId,
     const Image& image)
 {
@@ -266,9 +266,9 @@ Future<string> ProvisionerProcess::provision(
 }
 
 
-Future<string> ProvisionerProcess::_provision(
+Future<ProvisionInfo> ProvisionerProcess::_provision(
     const ContainerID& containerId,
-    const vector<string>& layers)
+    const ImageInfo& ImageInfo)
 {
   // TODO(jieyu): Choose a backend smartly. For instance, if there is
   // only one layer returned from the store. prefer to use bind
@@ -295,8 +295,10 @@ Future<string> ProvisionerProcess::_provision(
 
   infos[containerId]->rootfses[backend].insert(rootfsId);
 
-  return backends.get(backend).get()->provision(layers, rootfs)
-    .then([rootfs]() -> Future<string> { return rootfs; });
+  return backends.get(backend).get()->provision(ImageInfo.layers, rootfs)
+    .then([rootfs, ImageInfo]() -> Future<ProvisionInfo> {
+      return ProvisionInfo{rootfs, ImageInfo.runtimeConfig};
+    });
 }
 
 
