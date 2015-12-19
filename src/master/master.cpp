@@ -2904,7 +2904,6 @@ Resources Master::addTask(
 
   // Determine if this task launches an executor, and if so make sure
   // the slave and framework state has been updated accordingly.
-  Option<ExecutorID> executorId;
 
   if (task.has_executor()) {
     // TODO(benh): Refactor this code into Slave::addTask.
@@ -2919,29 +2918,10 @@ Resources Master::addTask(
 
       resources += task.executor().resources();
     }
-
-    executorId = task.executor().executor_id();
   }
 
   // Add the task to the framework and slave.
-  Task* t = new Task();
-  t->mutable_framework_id()->MergeFrom(framework->id());
-  t->set_state(TASK_STAGING);
-  t->set_name(task.name());
-  t->mutable_task_id()->MergeFrom(task.task_id());
-  t->mutable_slave_id()->MergeFrom(task.slave_id());
-  t->mutable_resources()->MergeFrom(task.resources());
-
-  if (executorId.isSome()) {
-    t->mutable_executor_id()->MergeFrom(executorId.get());
-  }
-
-  if (task.has_labels()) {
-    t->mutable_labels()->MergeFrom(task.labels());
-  }
-  if (task.has_discovery()) {
-    t->mutable_discovery()->MergeFrom(task.discovery());
-  }
+  Task* t = new Task(protobuf::createTask(task, TASK_STAGING, framework->id()));
 
   slave->addTask(t);
   framework->addTask(t);
@@ -3133,10 +3113,32 @@ void Master::accept(
 
         break;
       }
-      case Offer::Operation::CREATE:
-      case Offer::Operation::DESTROY:
-        // TODO(mpark): Implement authorization for Create/Destroy.
+
+      // The CREATE operation allows the creation of a persistent volume.
+      case Offer::Operation::CREATE: {
+        Option<string> principal = framework->info.has_principal()
+          ? framework->info.principal()
+          : Option<string>::none();
+
+        futures.push_back(
+            authorizeCreateVolume(
+                operation.create(), principal));
+
         break;
+      }
+
+      // The DESTROY operation allows the destruction of a persistent volume.
+      case Offer::Operation::DESTROY: {
+        Option<string> principal = framework->info.has_principal()
+          ? framework->info.principal()
+          : Option<string>::none();
+
+        futures.push_back(
+            authorizeDestroyVolume(
+                operation.destroy(), principal));
+
+        break;
+      }
     }
   }
 
@@ -3320,9 +3322,33 @@ void Master::_accept(
       }
 
       case Offer::Operation::CREATE: {
+        Future<bool> authorization = authorizations.front();
+        authorizations.pop_front();
+
+        CHECK(!authorization.isDiscarded());
+
+        if (authorization.isFailed()) {
+          // TODO(greggomann): We may want to retry this failed authorization
+          // request rather than dropping it immediately.
+          drop(framework,
+               operation,
+               "Authorization of principal '" + framework->info.principal() +
+               "' to create persistent volumes failed: " +
+               authorization.failure());
+
+          continue;
+        } else if (!authorization.get()) {
+          drop(framework,
+               operation,
+               "Not authorized to create persistent volumes as '" +
+                 framework->info.principal() + "'");
+
+          continue;
+        }
+
+        // Make sure this create operation is valid.
         Option<Error> error = validation::operation::validate(
-            operation.create(),
-            slave->checkpointedResources);
+            operation.create(), slave->checkpointedResources);
 
         if (error.isSome()) {
           drop(framework, operation, error.get().message);
@@ -3346,9 +3372,33 @@ void Master::_accept(
       }
 
       case Offer::Operation::DESTROY: {
+        Future<bool> authorization = authorizations.front();
+        authorizations.pop_front();
+
+        CHECK(!authorization.isDiscarded());
+
+        if (authorization.isFailed()) {
+          // TODO(greggomann): We may want to retry this failed authorization
+          // request rather than dropping it immediately.
+          drop(framework,
+               operation,
+               "Authorization of principal '" + framework->info.principal() +
+               "' to destroy persistent volumes failed: " +
+               authorization.failure());
+
+          continue;
+        } else if (!authorization.get()) {
+          drop(framework,
+               operation,
+               "Not authorized to destroy persistent volumes as '" +
+                 framework->info.principal() + "'");
+
+          continue;
+        }
+
+        // Make sure this destroy operation is valid.
         Option<Error> error = validation::operation::validate(
-            operation.destroy(),
-            slave->checkpointedResources);
+            operation.destroy(), slave->checkpointedResources);
 
         if (error.isSome()) {
           drop(framework, operation, error.get().message);
@@ -3357,7 +3407,7 @@ void Master::_accept(
 
         Try<Resources> resources = _offeredResources.apply(operation);
         if (resources.isError()) {
-          drop(framework, operation, error.get().message);
+          drop(framework, operation, resources.error());
           continue;
         }
 
