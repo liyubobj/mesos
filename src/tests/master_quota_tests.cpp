@@ -985,7 +985,7 @@ TEST_F(MasterQuotaTest, AvailableResourcesAfterRescinding)
 TEST_F(MasterQuotaTest, NoAuthenticationNoAuthorization)
 {
   TestAllocator<> allocator;
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   // Disable authentication and authorization by providing neither
   // credentials nor ACLs.
@@ -1104,7 +1104,7 @@ TEST_F(MasterQuotaTest, UnauthenticatedQuotaRequest)
 TEST_F(MasterQuotaTest, AuthorizedQuotaSetRequest)
 {
   TestAllocator<> allocator;
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   // Setup ACLs so that the default principal can set quotas for `ROLE1`.
   ACLs acls;
@@ -1164,7 +1164,7 @@ TEST_F(MasterQuotaTest, AuthorizedQuotaSetRequest)
 TEST_F(MasterQuotaTest, AuthorizedQuotaSetRequestWithoutPrincipal)
 {
   TestAllocator<> allocator;
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   // Setup ACLs so that the default principal can set quotas for `ROLE1`.
   ACLs acls;
