@@ -51,7 +51,6 @@ using mesos::internal::master::MIN_MEM;
 using mesos::internal::master::allocator::HierarchicalDRFAllocator;
 
 using mesos::master::allocator::Allocator;
-using mesos::master::RoleInfo;
 
 using mesos::quota::QuotaInfo;
 
@@ -137,7 +136,6 @@ protected:
   }
 
   void initialize(
-      const vector<string>& _roles,
       const master::Flags& _flags = master::Flags(),
       Option<lambda::function<
           void(const FrameworkID&,
@@ -148,16 +146,6 @@ protected:
                  inverseOfferCallback = None())
   {
     flags = _flags;
-
-    // NOTE: The master always adds this default role.
-    RoleInfo info;
-    info.set_name("*");
-    roles["*"] = info;
-
-    foreach (const string& role, _roles) {
-      info.set_name(role);
-      roles[role] = info;
-    }
 
     if (offerCallback.isNone()) {
       offerCallback =
@@ -193,7 +181,7 @@ protected:
         offerCallback.get(),
         inverseOfferCallback.get(),
         enforceReclaimCallback,
-        roles);
+        hashmap<string, double>());
   }
 
   SlaveInfo createSlaveInfo(const string& resources)
@@ -247,8 +235,6 @@ protected:
   process::Queue<Allocation> allocations;
   process::Queue<Deallocation> deallocations;
 
-  hashmap<string, RoleInfo> roles;
-
 private:
   int nextSlaveId;
   int nextFrameworkId;
@@ -279,7 +265,7 @@ TEST_F(HierarchicalAllocatorTest, UnreservedDRF)
   // would slow down the test.
   Clock::pause();
 
-  initialize(vector<string>{"role1", "role2"});
+  initialize();
 
   hashmap<FrameworkID, Resources> EMPTY;
 
@@ -405,7 +391,7 @@ TEST_F(HierarchicalAllocatorTest, ReservedDRF)
   // would slow down the test.
   Clock::pause();
 
-  initialize(vector<string>{"role1", "role2"});
+  initialize();
 
   hashmap<FrameworkID, Resources> EMPTY;
 
@@ -477,7 +463,7 @@ TEST_F(HierarchicalAllocatorTest, MaintenanceInverseOffers)
   // test.
   Clock::pause();
 
-  initialize(vector<string>{});
+  initialize();
 
   // No initial resources.
   hashmap<FrameworkID, Resources> EMPTY;
@@ -534,7 +520,7 @@ TEST_F(HierarchicalAllocatorTest, CoarseGrained)
   // influence this test.
   Clock::pause();
 
-  initialize(vector<string>{"role1", "role2"});
+  initialize();
 
   hashmap<FrameworkID, Resources> EMPTY;
 
@@ -607,7 +593,7 @@ TEST_F(HierarchicalAllocatorTest, SameShareFairness)
 {
   Clock::pause();
 
-  initialize(vector<string>{});
+  initialize();
 
   hashmap<FrameworkID, Resources> EMPTY;
 
@@ -654,7 +640,7 @@ TEST_F(HierarchicalAllocatorTest, Reservations)
 {
   Clock::pause();
 
-  initialize(vector<string>{"role1", "role2", "role3"});
+  initialize();
 
   hashmap<FrameworkID, Resources> EMPTY;
 
@@ -707,7 +693,7 @@ TEST_F(HierarchicalAllocatorTest, RecoverResources)
 {
   Clock::pause();
 
-  initialize(vector<string>{"role1"});
+  initialize();
 
   hashmap<FrameworkID, Resources> EMPTY;
 
@@ -773,7 +759,7 @@ TEST_F(HierarchicalAllocatorTest, Allocatable)
   // would slow down the test.
   Clock::pause();
 
-  initialize(vector<string>{"role1"});
+  initialize();
 
   FrameworkInfo framework = createFrameworkInfo("role1");
   allocator->addFramework(
@@ -840,7 +826,8 @@ TEST_F(HierarchicalAllocatorTest, Allocatable)
 TEST_F(HierarchicalAllocatorTest, UpdateAllocation)
 {
   Clock::pause();
-  initialize(vector<string>{"role1"});
+
+  initialize();
 
   hashmap<FrameworkID, Resources> EMPTY;
 
@@ -912,7 +899,7 @@ TEST_F(HierarchicalAllocatorTest, UpdateAllocation)
 // allocator has sufficient available resources.
 TEST_F(HierarchicalAllocatorTest, UpdateAvailableSuccess)
 {
-  initialize(vector<string>{"role1"});
+  initialize();
 
   hashmap<FrameworkID, Resources> EMPTY;
 
@@ -957,7 +944,7 @@ TEST_F(HierarchicalAllocatorTest, UpdateAvailableSuccess)
 // allocator has insufficient available resources.
 TEST_F(HierarchicalAllocatorTest, UpdateAvailableFail)
 {
-  initialize(vector<string>{"role1"});
+  initialize();
 
   hashmap<FrameworkID, Resources> EMPTY;
 
@@ -994,7 +981,8 @@ TEST_F(HierarchicalAllocatorTest, UpdateSlave)
 {
   // Pause clock to disable periodic allocation.
   Clock::pause();
-  initialize(vector<string>{"role1"});
+
+  initialize();
 
   hashmap<FrameworkID, Resources> EMPTY;
 
@@ -1051,7 +1039,8 @@ TEST_F(HierarchicalAllocatorTest, OversubscribedNotAllocated)
 {
   // Pause clock to disable periodic allocation.
   Clock::pause();
-  initialize(vector<string>{"role1"});
+
+  initialize();
 
   hashmap<FrameworkID, Resources> EMPTY;
 
@@ -1086,7 +1075,8 @@ TEST_F(HierarchicalAllocatorTest, RecoverOversubscribedResources)
 {
   // Pause clock to disable periodic allocation.
   Clock::pause();
-  initialize(vector<string>{"role1"});
+
+  initialize();
 
   hashmap<FrameworkID, Resources> EMPTY;
 
@@ -1138,7 +1128,7 @@ TEST_F(HierarchicalAllocatorTest, Whitelist)
 {
   Clock::pause();
 
-  initialize(vector<string>{"role1"});
+  initialize();
 
   hashset<string> whitelist;
   whitelist.insert("dummy-slave");
@@ -1213,7 +1203,7 @@ TEST_F(HierarchicalAllocatorTest, QuotaProvidesQuarantee)
 
   hashmap<FrameworkID, Resources> EMPTY;
 
-  initialize(vector<string>{QUOTA_ROLE, NO_QUOTA_ROLE});
+  initialize();
 
   // Create `framework1` and set quota for its role.
   FrameworkInfo framework1 = createFrameworkInfo(QUOTA_ROLE);
@@ -1330,7 +1320,7 @@ TEST_F(HierarchicalAllocatorTest, RemoveQuota)
   const string QUOTA_ROLE{"quota-role"};
   const string NO_QUOTA_ROLE{"no-quota-role"};
 
-  initialize(vector<string>{QUOTA_ROLE, NO_QUOTA_ROLE});
+  initialize();
 
   // We start with the following cluster setup.
   // Total cluster resources (2 identical agents): cpus=2, mem=1024.
@@ -1427,7 +1417,7 @@ TEST_F(HierarchicalAllocatorTest, MultipleFrameworksInRoleWithQuota)
 
   hashmap<FrameworkID, Resources> EMPTY;
 
-  initialize(vector<string>{QUOTA_ROLE, NO_QUOTA_ROLE});
+  initialize();
 
   // Create `framework1a` and set quota for its role.
   FrameworkInfo framework1a = createFrameworkInfo(QUOTA_ROLE);
@@ -1547,7 +1537,7 @@ TEST_F(HierarchicalAllocatorTest, QuotaAllocationGranularity)
 
   hashmap<FrameworkID, Resources> EMPTY;
 
-  initialize(vector<string>{QUOTA_ROLE, NO_QUOTA_ROLE});
+  initialize();
 
   // Create `framework1` and set quota for its role.
   FrameworkInfo framework1 = createFrameworkInfo(QUOTA_ROLE);
@@ -1599,7 +1589,7 @@ TEST_F(HierarchicalAllocatorTest, DRFWithQuota)
   const string QUOTA_ROLE{"quota-role"};
   const string NO_QUOTA_ROLE{"no-quota-role"};
 
-  initialize(vector<string>{QUOTA_ROLE, NO_QUOTA_ROLE});
+  initialize();
 
   // We start with the following cluster setup.
   // Total cluster resources (1 agent): cpus=1, mem=512.
@@ -1698,7 +1688,7 @@ TEST_F(HierarchicalAllocatorTest, QuotaAgainstStarvation)
   const string QUOTA_ROLE{"quota-role"};
   const string NO_QUOTA_ROLE{"no-quota-role"};
 
-  initialize(vector<string>{QUOTA_ROLE, NO_QUOTA_ROLE});
+  initialize();
 
   // We want to start with the following cluster setup.
   // Total cluster resources (2 identical agents): cpus=2, mem=1024.
@@ -1823,7 +1813,7 @@ TEST_F(HierarchicalAllocatorTest, QuotaAbsentFramework)
 
   hashmap<FrameworkID, Resources> EMPTY;
 
-  initialize(vector<string>{QUOTA_ROLE, NO_QUOTA_ROLE});
+  initialize();
 
   SlaveInfo agent1 = createSlaveInfo("cpus:2;mem:1024;disk:0");
   SlaveInfo agent2 = createSlaveInfo("cpus:1;mem:512;disk:0");
@@ -1910,7 +1900,7 @@ TEST_P(HierarchicalAllocator_BENCHMARK_Test, AddAndUpdateSlave)
     finished++;
   };
 
-  initialize({}, master::Flags(), offerCallback);
+  initialize(master::Flags(), offerCallback);
 
   Stopwatch watch;
   watch.start();
@@ -2020,7 +2010,7 @@ TEST_F(HierarchicalAllocator_BENCHMARK_Test, DeclineOffers)
   slaves.reserve(slaveCount);
   frameworks.reserve(frameworkCount);
 
-  initialize({}, flags, offerCallback);
+  initialize(flags, offerCallback);
 
   for (unsigned i = 0; i < frameworkCount; ++i) {
     frameworks.push_back(createFrameworkInfo("*"));

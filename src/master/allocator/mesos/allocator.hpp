@@ -58,7 +58,7 @@ public:
       const lambda::function<
           void(const FrameworkID&, const SlaveID&, const TaskID&)>&
         enforceReclaimCallback,
-      const hashmap<std::string, mesos::master::RoleInfo>& roles);
+      const hashmap<std::string, double>& weights);
 
   void recover(
       const int expectedAgentCount,
@@ -193,7 +193,7 @@ public:
           void(const FrameworkID&,
                const hashmap<SlaveID, UnavailableResources>&)>&
         inverseOfferCallback,
-      const hashmap<std::string, mesos::master::RoleInfo>& roles) = 0;
+      const hashmap<std::string, double>& weights) = 0;
 
   virtual void recover(
       const int expectedAgentCount,
@@ -339,7 +339,7 @@ inline void MesosAllocator<AllocatorProcess>::initialize(
     const lambda::function<
           void(const FrameworkID&, const SlaveID&, const TaskID&)>&
         enforceReclaimCallback,
-    const hashmap<std::string, mesos::master::RoleInfo>& roles)
+    const hashmap<std::string, double>& weights)
 {
   process::dispatch(
       process,
@@ -347,7 +347,7 @@ inline void MesosAllocator<AllocatorProcess>::initialize(
       allocationInterval,
       offerCallback,
       inverseOfferCallback,
-      roles);
+      weights);
 }
 
 

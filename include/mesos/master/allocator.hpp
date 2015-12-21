@@ -72,10 +72,9 @@ public:
   /**
    * Initializes the allocator.
    *
-   * Initializes the allocator, it is invoked when the master starts up.
-   * Any errors in initialization should fail fast and result in an ABORT.
-   * The master expects the allocator to be successfully initialized if
-   * this call returns.
+   * Invoked when the master starts up. Any errors in initialization
+   * should fail fast and result in an ABORT. The master expects the
+   * allocator to be successfully initialized if this call returns.
    *
    * @param allocationInterval The allocate interval for the allocator, it
    *     determines how often the allocator should perform the batch
@@ -87,9 +86,8 @@ public:
    *     allocations from the frameworks.
    * @param enforceReclaimCallback A callback the allocator uses to ask the
    *     master to enforce reclaim the executor after a grace period.
-   * @param roles The roles are actually checked by the master (see
-   *     Master::subscribe). All frameworks that are added to the allocator
-   *     will fall into one of these roles.
+   * @param weights Configured per-role weights. Any roles that do not
+   *     appear in this map will be assigned the default weight of 1.
    */
   virtual void initialize(
       const Duration& allocationInterval,
@@ -103,11 +101,10 @@ public:
       const lambda::function<
           void(const FrameworkID&, const SlaveID&, const TaskID&)>&
         enforceReclaimCallback,
-      const hashmap<std::string, RoleInfo>& roles) = 0;
+      const hashmap<std::string, double>& weights) = 0;
 
   /**
    * Informs the allocator of the recovered state from the master.
-   *
    *
    * Because it is hard to define recovery for a running allocator, this
    * method should be called after `initialize()`, but before actual

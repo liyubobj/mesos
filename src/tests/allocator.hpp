@@ -388,7 +388,7 @@ public:
           void(const FrameworkID&,
                const SlaveID&,
                const TaskID&)>&,
-      const hashmap<std::string, mesos::master::RoleInfo>&));
+      const hashmap<std::string, double>&));
 
   MOCK_METHOD2(recover, void(
       const int expectedAgentCount,
