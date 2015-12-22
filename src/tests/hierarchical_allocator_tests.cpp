@@ -1849,8 +1849,7 @@ TEST_F(HierarchicalAllocatorTest, QuotaAbsentFramework)
 
 class HierarchicalAllocator_BENCHMARK_Test
   : public HierarchicalAllocatorTestBase,
-    public WithParamInterface<std::tr1::tuple<size_t, size_t>>
-{};
+    public WithParamInterface<std::tr1::tuple<size_t, size_t>> {};
 
 
 // The Hierarchical Allocator benchmark tests are parameterized
