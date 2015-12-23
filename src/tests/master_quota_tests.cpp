@@ -41,9 +41,6 @@
 #include "tests/allocator.hpp"
 #include "tests/mesos.hpp"
 
-using std::string;
-using std::vector;
-
 using google::protobuf::RepeatedPtrField;
 
 using mesos::internal::master::Master;
@@ -60,6 +57,9 @@ using process::http::Conflict;
 using process::http::OK;
 using process::http::Response;
 using process::http::Unauthorized;
+
+using std::string;
+using std::vector;
 
 using testing::_;
 using testing::DoAll;
@@ -115,12 +115,17 @@ protected:
   // Generates a quota request from the specified resources.
   string createRequestBody(const Resources& resources, bool force = false) const
   {
-    string request = strings::format("resources=%s", JSON::protobuf(
-        static_cast<const RepeatedPtrField<Resource>&>(resources))).get();
+    const string json =
+        "{"
+        "  %s"
+        "  \"resources\":%s"
+        "}";
 
-    if (force) {
-      request += "&force=true";
-    }
+    const string request = strings::format(
+        json,
+        force ? "\"force\":true," : "",
+        JSON::protobuf(
+            static_cast<const RepeatedPtrField<Resource>&>(resources))).get();
 
     return request;
   }
@@ -190,9 +195,9 @@ TEST_F(MasterQuotaTest, SetInvalidRequest)
         request);
   };
 
-  // Tests whether a quota request with missing 'resource=[]' fails.
+  // Tests whether a quota request with invalid JSON fails.
   {
-    string badRequest =
+    const string badRequest =
       "{"
       "  invalidJson"
       "}";
@@ -203,12 +208,12 @@ TEST_F(MasterQuotaTest, SetInvalidRequest)
       << response.get().body;
   }
 
-  // Tests whether a quota requests with invalid json fails.
+  // Tests whether a quota request with missing 'resource' field fails.
   {
-    string badRequest =
-      "resources=["
-      "  \"invalidJson\" : 1"
-      "]";
+    const string badRequest =
+      "{"
+      "  \"unknownField\":\"unknownValue\""
+      "}";
 
     Future<Response> response = postQuota(badRequest);
 
@@ -218,10 +223,13 @@ TEST_F(MasterQuotaTest, SetInvalidRequest)
 
   // Tests whether a quota request with invalid resources fails.
   {
-    string badRequest =
-      "resources=["
-      "  {\"invalidResource\" : 1}"
-      "]";
+    const string badRequest =
+      "{"
+      "  \"resources\":"
+      "  ["
+      "    \" invalidResource\" : 1"
+      "  ]"
+      "}";
 
     Future<Response> response = postQuota(badRequest);
 
