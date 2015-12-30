@@ -16,6 +16,7 @@
 
 #include <mesos/module/isolator.hpp>
 
+#include <mesos/slave/container_logger.hpp>
 #include <mesos/slave/isolator.hpp>
 
 #include <process/collect.hpp>
@@ -90,6 +91,7 @@ namespace slave {
 using mesos::modules::ModuleManager;
 
 using mesos::slave::ContainerLimitation;
+using mesos::slave::ContainerLogger;
 using mesos::slave::ContainerPrepareInfo;
 using mesos::slave::ContainerState;
 using mesos::slave::Isolator;
@@ -106,22 +108,22 @@ Try<MesosContainerizer*> MesosContainerizer::create(
     bool local,
     Fetcher* fetcher)
 {
-  string isolation;
+  // Modify `flags` based on the deprecated `isolation` flag (and then
+  // use `flags_` in the rest of this function).
+  Flags flags_ = flags;
 
   if (flags.isolation == "process") {
     LOG(WARNING) << "The 'process' isolation flag is deprecated, "
                  << "please update your flags to"
                  << " '--isolation=posix/cpu,posix/mem'.";
 
-    isolation = "posix/cpu,posix/mem";
+    flags_.isolation = "posix/cpu,posix/mem";
   } else if (flags.isolation == "cgroups") {
     LOG(WARNING) << "The 'cgroups' isolation flag is deprecated, "
                  << "please update your flags to"
                  << " '--isolation=cgroups/cpu,cgroups/mem'.";
 
-    isolation = "cgroups/cpu,cgroups/mem";
-  } else {
-    isolation = flags.isolation;
+    flags_.isolation = "cgroups/cpu,cgroups/mem";
   }
 
   // One and only one filesystem isolator is required. The filesystem
@@ -130,25 +132,61 @@ Try<MesosContainerizer*> MesosContainerizer::create(
   // the user does not specify one, 'filesystem/posix' will be used.
   //
   // TODO(jieyu): Check that only one filesystem isolator is used.
-  if (!strings::contains(isolation, "filesystem/")) {
-    isolation += ",filesystem/posix";
+  if (!strings::contains(flags_.isolation, "filesystem/")) {
+    flags_.isolation += ",filesystem/posix";
   }
 
-  // Modify the flags to include any changes to isolation.
-  Flags flags_ = flags;
-  flags_.isolation = isolation;
+  LOG(INFO) << "Using isolation: " << flags_.isolation;
 
-  LOG(INFO) << "Using isolation: " << isolation;
+  // Create the container logger for the MesosContainerizer.
+  Try<ContainerLogger*> logger =
+    ContainerLogger::create(flags_.container_logger);
+
+  if (logger.isError()) {
+    return Error("Failed to create container logger: " + logger.error());
+  }
+
+  // Create the launcher for the MesosContainerizer.
+  Try<Launcher*> launcher = [&flags_]() -> Try<Launcher*> {
+#ifdef __linux__
+    if (flags_.launcher.isSome()) {
+      // If the user has specified the launcher, use it.
+      if (flags_.launcher.get() == "linux") {
+        return LinuxLauncher::create(flags_);
+      } else if (flags_.launcher.get() == "posix") {
+        return PosixLauncher::create(flags_);
+      } else {
+        return Error(
+            "Unknown or unsupported launcher: " + flags_.launcher.get());
+      }
+    }
+
+    // Use Linux launcher if it is available, POSIX otherwise.
+    return LinuxLauncher::available()
+      ? LinuxLauncher::create(flags_)
+      : PosixLauncher::create(flags_);
+#else
+    if (flags_.launcher.isSome() && flags_.launcher.get() != "posix") {
+      return Error("Unsupported launcher: " + flags_.launcher.get());
+    }
+
+    return PosixLauncher::create(flags_);
+#endif // __linux__
+  }();
+
+  if (launcher.isError()) {
+    return Error("Failed to create launcher: " + launcher.error());
+  }
 
 #ifdef __linux__
   // The provisioner will be used by the 'filesystem/linux' isolator.
-  Try<Owned<Provisioner>> provisioner = Provisioner::create(flags, fetcher);
+  Try<Owned<Provisioner>> provisioner = Provisioner::create(flags_, fetcher);
   if (provisioner.isError()) {
     return Error("Failed to create provisioner: " + provisioner.error());
   }
 #endif
 
-  // Create a MesosContainerizerProcess using isolators and a launcher.
+  // Create the isolators for the MesosContainerizer.
   const hashmap<string, lambda::function<Try<Isolator*>(const Flags&)>>
     creators = {
     // Filesystem isolators.
@@ -179,72 +217,36 @@ Try<MesosContainerizer*> MesosContainerizer::create(
 
   vector<Owned<Isolator>> isolators;
 
-  foreach (const string& type, strings::tokenize(isolation, ",")) {
-    Owned<Isolator> isolator;
-
-    if (creators.contains(type)) {
-      Try<Isolator*> _isolator = creators.at(type)(flags_);
-      if (_isolator.isError()) {
-        return Error(
-            "Could not create isolator " + type + ": " + _isolator.error());
+  foreach (const string& type, strings::tokenize(flags_.isolation, ",")) {
+    Try<Isolator*> isolator = [&creators, &type, &flags_]() -> Try<Isolator*> {
+      if (creators.contains(type)) {
+        return creators.at(type)(flags_);
+      } else if (ModuleManager::contains<Isolator>(type)) {
+        return ModuleManager::create<Isolator>(type);
       }
+      return Error("Unknown or unsupported isolator");
+    }();
 
-      isolator.reset(_isolator.get());
-    } else if (ModuleManager::contains<Isolator>(type)) {
-      Try<Isolator*> _isolator = ModuleManager::create<Isolator>(type);
-      if (_isolator.isError()) {
-        return Error(
-            "Could not create isolator " + type + ": " + _isolator.error());
-      }
-
-      isolator.reset(_isolator.get());
-    } else {
-      return Error("Unknown or unsupported isolator: " + type);
+    if (isolator.isError()) {
+      return Error(
+          "Could not create isolator '" + type + "': " + isolator.error());
     }
 
     // NOTE: The filesystem isolator must be the first isolator used
     // so that the runtime isolators can have a consistent view on the
     // prepared filesystem (e.g., any volume mounts are performed).
     if (strings::contains(type, "filesystem/")) {
-      isolators.insert(isolators.begin(), isolator);
+      isolators.insert(isolators.begin(), Owned<Isolator>(isolator.get()));
     } else {
-      isolators.push_back(isolator);
+      isolators.push_back(Owned<Isolator>(isolator.get()));
     }
-  }
-
-#ifdef __linux__
-  Try<Launcher*> launcher = (Launcher*) NULL;
-  if (flags_.launcher.isSome()) {
-    // If the user has specified the launcher, use it.
-    if (flags_.launcher.get() == "linux") {
-      launcher = LinuxLauncher::create(flags_);
-    } else if (flags_.launcher.get() == "posix") {
-      launcher = PosixLauncher::create(flags_);
-    } else {
-      return Error("Unknown or unsupported launcher: " + flags_.launcher.get());
-    }
-  } else {
-    // Use Linux launcher if it is available, POSIX otherwise.
-    launcher = LinuxLauncher::available()
-      ? LinuxLauncher::create(flags_)
-      : PosixLauncher::create(flags_);
-  }
-#else
-  if (flags_.launcher.isSome() && flags_.launcher.get() != "posix") {
-    return Error("Unsupported launcher: " + flags_.launcher.get());
-  }
-
-  Try<Launcher*> launcher = PosixLauncher::create(flags_);
-#endif // __linux__
-
-  if (launcher.isError()) {
-    return Error("Failed to create launcher: " + launcher.error());
   }
 
   return new MesosContainerizer(
       flags_,
       local,
       fetcher,
+      Owned<ContainerLogger>(logger.get()),
       Owned<Launcher>(launcher.get()),
       isolators);
 }
@@ -254,12 +256,14 @@ MesosContainerizer::MesosContainerizer(
     const Flags& flags,
     bool local,
     Fetcher* fetcher,
+    const Owned<ContainerLogger>& logger,
     const Owned<Launcher>& launcher,
     const vector<Owned<Isolator>>& isolators)
   : process(new MesosContainerizerProcess(
       flags,
       local,
       fetcher,
+      logger,
       launcher,
       isolators))
 {
@@ -790,89 +794,97 @@ Future<bool> MesosContainerizerProcess::_launch(
   JSON::Object commands;
   commands.values["commands"] = commandArray;
 
-  // Use a pipe to block the child until it's been isolated.
-  int pipes[2];
+  return logger->prepare(executorInfo, directory)
+    .then(defer(
+        self(),
+        [=](const ContainerLogger::SubprocessInfo& subprocessInfo)
+          -> Future<bool> {
+    // Use a pipe to block the child until it's been isolated.
+    int pipes[2];
 
-  // We assume this should not fail under reasonable conditions so we
-  // use CHECK.
-  CHECK(pipe(pipes) == 0);
+    // We assume this should not fail under reasonable conditions so we
+    // use CHECK.
+    CHECK(pipe(pipes) == 0);
 
-  // Prepare the flags to pass to the launch process.
-  MesosContainerizerLaunch::Flags launchFlags;
+    // Prepare the flags to pass to the launch process.
+    MesosContainerizerLaunch::Flags launchFlags;
 
-  launchFlags.command = JSON::protobuf(executorInfo.command());
+    launchFlags.command = JSON::protobuf(executorInfo.command());
 
-  launchFlags.directory = rootfs.isSome() ? flags.sandbox_directory : directory;
-  launchFlags.rootfs = rootfs;
-  launchFlags.user = user;
-  launchFlags.pipe_read = pipes[0];
-  launchFlags.pipe_write = pipes[1];
-  launchFlags.commands = commands;
+    launchFlags.directory = rootfs.isSome()
+      ? flags.sandbox_directory
+      : directory;
+    launchFlags.rootfs = rootfs;
+    launchFlags.user = user;
+    launchFlags.pipe_read = pipes[0];
+    launchFlags.pipe_write = pipes[1];
+    launchFlags.commands = commands;
 
-  // Fork the child using launcher.
-  vector<string> argv(2);
-  argv[0] = MESOS_CONTAINERIZER;
-  argv[1] = MesosContainerizerLaunch::NAME;
+    // Fork the child using launcher.
+    vector<string> argv(2);
+    argv[0] = MESOS_CONTAINERIZER;
+    argv[1] = MesosContainerizerLaunch::NAME;
 
-  Try<pid_t> forked = launcher->fork(
-      containerId,
-      path::join(flags.launcher_dir, MESOS_CONTAINERIZER),
-      argv,
-      Subprocess::FD(STDIN_FILENO),
-      (local ? Subprocess::FD(STDOUT_FILENO)
-             : Subprocess::PATH(path::join(directory, "stdout"))),
-      (local ? Subprocess::FD(STDERR_FILENO)
-             : Subprocess::PATH(path::join(directory, "stderr"))),
-      launchFlags,
-      environment,
-      None(),
-      namespaces); // 'namespaces' will be ignored by PosixLauncher.
+    Try<pid_t> forked = launcher->fork(
+        containerId,
+        path::join(flags.launcher_dir, MESOS_CONTAINERIZER),
+        argv,
+        Subprocess::FD(STDIN_FILENO),
+        (local ? Subprocess::FD(STDOUT_FILENO)
+               : Subprocess::IO(subprocessInfo.out)),
+        (local ? Subprocess::FD(STDERR_FILENO)
+               : Subprocess::IO(subprocessInfo.err)),
+        launchFlags,
+        environment,
+        None(),
+        namespaces); // 'namespaces' will be ignored by PosixLauncher.
 
-  if (forked.isError()) {
-    return Failure("Failed to fork executor: " + forked.error());
-  }
-  pid_t pid = forked.get();
-
-  // Checkpoint the executor's pid if requested.
-  if (checkpoint) {
-    const string& path = slave::paths::getForkedPidPath(
-        slave::paths::getMetaRootDir(flags.work_dir),
-        slaveId,
-        executorInfo.framework_id(),
-        executorInfo.executor_id(),
-        containerId);
-
-    LOG(INFO) << "Checkpointing executor's forked pid " << pid
-              << " to '" << path <<  "'";
-
-    Try<Nothing> checkpointed =
-      slave::state::checkpoint(path, stringify(pid));
-
-    if (checkpointed.isError()) {
-      LOG(ERROR) << "Failed to checkpoint executor's forked pid to '"
-                 << path << "': " << checkpointed.error();
-
-      return Failure("Could not checkpoint executor's pid");
+    if (forked.isError()) {
+      return Failure("Failed to fork executor: " + forked.error());
     }
-  }
+    pid_t pid = forked.get();
 
-  // Monitor the executor's pid. We keep the future because we'll
-  // refer to it again during container destroy.
-  Future<Option<int>> status = process::reap(pid);
-  status.onAny(defer(self(), &Self::reaped, containerId));
-  containers_[containerId]->status = status;
+    // Checkpoint the executor's pid if requested.
+    if (checkpoint) {
+      const string& path = slave::paths::getForkedPidPath(
+          slave::paths::getMetaRootDir(flags.work_dir),
+          slaveId,
+          executorInfo.framework_id(),
+          executorInfo.executor_id(),
+          containerId);
 
-  return isolate(containerId, pid)
-    .then(defer(self(),
-                &Self::fetch,
-                containerId,
-                executorInfo.command(),
-                directory,
-                user,
-                slaveId))
-    .then(defer(self(), &Self::exec, containerId, pipes[1]))
-    .onAny(lambda::bind(&os::close, pipes[0]))
-    .onAny(lambda::bind(&os::close, pipes[1]));
+      LOG(INFO) << "Checkpointing executor's forked pid " << pid
+                << " to '" << path <<  "'";
+
+      Try<Nothing> checkpointed =
+        slave::state::checkpoint(path, stringify(pid));
+
+      if (checkpointed.isError()) {
+        LOG(ERROR) << "Failed to checkpoint executor's forked pid to '"
+                   << path << "': " << checkpointed.error();
+
+        return Failure("Could not checkpoint executor's pid");
+      }
+    }
+
+    // Monitor the executor's pid. We keep the future because we'll
+    // refer to it again during container destroy.
+    Future<Option<int>> status = process::reap(pid);
+    status.onAny(defer(self(), &Self::reaped, containerId));
+    containers_[containerId]->status = status;
+
+    return isolate(containerId, pid)
+      .then(defer(self(),
+                  &Self::fetch,
+                  containerId,
+                  executorInfo.command(),
+                  directory,
+                  user,
+                  slaveId))
+      .then(defer(self(), &Self::exec, containerId, pipes[1]))
+      .onAny(lambda::bind(&os::close, pipes[0]))
+      .onAny(lambda::bind(&os::close, pipes[1]));
+  }));
 }
 
 
