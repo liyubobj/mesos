@@ -14,39 +14,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef __URI_FETCHERS_CURL_HPP__
-#define __URI_FETCHERS_CURL_HPP__
+#ifndef __URI_SCHEMES_HDFS_HPP__
+#define __URI_SCHEMES_HDFS_HPP__
 
-#include <process/owned.hpp>
+#include <string>
 
-#include <stout/flags.hpp>
-#include <stout/try.hpp>
+#include <mesos/uri/uri.hpp>
 
-#include <mesos/uri/fetcher.hpp>
+#include "uri/utils.hpp"
 
 namespace mesos {
 namespace uri {
 
-class CurlFetcherPlugin : public Fetcher::Plugin
+/**
+ * Creates an hdfs URI with the given path.
+ */
+inline URI hdfs(const std::string& path)
 {
-public:
-  class Flags : public virtual flags::FlagsBase {};
-
-  static Try<process::Owned<Fetcher::Plugin>> create(const Flags& flags);
-
-  virtual ~CurlFetcherPlugin() {}
-
-  virtual std::set<std::string> schemes();
-
-  virtual process::Future<Nothing> fetch(
-      const URI& uri,
-      const std::string& directory);
-
-private:
-  CurlFetcherPlugin() {}
-};
+  return construct("hdfs", path);
+}
 
 } // namespace uri {
 } // namespace mesos {
 
-#endif // __URI_FETCHERS_CURL_HPP__
+
+#endif // __URI_SCHEMES_HDFS_HPP__
