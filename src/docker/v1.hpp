@@ -14,18 +14,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef __MESOS_URI_PROTO_HPP__
-#define __MESOS_URI_PROTO_HPP__
-
-#include <iosfwd>
+#ifndef __DOCKER_V1_HPP__
+#define __DOCKER_V1_HPP__
 
 // ONLY USEFUL AFTER RUNNING PROTOC.
-#include <mesos/uri/uri.pb.h>
+#include "docker/v1.pb.h"
 
-namespace mesos {
-
-std::ostream& operator<<(std::ostream& stream, const URI& uri);
-
-} // namespace mesos {
-
-#endif // __MESOS_URI_PROTO_HPP__
+#endif // __DOCKER_V1_HPP__
