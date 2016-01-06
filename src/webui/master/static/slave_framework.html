@@ -80,6 +80,7 @@
           <th data-key="queued_tasks.length">Queued Tasks</th>
           <th data-key="resources.cpus">CPUs (Used / Allocated)</th>
           <th data-key="resources.mem">Mem (Used / Allocated)</th>
+          <th data-key="resources.disk">Disk (Used / Allocated)</th>
           <th></th>
         </tr>
       </thead>
@@ -94,10 +95,13 @@
           <td>{{executor.source}}</td>
           <td>{{executor.tasks.length | number}}</td>
           <td>{{executor.queued_tasks.length | number}}</td>
-          <td>{{monitor.frameworks[framework.id].executors[executor.id].statistics.cpus_user_usage + monitor.frameworks[framework.id].executors[executor.id].statistics.cpus_system_usage | number}} /
+          <td>{{monitor.frameworks[framework.id].executors[executor.id].statistics.cpus_total_usage | number}} /
               {{executor.resources.cpus | number}}</td>
           <td>{{monitor.frameworks[framework.id].executors[executor.id].statistics.mem_rss_bytes | dataSize}} /
               {{executor.resources.mem * (1024 * 1024) | dataSize}}</td>
+          <td>
+          <td>{{monitor.frameworks[framework.id].executors[executor.id].statistics.data_used_bytes | dataSize}} /
+              {{executor.resources.disk * (1024 * 1024) | dataSize}}</td>
           <td>
             <a href="{{'#/slaves/' + slave_id + '/browse?path=' +
                        encodeURIComponent(executor.directory)}}">

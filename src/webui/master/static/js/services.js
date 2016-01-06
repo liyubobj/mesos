@@ -108,13 +108,14 @@
 
   function Statistics() {
     this.cpus_user_time_secs = 0.0;
-    this.cpus_user_usage = 0.0;
     this.cpus_system_time_secs = 0.0;
-    this.cpus_system_usage = 0.0;
     this.cpus_limit = 0.0;
     this.cpus_total_usage = 0.0;
     this.mem_rss_bytes = 0.0;
     this.mem_limit_bytes = 0.0;
+    this.disk_used_bytes = 0.0;
+    this.disk_limit_bytes = 0.0;
+    this.timestamp = 0.0;
   }
 
   Statistics.prototype.add = function(statistics) {
@@ -124,6 +125,8 @@
     this.cpus_limit += statistics.cpus_limit;
     this.mem_rss_bytes += statistics.mem_rss_bytes;
     this.mem_limit_bytes += statistics.mem_limit_bytes;
+    this.disk_used_bytes += statistics.disk_used_bytes;
+    this.disk_limit_bytes += statistics.disk_limit_bytes;
 
     // Set instead of add the timestamp since this is an instantaneous view of
     // CPU usage since the last poll.
@@ -131,13 +134,13 @@
   };
 
   Statistics.prototype.diffUsage = function(statistics) {
-    this.cpus_user_usage =
+    var cpus_user_usage =
       (this.cpus_user_time_secs - statistics.cpus_user_time_secs) /
       (this.timestamp - statistics.timestamp);
-    this.cpus_system_usage =
+    var cpus_system_usage =
       (this.cpus_system_time_secs - statistics.cpus_system_time_secs) /
       (this.timestamp - statistics.timestamp);
-    this.cpus_total_usage = this.cpus_user_usage + this.cpus_system_usage;
+    this.cpus_total_usage = cpus_user_usage + cpus_system_usage;
   };
 
   Statistics.parseJSON = function(json) {
@@ -181,9 +184,8 @@
   //
   //   {
   //     cpus_user_time_secs: value,
-  //     cpus_user_usage: value, // Once computed.
   //     cpus_system_time_secs: value,
-  //     cpus_system_usage: value, // Once computed.
+  //     cpus_total_usage: value, // Once computed.
   //     mem_limit_bytes: value,
   //     mem_rss_bytes: value,
   //   }
@@ -222,9 +224,6 @@
       var framework_id = executor.framework_id;
       var current = executor.statistics =
         Statistics.parseJSON(executor.statistics);
-
-      current.cpus_user_usage = 0.0;
-      current.cpus_system_usage = 0.0;
 
       // Compute CPU usage if possible.
       if (that.scope.monitor &&
