@@ -537,7 +537,7 @@ TEST_F(MasterQuotaTest, StatusNoQuotas)
 TEST_F(MasterQuotaTest, StatusSingleQuota)
 {
   TestAllocator<> allocator;
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   Try<PID<Master>> master = StartMaster(&allocator);
   ASSERT_SOME(master);

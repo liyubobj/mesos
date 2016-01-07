@@ -735,7 +735,7 @@ TEST_F(PersistentVolumeEndpointsTest, GoodCreateAndDestroyACL)
   master::Flags masterFlags = CreateMasterFlags();
   masterFlags.acls = acls;
 
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   Try<PID<Master>> master = StartMaster(&allocator, masterFlags);
   ASSERT_SOME(master);
@@ -865,7 +865,7 @@ TEST_F(PersistentVolumeEndpointsTest, BadCreateAndDestroyACL)
   master::Flags masterFlags = CreateMasterFlags();
   masterFlags.acls = acls;
 
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   Try<PID<Master>> master = StartMaster(&allocator, masterFlags);
   ASSERT_SOME(master);
@@ -992,7 +992,7 @@ TEST_F(PersistentVolumeEndpointsTest, GoodCreateAndDestroyACLBadCredential)
   master::Flags masterFlags = CreateMasterFlags();
   masterFlags.acls = acls;
 
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   Try<PID<Master>> master = StartMaster(&allocator, masterFlags);
   ASSERT_SOME(master);
