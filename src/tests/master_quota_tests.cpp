@@ -1339,7 +1339,7 @@ TEST_F(MasterQuotaTest, AuthorizeQuotaRequests)
 TEST_F(MasterQuotaTest, AuthorizeQuotaRequestsWithoutPrincipal)
 {
   TestAllocator<> allocator;
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   // Setup ACLs so that any principal can set quotas for `ROLE1` and remove
   // anyone's quotas.
