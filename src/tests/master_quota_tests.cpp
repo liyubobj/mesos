@@ -569,7 +569,11 @@ TEST_F(MasterQuotaTest, StatusSingleQuota)
   AWAIT_EXPECT_RESPONSE_STATUS_EQ(OK().status, response) << response.get().body;
 
   // Query the master quota endpoint.
-  response = process::http::get(master.get(), "quota");
+  response = process::http::get(
+      master.get(),
+      "quota",
+      None(),
+      createBasicAuthHeaders(DEFAULT_CREDENTIAL));
   AWAIT_EXPECT_RESPONSE_STATUS_EQ(OK().status, response) << response.get().body;
 
   EXPECT_SOME_EQ(
@@ -1090,14 +1094,14 @@ TEST_F(MasterQuotaTest, NoAuthenticationNoAuthorization)
   TestAllocator<> allocator;
   EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
-  // Disable authentication and authorization by providing neither
-  // credentials nor ACLs.
+  // Disable authentication and authorization.
   // TODO(alexr): Setting master `--acls` flag to `ACLs()` or `None()` seems
   // to be semantically equal, however, the test harness currently does not
   // allow `None()`. Once MESOS-4196 is resolved, use `None()` for clarity.
   master::Flags masterFlags = CreateMasterFlags();
-  masterFlags.credentials = None();
   masterFlags.acls = ACLs();
+  masterFlags.authenticate_http = false;
+  masterFlags.credentials = None();
 
   Try<PID<Master>> master = StartMaster(&allocator, masterFlags);
   ASSERT_SOME(master);
@@ -1187,7 +1191,7 @@ TEST_F(MasterQuotaTest, UnauthenticatedQuotaRequest)
       createRequestBody(quotaResources));
 
   AWAIT_EXPECT_RESPONSE_STATUS_EQ(
-      Unauthorized("Mesos master").status, response1) << response1.get().body;
+      Unauthorized(vector<string>()).status, response1) << response1.get().body;
 
   // The absense of credentials leads to authentication failure as well.
   Future<Response> response2 = process::http::post(
@@ -1197,7 +1201,7 @@ TEST_F(MasterQuotaTest, UnauthenticatedQuotaRequest)
       createRequestBody(quotaResources));
 
   AWAIT_EXPECT_RESPONSE_STATUS_EQ(
-      Unauthorized("Mesos master").status, response2) << response2.get().body;
+      Unauthorized(vector<string>()).status, response2) << response2.get().body;
 
   Shutdown();
 }
@@ -1349,9 +1353,9 @@ TEST_F(MasterQuotaTest, AuthorizeQuotaRequestsWithoutPrincipal)
   acl2->mutable_principals()->set_type(mesos::ACL::Entity::ANY);
   acl2->mutable_quota_principals()->set_type(mesos::ACL::Entity::ANY);
 
-  // Disable authentication by not providing credentials.
   master::Flags masterFlags = CreateMasterFlags();
   masterFlags.acls = acls;
+  masterFlags.authenticate_http = false;
   masterFlags.credentials = None();
 
   Try<PID<Master>> master = StartMaster(&allocator, masterFlags);

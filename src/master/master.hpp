@@ -835,8 +835,6 @@ protected:
   OfferID newOfferId();
   SlaveID newSlaveId();
 
-  Option<Credentials> credentials;
-
 private:
   void _apply(Slave* slave, const Offer::Operation& operation);
 
@@ -952,10 +950,12 @@ private:
         const process::http::Request& request) const;
 
     process::Future<process::http::Response> set(
-        const process::http::Request& request) const;
+        const process::http::Request& request,
+        const Option<std::string>& principal) const;
 
     process::Future<process::http::Response> remove(
-        const process::http::Request& request) const;
+        const process::http::Request& request,
+        const Option<std::string>& principal) const;
 
   private:
     // Heuristically tries to determine whether a quota request could
@@ -1040,11 +1040,13 @@ private:
 
     // /master/create-volumes
     process::Future<process::http::Response> createVolumes(
-        const process::http::Request& request) const;
+        const process::http::Request& request,
+        const Option<std::string>& principal) const;
 
     // /master/destroy-volumes
     process::Future<process::http::Response> destroyVolumes(
-        const process::http::Request& request) const;
+        const process::http::Request& request,
+        const Option<std::string>& principal) const;
 
     // /master/flags
     process::Future<process::http::Response> flags(
@@ -1068,7 +1070,8 @@ private:
 
     // /master/reserve
     process::Future<process::http::Response> reserve(
-        const process::http::Request& request) const;
+        const process::http::Request& request,
+        const Option<std::string>& principal) const;
 
     // /master/roles
     process::Future<process::http::Response> roles(
@@ -1076,7 +1079,8 @@ private:
 
     // /master/teardown
     process::Future<process::http::Response> teardown(
-        const process::http::Request& request) const;
+        const process::http::Request& request,
+        const Option<std::string>& principal) const;
 
     // /master/slaves
     process::Future<process::http::Response> slaves(
@@ -1112,11 +1116,13 @@ private:
 
     // /master/unreserve
     process::Future<process::http::Response> unreserve(
-        const process::http::Request& request) const;
+        const process::http::Request& request,
+        const Option<std::string>& principal) const;
 
     // /master/quota
     process::Future<process::http::Response> quota(
-        const process::http::Request& request) const;
+        const process::http::Request& request,
+        const Option<std::string>& principal) const;
 
     static std::string SCHEDULER_HELP();
     static std::string FLAGS_HELP();
@@ -1141,12 +1147,6 @@ private:
     static std::string QUOTA_HELP();
 
   private:
-    // Helper for doing authentication, returns the credential used if
-    // the authentication was successful (or none if no credentials
-    // have been given to the master), otherwise an Error.
-    Result<Credential> authenticate(
-        const process::http::Request& request) const;
-
     // Continuations.
     process::Future<process::http::Response> _teardown(
         const FrameworkID& id) const;
@@ -1180,11 +1180,6 @@ private:
     // NOTE: The quota specific pieces of the Operator API are factored
     // out into this separate class.
     QuotaHandler quotaHandler;
-
-    // Access to `authenticate`.
-    // TODO(alexr): Remove this once `authenticate` is moved to libprocess,
-    // see MESOS-4149.
-    friend class QuotaHandler;
   };
 
   Master(const Master&);              // No copying.

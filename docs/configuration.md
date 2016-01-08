@@ -336,6 +336,18 @@ file:///path/to/file (where file contains one of the above)</code></pre>
   </tr>
   <tr>
     <td>
+      --[no-]authenticate_http
+    </td>
+    <td>
+      If <code>true</code> only authenticated requests for HTTP endpoints
+      supporting authentication are allowed.
+      <p/>
+      If <code>false</code> unauthenticated HTTP endpoint requests are also allowed.
+      (default: false)
+    </td>
+  </tr>
+  <tr>
+    <td>
       --authenticators=VALUE
     </td>
     <td>
@@ -343,6 +355,19 @@ file:///path/to/file (where file contains one of the above)</code></pre>
       and/or slaves. Use the default <code>crammd5</code>, or
       load an alternate authenticator module using <code>--modules</code>.
       (default: crammd5)
+    </td>
+  </tr>
+  <tr>
+    <td>
+      --http_authenticators=VALUE
+    </td>
+    <td>
+      HTTP authenticator implementation to use when handling requests to
+      authenticated endpoints. Use the default <code>basic<code>, or
+      load an alternate HTTP authenticator module using <code>--modules</code>.
+      <p/>
+      Currently there is no support for multiple HTTP authenticators.
+      (default: basic)
     </td>
   </tr>
   <tr>
