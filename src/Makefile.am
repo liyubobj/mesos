@@ -150,6 +150,8 @@ ALLOCATOR_PROTO = $(top_srcdir)/include/mesos/master/allocator.proto
 AUTHENTICATION_PROTO = $(top_srcdir)/include/mesos/authentication/authentication.proto
 AUTHORIZATION_PROTO = $(top_srcdir)/include/mesos/authorizer/authorizer.proto
 CONTAINERIZER_PROTO = $(top_srcdir)/include/mesos/containerizer/containerizer.proto
+DOCKER_V1_PROTO = $(top_srcdir)/include/mesos/docker/v1.proto
+DOCKER_V2_PROTO = $(top_srcdir)/include/mesos/docker/v2.proto
 EXECUTOR_PROTO = $(top_srcdir)/include/mesos/executor/executor.proto
 FETCHER_PROTO = $(top_srcdir)/include/mesos/fetcher/fetcher.proto
 MAINTENANCE_PROTO = $(top_srcdir)/include/mesos/maintenance/maintenance.proto
@@ -649,6 +651,7 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   uri/fetcher.cpp							\
   uri/utils.cpp								\
   uri/fetchers/curl.cpp							\
+  uri/fetchers/docker.cpp						\
   uri/fetchers/hadoop.cpp						\
   usage/usage.cpp							\
   v1/attributes.cpp							\
@@ -778,6 +781,7 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   uri/fetcher.hpp							\
   uri/utils.hpp								\
   uri/fetchers/curl.hpp							\
+  uri/fetchers/docker.hpp						\
   uri/fetchers/hadoop.hpp						\
   uri/schemes/file.hpp							\
   uri/schemes/hdfs.hpp							\
@@ -989,6 +993,8 @@ libmesos_la_SOURCES =							\
   $(AUTHORIZATION_PROTO)						\
   $(CONTAINERIZER_PROTO)						\
   $(EXECUTOR_PROTO)							\
+  $(DOCKER_V1_PROTO)							\
+  $(DOCKER_V2_PROTO)							\
   $(FETCHER_PROTO)							\
   $(MAINTENANCE_PROTO)							\
   $(MESOS_PROTO)							\
