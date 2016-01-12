@@ -339,3 +339,78 @@ TEST(ProtobufTest, ParseJSONArray)
   EXPECT_EQ(message, repeated.Get(0));
   EXPECT_EQ(message, repeated.Get(1));
 }
+
+
+TEST(ProtobufTest, ParseJSONNull)
+{
+  tests::Nested nested;
+  nested.set_str("value");
+
+  // Test message with optional field set to 'null'.
+  string message =
+    "{"
+    "  \"str\": \"value\","
+    "  \"optional_str\": null"
+    "}";
+
+  Try<JSON::Object> json = JSON::parse<JSON::Object>(message);
+  ASSERT_SOME(json);
+
+  Try<tests::Nested> parse = protobuf::parse<tests::Nested>(json.get());
+  ASSERT_SOME(parse);
+
+  EXPECT_EQ(parse->SerializeAsString(), nested.SerializeAsString());
+
+  // Test message with repeated field set to 'null'.
+  message =
+    "{"
+    "  \"str\": \"value\","
+    "  \"repeated_str\": null"
+    "}";
+
+  json = JSON::parse<JSON::Object>(message);
+  ASSERT_SOME(json);
+
+  parse = protobuf::parse<tests::Nested>(json.get());
+  ASSERT_SOME(parse);
+
+  EXPECT_EQ(parse->SerializeAsString(), nested.SerializeAsString());
+
+  // Test message with required field set to 'null'.
+  message =
+    "{"
+    "  \"str\": null"
+    "}";
+
+  json = JSON::parse<JSON::Object>(message);
+  ASSERT_SOME(json);
+
+  EXPECT_ERROR(protobuf::parse<tests::Nested>(json.get()));
+}
+
+
+TEST(ProtobufTest, ParseJSONNestedError)
+{
+  // Here we trigger an error parsing the 'nested' message.
+  string message =
+    "{"
+    "  \"b\": true,"
+    "  \"str\": \"string\","
+    "  \"bytes\": \"Ynl0ZXM=\","
+    "  \"f\": 1.0,"
+    "  \"d\": 1.0,"
+    "  \"e\": \"ONE\","
+    "  \"nested\": {"
+    "      \"str\": 1.0" // Error due to int for string type.
+    "  }"
+    "}";
+
+  Try<JSON::Object> json = JSON::parse<JSON::Object>(message);
+  ASSERT_SOME(json);
+
+  Try<tests::Message> parse = protobuf::parse<tests::Message>(json.get());
+  ASSERT_ERROR(parse);
+
+  EXPECT_TRUE(strings::contains(
+      parse.error(), "Not expecting a JSON number for field"));
+}

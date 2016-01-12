@@ -6120,9 +6120,6 @@ void Master::removeFramework(Framework* framework)
 
   framework->unregisteredTime = Clock::now();
 
-  // The completedFramework buffer now owns the framework pointer.
-  frameworks.completed.push_back(shared_ptr<Framework>(framework));
-
   const string& role = framework->info.role();
   CHECK(activeRoles.contains(role))
     << "Unknown role " << role
@@ -6156,6 +6153,9 @@ void Master::removeFramework(Framework* framework)
   // Remove the framework.
   frameworks.registered.erase(framework->id());
   allocator->removeFramework(framework->id());
+
+  // The completedFramework buffer now owns the framework pointer.
+  frameworks.completed.push_back(shared_ptr<Framework>(framework));
 }
 
 
