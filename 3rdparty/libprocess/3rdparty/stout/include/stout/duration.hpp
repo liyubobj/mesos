@@ -14,7 +14,6 @@
 #define __STOUT_DURATION_HPP__
 
 #include <ctype.h> // For 'isdigit'.
-#include <limits.h> // For 'LLONG_(MAX|MIN)'.
 
 // For 'timeval'.
 #ifndef __WINDOWS__
@@ -177,11 +176,7 @@ protected:
   static const int64_t DAYS         = 24 * HOURS;
   static const int64_t WEEKS        = 7 * DAYS;
 
-  // For the Seconds, Minutes, Hours, Days & Weeks constructor.
-  constexpr Duration(int32_t value, int64_t unit)
-    : nanos(value * unit) {}
-
-  // For the Nanoseconds, Microseconds, Milliseconds constructor.
+  // Construct from a (value, unit) pair.
   constexpr Duration(int64_t value, int64_t unit)
     : nanos(value * unit) {}
 
@@ -257,7 +252,7 @@ public:
 class Minutes : public Duration
 {
 public:
-  explicit constexpr Minutes(int32_t minutes)
+  explicit constexpr Minutes(int64_t minutes)
     : Duration(minutes, MINUTES) {}
 
   constexpr Minutes(const Duration& d) : Duration(d) {}
@@ -271,7 +266,7 @@ public:
 class Hours : public Duration
 {
 public:
-  explicit constexpr Hours(int32_t hours)
+  explicit constexpr Hours(int64_t hours)
     : Duration(hours, HOURS) {}
 
   constexpr Hours(const Duration& d) : Duration(d) {}
@@ -285,7 +280,7 @@ public:
 class Days : public Duration
 {
 public:
-  explicit Days(int32_t days)
+  explicit Days(int64_t days)
     : Duration(days, DAYS) {}
 
   Days(const Duration& d) : Duration(d) {}
@@ -299,7 +294,7 @@ public:
 class Weeks : public Duration
 {
 public:
-  explicit constexpr Weeks(int32_t value) : Duration(value, WEEKS) {}
+  explicit constexpr Weeks(int64_t value) : Duration(value, WEEKS) {}
 
   constexpr Weeks(const Duration& d) : Duration(d) {}
 
@@ -399,7 +394,8 @@ inline std::ostream& operator<<(std::ostream& stream, const Duration& duration_)
 
 inline Try<Duration> Duration::create(double seconds)
 {
-  if (seconds * SECONDS > LLONG_MAX || seconds * SECONDS < LLONG_MIN) {
+  if (seconds * SECONDS > std::numeric_limits<int64_t>::max() ||
+      seconds * SECONDS < std::numeric_limits<int64_t>::min()) {
     return Error("Argument out of the range that a Duration can represent due "
                  "to int64_t's size limit");
   }
@@ -407,10 +403,15 @@ inline Try<Duration> Duration::create(double seconds)
   return Nanoseconds(static_cast<int64_t>(seconds * SECONDS));
 }
 
+inline constexpr Duration Duration::max()
+{
+  return Nanoseconds(std::numeric_limits<int64_t>::max());
+}
 
-inline constexpr Duration Duration::max() { return Nanoseconds(LLONG_MAX); }
 
-
-inline constexpr Duration Duration::min() { return Nanoseconds(LLONG_MIN); }
+inline constexpr Duration Duration::min()
+{
+  return Nanoseconds(std::numeric_limits<int64_t>::min());
+}
 
 #endif // __STOUT_DURATION_HPP__
