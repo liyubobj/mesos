@@ -95,6 +95,7 @@ if diff_stat:
   sys.exit(1)
 
 top_level_dir = execute(['git', 'rev-parse', '--show-toplevel']).strip()
+git_dir = execute(['git', 'rev-parse', '--git-common-dir']).strip()
 
 # Use the tracking_branch specified by the user if exists.
 parser = argparse.ArgumentParser(add_help=False)
@@ -233,6 +234,16 @@ for i in range(len(shas)):
         parent_review_request_id = review_request_id
         continue
 
+    # Strip the review url from the commit message, so that it is not included
+    # in the summary message when GUESS_FIELDS is set in .reviewboardc. Update
+    # the sha appropriately.
+    if review_request_id:
+        stripped_message = message[:pos]
+        execute(['git', 'checkout', sha])
+        execute(['git', 'commit', '--amend', '-m', stripped_message])
+        sha = execute(['git', 'rev-parse', 'HEAD']).strip()
+        execute(['git', 'checkout', branch])
+
     revision_range = previous + ':' + sha
 
     # Build the post-review/rbt command up to the point where they are common.
@@ -265,12 +276,17 @@ for i in range(len(shas)):
     print output
 
 
+    # If we already have a request_id, continue on to the next commit in the
+    # chain. We update 'previous' from the shas[] array because we have
+    # overwritten the temporary sha variable above.
     if review_request_id is not None:
-        i = i + 1
-        previous = sha
+        previous = shas[i]
         parent_review_request_id = review_request_id
+        i = i + 1
         continue
 
+    # Otherwise, get the request_id from the output of post-review, append it
+    # to the commit message and rebase all other commits on top of it.
     lines = output.split('\n')
 
     # The last line of output in post-review is the review url.
@@ -295,7 +311,7 @@ for i in range(len(shas)):
 
     # Now rebase all remaining shas on top of this amended commit.
     j = i + 1
-    old_sha = execute(['cat', os.path.join(top_level_dir, '.git/refs/heads', temporary_branch)]).strip()
+    old_sha = execute(['cat', os.path.join(git_dir, 'refs/heads', temporary_branch)]).strip()
     previous = old_sha
     while j < len(shas):
         execute(['git', 'checkout', shas[j]])
@@ -313,7 +329,7 @@ for i in range(len(shas)):
 
     # Okay, now update the actual branch to our temporary branch.
     new_sha = old_sha
-    old_sha = execute(['cat', os.path.join(top_level_dir, '.git/refs/heads', branch)]).strip()
+    old_sha = execute(['cat', os.path.join(git_dir, 'refs/heads', branch)]).strip()
     execute(['git', 'update-ref', 'refs/heads/' + branch, new_sha, old_sha])
 
     i = i + 1
