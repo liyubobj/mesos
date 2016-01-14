@@ -18,6 +18,7 @@ Image: An image in this documentation refers to a container filesystem image. A 
 
 We introduced a new protobuf message `Image` that describes a container filesystem image.
 
+~~~{.proto}
 message Image {
   enum Type {
     APPC = 1;
@@ -40,6 +41,7 @@ message Image {
   optional Appc appc = 2;
   optional Docker docker = 3;
 }
+~~~
 
 This `Image` message type contains the type of image specification and the corresponding configurations for that type.
 
@@ -109,5 +111,5 @@ The Bind backend currently has these two limitations:
 The design doc is available [here](https://docs.google.com/document/d/1Fx5TS0LytV7u5MZExQS0-g-gScX2yKCKQg9UPFzhp6U).
 
 ## Related Docs
-For more information on the Mesos containerizer filesystem, namespace, and isolator features, visit [here](https://github.com/apache/mesos/blob/master/docs/mesos-containerizer.md).
-For more information on launching Docker containers through the Docker containerizer, visit [here](https://github.com/apache/mesos/blob/master/docs/docker-containerizer.md).
+For more information on the Mesos containerizer filesystem, namespace, and isolator features, visit [Mesos Containerizer](mesos-containerizer.md).
+For more information on launching Docker containers through the Docker containerizer, visit [Docker Containerizer](docker-containerizer.md).

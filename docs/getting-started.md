@@ -56,6 +56,9 @@ Following are the instructions for stock Mac OS X Yosemite and El Capitan. If yo
     # Install Homebrew.
     $ ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
 
+    # Install Java.
+    $ brew install Caskroom/cask/java
+
     # Install libraries.
     $ brew install wget git autoconf automake libtool subversion maven
 
@@ -113,6 +116,13 @@ Following are the instructions for stock CentOS 6.6. If you are using a differen
     # Enter a shell with 'devtoolset-2' enabled.
     $ scl enable devtoolset-2 bash
     $ g++ --version  # Make sure you've got GCC > 4.8!
+
+    # Process isolation is using cgroups that are managed by 'cgconfig'.
+    # The 'cgconfig' service is not started by default on CentOS 6.6.
+    # Also the default configuration does not attach the 'perf_event' subsystem.
+    # To do this, add 'perf_event = /cgroup/perf_event;' to the entries in '/etc/cgconfig.conf'.
+    $ sudo yum install -y libcgroup
+    $ sudo service cgconfig start
 
 ### CentOS 7.1
 

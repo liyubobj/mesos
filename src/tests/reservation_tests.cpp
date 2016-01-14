@@ -60,6 +60,7 @@ using std::string;
 using std::vector;
 
 using testing::_;
+using testing::AtMost;
 using testing::DoAll;
 using testing::DoDefault;
 
@@ -267,6 +268,9 @@ TEST_F(ReservationTest, ReserveAndLaunchThenUnreserve)
   offer = offers.get()[0];
 
   EXPECT_TRUE(Resources(offer.resources()).contains(unreserved));
+
+  EXPECT_CALL(exec, shutdown(_))
+    .Times(AtMost(1));
 
   driver.stop();
   driver.join();
@@ -978,6 +982,9 @@ TEST_F(ReservationTest, CompatibleCheckpointedResources)
   terminate(slave2);
   wait(slave2);
 
+  EXPECT_CALL(exec, shutdown(_))
+    .Times(AtMost(1));
+
   driver.stop();
   driver.join();
 
@@ -1104,6 +1111,9 @@ TEST_F(ReservationTest, CompatibleCheckpointedResourcesWithPersistentVolumes)
   terminate(slave2);
   wait(slave2);
 
+  EXPECT_CALL(exec, shutdown(_))
+    .Times(AtMost(1));
+
   driver.stop();
   driver.join();
 
@@ -1208,6 +1218,9 @@ TEST_F(ReservationTest, IncompatibleCheckpointedResources)
   terminate(slave2);
   wait(slave2);
 
+  EXPECT_CALL(exec, shutdown(_))
+    .Times(AtMost(1));
+
   driver.stop();
   driver.join();
 
@@ -1226,7 +1239,7 @@ TEST_F(ReservationTest, GoodACLReserveThenUnreserve)
   reserve->mutable_principals()->add_values(DEFAULT_CREDENTIAL.principal());
   reserve->mutable_resources()->set_type(mesos::ACL::Entity::ANY);
 
-  // This principal can unreserve any resources.
+  // This principal can unreserve its own reserved resources.
   mesos::ACL::UnreserveResources* unreserve = acls.add_unreserve_resources();
   unreserve->mutable_principals()->add_values(DEFAULT_CREDENTIAL.principal());
   unreserve->mutable_reserver_principals()->add_values(
@@ -1722,6 +1735,9 @@ TEST_F(ReservationTest, ACLMultipleOperations)
 
   // Check that the task launched as expected.
   EXPECT_EQ(TASK_FINISHED, failedTaskStatus.get().state());
+
+  EXPECT_CALL(exec, shutdown(_))
+    .Times(AtMost(1));
 
   driver.stop();
   driver.join();
