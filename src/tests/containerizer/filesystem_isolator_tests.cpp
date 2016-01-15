@@ -154,8 +154,7 @@ protected:
 
     Owned<Provisioner> provisioner(new Provisioner(provisionerProcess));
 
-    Try<Isolator*> isolator =
-      LinuxFilesystemIsolatorProcess::create(flags, provisioner);
+    Try<Isolator*> isolator = LinuxFilesystemIsolatorProcess::create(flags);
 
     if (isolator.isError()) {
       return Error(
@@ -184,6 +183,7 @@ protected:
             &fetcher,
             Owned<ContainerLogger>(logger.get()),
             Owned<Launcher>(launcher.get()),
+            provisioner,
             {Owned<Isolator>(isolator.get())}));
   }
 
@@ -1004,8 +1004,7 @@ TEST_F(LinuxFilesystemIsolatorTest, ROOT_WorkDirMount)
 {
   slave::Flags flags = CreateSlaveFlags();
 
-  Try<Isolator*> isolator =
-    LinuxFilesystemIsolatorProcess::create(flags, Owned<Provisioner>());
+  Try<Isolator*> isolator = LinuxFilesystemIsolatorProcess::create(flags);
 
   ASSERT_SOME(isolator);
 
@@ -1040,8 +1039,7 @@ TEST_F(LinuxFilesystemIsolatorTest, ROOT_WorkDirMountPreExists)
       flags.work_dir.c_str(),
       flags.work_dir.c_str()));
 
-  Try<Isolator*> isolator =
-    LinuxFilesystemIsolatorProcess::create(flags, Owned<Provisioner>());
+  Try<Isolator*> isolator = LinuxFilesystemIsolatorProcess::create(flags);
 
   ASSERT_SOME(isolator);
 
