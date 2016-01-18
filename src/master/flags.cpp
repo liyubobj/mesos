@@ -194,6 +194,7 @@ mesos::internal::master::Flags::Flags()
       "are used to indicate forms of priority.");
 
   // TODO(adam-mesos): Deprecate --authenticate for --authenticate_frameworks.
+  // See MESOS-4386 for details.
   add(&Flags::authenticate_frameworks,
       "authenticate",
       "If authenticate is 'true' only authenticated frameworks are allowed\n"
@@ -460,4 +461,14 @@ mesos::internal::master::Flags::Flags()
       "\n"
       "Currently there is no support for multiple HTTP authenticators.",
       DEFAULT_HTTP_AUTHENTICATOR);
+
+  add(&Flags::max_completed_frameworks,
+      "max_completed_frameworks",
+      "Maximum number of completed frameworks to store in memory.",
+      DEFAULT_MAX_COMPLETED_FRAMEWORKS);
+
+  add(&Flags::max_completed_tasks_per_framework,
+      "max_completed_tasks_per_framework",
+      "Maximum number of completed tasks per framework to store in memory.",
+      DEFAULT_MAX_COMPLETED_TASKS_PER_FRAMEWORK);
 }

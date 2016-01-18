@@ -473,6 +473,23 @@ file:///path/to/file (where file contains one of the above)</code></pre>
   </tr>
   <tr>
     <td>
+      --max_completed_frameworks=VALUE
+    </td>
+    <td>
+      Maximum number of completed frameworks to store in memory. (default: 50)
+    </td>
+  </tr>
+  <tr>
+    <td>
+      --max_completed_tasks_per_framework=VALUE
+    </td>
+    <td>
+      Maximum number of completed tasks per framework to store in memory.
+      (default: 1000)
+    </td>
+  </tr>
+  <tr>
+    <td>
       --max_slave_ping_timeouts=VALUE
     </td>
     <td>
@@ -1567,6 +1584,8 @@ file:///path/to/file (where file contains one of the above)</code></pre>
       If the user does not exist, an error occurs and the task will fail.
       If set to <code>false</code>, tasks will be run as the same user as the
       Mesos agent process. (default: true)
+      <b>NOTE</b> This feature is not yet supported on Windows agents, and
+      therefore the flag currently does not exist on that platform.
     </td>
   </tr>
   <tr>

@@ -89,6 +89,8 @@ namespace mesos {
 namespace internal {
 namespace tests {
 
+namespace quota = mesos::internal::master::quota;
+
 using namespace mesos::maintenance;
 using namespace mesos::quota;
 
@@ -675,22 +677,28 @@ TEST_P(RegistrarTest, StopMaintenance)
 // Tests that adding and updating quotas in the registry works properly.
 TEST_P(RegistrarTest, UpdateQuota)
 {
-  // Prepare `QuotaInfo` protobufs used in the test.
-  const std::string role1 = "role1";
-  const std::string role2 = "role2";
+  const std::string ROLE1 = "role1";
+  const std::string ROLE2 = "role2";
 
   // NOTE: `quotaResources1` yields a collection with two `Resource`
   // objects once converted to `RepeatedPtrField`.
   Resources quotaResources1 = Resources::parse("cpus:1;mem:1024").get();
   Resources quotaResources2 = Resources::parse("cpus:2").get();
 
+  // Prepare `QuotaInfo` protobufs used in the test.
   QuotaInfo quota1;
-  quota1.set_role(role1);
-  quota1.mutable_guarantee()->CopyFrom(quotaResources1.flatten(role1));
+  quota1.set_role(ROLE1);
+  quota1.mutable_guarantee()->CopyFrom(quotaResources1);
+
+  Option<Error> validateError1 = quota::validation::quotaInfo(quota1);
+  EXPECT_NONE(validateError1);
 
   QuotaInfo quota2;
-  quota2.set_role(role2);
-  quota2.mutable_guarantee()->CopyFrom(quotaResources1.flatten(role2));
+  quota2.set_role(ROLE2);
+  quota2.mutable_guarantee()->CopyFrom(quotaResources1);
+
+  Option<Error> validateError2 = quota::validation::quotaInfo(quota2);
+  EXPECT_NONE(validateError2);
 
   {
     // Prepare the registrar; see the comment above why we need to do this in
@@ -710,14 +718,14 @@ TEST_P(RegistrarTest, UpdateQuota)
 
     // Check that the recovered quota matches the one we stored.
     ASSERT_EQ(1, registry.get().quotas().size());
-    EXPECT_EQ(role1, registry.get().quotas(0).info().role());
+    EXPECT_EQ(ROLE1, registry.get().quotas(0).info().role());
     ASSERT_EQ(2, registry.get().quotas(0).info().guarantee().size());
 
     Resources storedResources(registry.get().quotas(0).info().guarantee());
-    EXPECT_EQ(quotaResources1, storedResources.flatten());
+    EXPECT_EQ(quotaResources1, storedResources);
 
-    // Change quota for `role1`.
-    quota1.mutable_guarantee()->CopyFrom(quotaResources2.flatten(role1));
+    // Change quota for `ROLE1`.
+    quota1.mutable_guarantee()->CopyFrom(quotaResources2);
 
     // Update the only stored quota.
     AWAIT_EQ(true, registrar.apply(Owned<Operation>(new UpdateQuota(quota1))));
@@ -730,11 +738,11 @@ TEST_P(RegistrarTest, UpdateQuota)
 
     // Check that the recovered quota matches the one we updated.
     ASSERT_EQ(1, registry.get().quotas().size());
-    EXPECT_EQ(role1, registry.get().quotas(0).info().role());
+    EXPECT_EQ(ROLE1, registry.get().quotas(0).info().role());
     ASSERT_EQ(1, registry.get().quotas(0).info().guarantee().size());
 
     Resources storedResources(registry.get().quotas(0).info().guarantee());
-    EXPECT_EQ(quotaResources2, storedResources.flatten());
+    EXPECT_EQ(quotaResources2, storedResources);
 
     // Store one more quota for a role without quota.
     AWAIT_EQ(true, registrar.apply(Owned<Operation>(new UpdateQuota(quota2))));
@@ -750,17 +758,17 @@ TEST_P(RegistrarTest, UpdateQuota)
     // been added.
     // TODO(alexr): Consider removing dependency on the order.
     ASSERT_EQ(2, registry.get().quotas().size());
-    EXPECT_EQ(role1, registry.get().quotas(0).info().role());
+    EXPECT_EQ(ROLE1, registry.get().quotas(0).info().role());
     ASSERT_EQ(1, registry.get().quotas(0).info().guarantee().size());
 
-    EXPECT_EQ(role2, registry.get().quotas(1).info().role());
+    EXPECT_EQ(ROLE2, registry.get().quotas(1).info().role());
     ASSERT_EQ(2, registry.get().quotas(1).info().guarantee().size());
 
     Resources storedResources(registry.get().quotas(1).info().guarantee());
-    EXPECT_EQ(quotaResources1, storedResources.flatten());
+    EXPECT_EQ(quotaResources1, storedResources);
 
     // Change quota for `role2`.
-    quota2.mutable_guarantee()->CopyFrom(quotaResources2.flatten(role2));
+    quota2.mutable_guarantee()->CopyFrom(quotaResources2);
 
     // Update quota for `role2` in presence of multiple quotas.
     AWAIT_EQ(true, registrar.apply(Owned<Operation>(new UpdateQuota(quota2))));
@@ -778,17 +786,17 @@ TEST_P(RegistrarTest, UpdateQuota)
     // TODO(alexr): Consider removing dependency on the order.
     ASSERT_EQ(2, registry.get().quotas().size());
 
-    EXPECT_EQ(role1, registry.get().quotas(0).info().role());
+    EXPECT_EQ(ROLE1, registry.get().quotas(0).info().role());
     ASSERT_EQ(1, registry.get().quotas(0).info().guarantee().size());
 
     Resources storedResources1(registry.get().quotas(0).info().guarantee());
-    EXPECT_EQ(quotaResources2, storedResources1.flatten());
+    EXPECT_EQ(quotaResources2, storedResources1);
 
-    EXPECT_EQ(role2, registry.get().quotas(1).info().role());
+    EXPECT_EQ(ROLE2, registry.get().quotas(1).info().role());
     ASSERT_EQ(1, registry.get().quotas(1).info().guarantee().size());
 
     Resources storedResources2(registry.get().quotas(1).info().guarantee());
-    EXPECT_EQ(quotaResources2, storedResources2.flatten());
+    EXPECT_EQ(quotaResources2, storedResources2);
   }
 }
 
@@ -796,8 +804,8 @@ TEST_P(RegistrarTest, UpdateQuota)
 // Tests removing quotas from the registry.
 TEST_P(RegistrarTest, RemoveQuota)
 {
-  const std::string role1 = "role1";
-  const std::string role2 = "role2";
+  const std::string ROLE1 = "role1";
+  const std::string ROLE2 = "role2";
 
   {
     // Prepare the registrar; see the comment above why we need to do this in
@@ -806,19 +814,25 @@ TEST_P(RegistrarTest, RemoveQuota)
     Future<Registry> registry = registrar.recover(master);
     AWAIT_READY(registry);
 
-    // Prepare `QuotaInfo` protobufs.
     // NOTE: `quotaResources` yields a collection with two `Resource`
     // objects once converted to `RepeatedPtrField`.
     Resources quotaResources1 = Resources::parse("cpus:1;mem:1024").get();
     Resources quotaResources2 = Resources::parse("cpus:2").get();
 
+    // Prepare `QuotaInfo` protobufs.
     QuotaInfo quota1;
-    quota1.set_role(role1);
-    quota1.mutable_guarantee()->CopyFrom(quotaResources1.flatten(role1));
+    quota1.set_role(ROLE1);
+    quota1.mutable_guarantee()->CopyFrom(quotaResources1);
+
+    Option<Error> validateError1 = quota::validation::quotaInfo(quota1);
+    EXPECT_NONE(validateError1);
 
     QuotaInfo quota2;
-    quota2.set_role(role2);
-    quota2.mutable_guarantee()->CopyFrom(quotaResources2.flatten(role2));
+    quota2.set_role(ROLE2);
+    quota2.mutable_guarantee()->CopyFrom(quotaResources2);
+
+    Option<Error> validateError2 = quota::validation::quotaInfo(quota2);
+    EXPECT_NONE(validateError2);
 
     AWAIT_EQ(true, registrar.apply(Owned<Operation>(new UpdateQuota(quota1))));
     AWAIT_EQ(true, registrar.apply(Owned<Operation>(new UpdateQuota(quota2))));
@@ -834,11 +848,11 @@ TEST_P(RegistrarTest, RemoveQuota)
     // added.
     // TODO(alexr): Consider removing dependency on the order.
     ASSERT_EQ(2, registry.get().quotas().size());
-    EXPECT_EQ(role1, registry.get().quotas(0).info().role());
-    EXPECT_EQ(role2, registry.get().quotas(1).info().role());
+    EXPECT_EQ(ROLE1, registry.get().quotas(0).info().role());
+    EXPECT_EQ(ROLE2, registry.get().quotas(1).info().role());
 
     // Remove quota for `role2`.
-    AWAIT_EQ(true, registrar.apply(Owned<Operation>(new RemoveQuota(role2))));
+    AWAIT_EQ(true, registrar.apply(Owned<Operation>(new RemoveQuota(ROLE2))));
   }
 
   {
@@ -848,10 +862,10 @@ TEST_P(RegistrarTest, RemoveQuota)
 
     // Check that there is only one quota left in the registry.
     ASSERT_EQ(1, registry.get().quotas().size());
-    EXPECT_EQ(role1, registry.get().quotas(0).info().role());
+    EXPECT_EQ(ROLE1, registry.get().quotas(0).info().role());
 
-    // Remove quota for `role1`.
-    AWAIT_EQ(true, registrar.apply(Owned<Operation>(new RemoveQuota(role1))));
+    // Remove quota for `ROLE1`.
+    AWAIT_EQ(true, registrar.apply(Owned<Operation>(new RemoveQuota(ROLE1))));
   }
 
   {

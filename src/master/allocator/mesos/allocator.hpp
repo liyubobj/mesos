@@ -158,7 +158,7 @@ public:
 
   void setQuota(
       const std::string& role,
-      const mesos::quota::QuotaInfo& quota);
+      const Quota& quota);
 
   void removeQuota(
       const std::string& role);
@@ -293,7 +293,7 @@ public:
 
   virtual void setQuota(
       const std::string& role,
-      const mesos::quota::QuotaInfo& quota) = 0;
+      const Quota& quota) = 0;
 
   virtual void removeQuota(
       const std::string& role) = 0;
@@ -658,7 +658,7 @@ MesosAllocator<AllocatorProcess>::resolveConflicts(
 template <typename AllocatorProcess>
 inline void MesosAllocator<AllocatorProcess>::setQuota(
     const std::string& role,
-    const mesos::quota::QuotaInfo& quota)
+    const Quota& quota)
 {
   process::dispatch(
       process,

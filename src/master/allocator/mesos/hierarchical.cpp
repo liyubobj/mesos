@@ -37,8 +37,6 @@ using std::vector;
 
 using mesos::master::InverseOfferStatus;
 
-using mesos::quota::QuotaInfo;
-
 using process::Failure;
 using process::Future;
 using process::Timeout;
@@ -160,7 +158,16 @@ void HierarchicalAllocatorProcess::recover(
   CHECK_EQ(0, quotaRoleSorter->count());
   CHECK(_expectedAgentCount >= 0);
 
-  // If there are no quotas, no recovery is currently necessary.
+  // If there is no quota, recovery is a no-op. Otherwise, we need
+  // to delay allocations while agents are re-registering because
+  // otherwise we perform allocations on a partial view of resources!
+  // We would consequently perform unnecessary allocations to satisfy
+  // quota constraints, which can over-allocate non-revocable resources
+  // to roles using quota. Then, frameworks in roles without quota can
+  // be unnecessarily deprived of resources. We may also be unable to
+  // satisfy all of the quota constraints. Repeated master failovers
+  // exacerbate the issue.
+
   if (quotas.empty()) {
     VLOG(1) << "Skipping recovery of hierarchical allocator: "
             << "nothing to recover";
@@ -196,7 +203,7 @@ void HierarchicalAllocatorProcess::recover(
 
   // NOTE: `quotaRoleSorter` is updated implicitly in `setQuota()`.
   foreachpair (const string& role, const Quota& quota, quotas) {
-    setQuota(role, quota.info);
+    setQuota(role, quota);
   }
 
   LOG(INFO) << "Triggered allocator recovery: waiting for "
@@ -361,6 +368,10 @@ void HierarchicalAllocatorProcess::deactivateFramework(
   // HierarchicalAllocatorProcess::expire.
   frameworks[frameworkId].offerFilters.clear();
   frameworks[frameworkId].inverseOfferFilters.clear();
+
+  // Clear the suppressed flag to make sure the framework can be offered
+  // resources immediately after getting activated.
+  frameworks[frameworkId].suppressed = false;
 
   LOG(INFO) << "Deactivated framework " << frameworkId;
 }
@@ -992,7 +1003,7 @@ void HierarchicalAllocatorProcess::reviveOffers(
 
 void HierarchicalAllocatorProcess::setQuota(
     const string& role,
-    const QuotaInfo& quota)
+    const Quota& quota)
 {
   CHECK(initialized);
 
@@ -1018,7 +1029,7 @@ void HierarchicalAllocatorProcess::setQuota(
   }
 
   // TODO(alexr): Print all quota info for the role.
-  LOG(INFO) << "Set quota " << quota.guarantee() << " for role '" << role
+  LOG(INFO) << "Set quota " << quota.info.guarantee() << " for role '" << role
             << "'";
 
   // Trigger the allocation explicitly in order to promptly react to the
@@ -1037,7 +1048,7 @@ void HierarchicalAllocatorProcess::removeQuota(
   CHECK(quotaRoleSorter->contains(role));
 
   // TODO(alexr): Print all quota info for the role.
-  LOG(INFO) << "Removed quota " << quotas[role].guarantee()
+  LOG(INFO) << "Removed quota " << quotas[role].info.guarantee()
             << " for role '" << role << "'";
 
   // Remove the role from the quota'ed allocation group.
@@ -1174,7 +1185,7 @@ void HierarchicalAllocatorProcess::allocate(
       // alternatives are:
       //   * A custom sorter that is aware of quotas and sorts accordingly.
       //   * Removing satisfied roles from the sorter.
-      if (roleConsumedResources.contains(quotas[role].guarantee())) {
+      if (roleConsumedResources.contains(quotas[role].info.guarantee())) {
         break;
       }
 
@@ -1196,7 +1207,8 @@ void HierarchicalAllocatorProcess::allocate(
         Resources resources = available.unreserved().nonRevocable();
 
         // NOTE: The resources may not be allocatable here, but they can be
-        // accepted by some framework during the DRF allocation stage.
+        // accepted by one of the frameworks during the second allocation
+        // stage.
         if (!allocatable(resources)) {
           continue;
         }
@@ -1230,7 +1242,7 @@ void HierarchicalAllocatorProcess::allocate(
 
   // Calculate how many resources (including revocable and reserved) are
   // available for allocation in the next round. We need this in order to
-  // ensure we do not over-allocate resources during the WDRF phase.
+  // ensure we do not over-allocate resources during the second stage.
   Resources remainingClusterResources;
   foreach (const SlaveID& slaveId, slaveIds) {
     remainingClusterResources +=
@@ -1240,34 +1252,34 @@ void HierarchicalAllocatorProcess::allocate(
   // Frameworks in a quota'ed role may temporarily reject resources by
   // filtering or suppressing offers. Hence quotas may not be fully allocated.
   Resources unallocatedQuotaResources;
-  foreachpair (const string& name, const QuotaInfo& quota, quotas) {
+  foreachpair (const string& name, const Quota& quota, quotas) {
     // Compute the amount of quota that the role does not have allocated.
     // NOTE: Reserved and revocable resources are excluded in `quotaRoleSorter`.
     Resources allocated = Resources::sum(quotaRoleSorter->allocation(name));
-    const Resources required = quota.guarantee();
+    const Resources required = quota.info.guarantee();
     unallocatedQuotaResources += (required - allocated);
   }
 
-  // Determine how many resources we may allocate during the WDRF stage.
+  // Determine how many resources we may allocate during the next stage.
   // NOTE: Resources for quota allocations are already accounted in
   // `remainingClusterResources`.
   remainingClusterResources -= unallocatedQuotaResources;
 
-  // To ensure we do not over-allocate resources during the WDRF stage, we
-  // use 2 stopping criteria:
-  //   * No available resources for WDRF left, i.e.
-  //     `remainingClusterResources` - `allocatedForWDRF` is empty.
-  //   * A potential offer will force the WDRF stage to use more resources
+  // To ensure we do not over-allocate resources during the second stage
+  // with all frameworks, we use 2 stopping criteria:
+  //   * No available resources for the second stage left, i.e.
+  //     `remainingClusterResources` - `allocatedStage2` is empty.
+  //   * A potential offer will force the second stage to use more resources
   //     than available, i.e. `remainingClusterResources` does not contain
-  //     (`allocatedForWDRF` + potential offer). In this case we skip this
+  //     (`allocatedStage2` + potential offer). In this case we skip this
   //     agent and continue to the next one.
-  Resources allocatedForWDRF;
+  Resources allocatedStage2;
 
   // At this point resources for quotas are allocated or accounted for.
-  // Proceed with allocating the remaining free pool using WDRF.
+  // Proceed with allocating the remaining free pool.
   foreach (const SlaveID& slaveId, slaveIds) {
-    // If there are no resources available for the current WDRF stage, stop.
-    if ((remainingClusterResources - allocatedForWDRF).empty()) {
+    // If there are no resources available for the second stage, stop.
+    if (!allocatable(remainingClusterResources - allocatedStage2)) {
       break;
     }
 
@@ -1305,11 +1317,12 @@ void HierarchicalAllocatorProcess::allocate(
           continue;
         }
 
-        // If the offer generated by `resources` would force this WDRF stage
-        // to use more than `remainingClusterResources`, move along. We do
-        // not terminate early, as offers generated further in the loop may
-        // be small enough to fit within `remainingClusterResources`.
-        if (!remainingClusterResources.contains(allocatedForWDRF + resources)) {
+        // If the offer generated by `resources` would force the second
+        // stage to use more than `remainingClusterResources`, move along.
+        // We do not terminate early, as offers generated further in the
+        // loop may be small enough to fit within `remainingClusterResources`.
+        if (!remainingClusterResources.contains(
+                 allocatedStage2 + resources)) {
           continue;
         }
 
@@ -1321,7 +1334,7 @@ void HierarchicalAllocatorProcess::allocate(
         // NOTE: We may have already allocated some resources on the current
         // agent as part of quota.
         offerable[frameworkId][slaveId] += resources;
-        allocatedForWDRF += resources;
+        allocatedStage2 += resources;
         slaves[slaveId].allocated += resources;
 
         // Reserved resources are only accounted for in the framework

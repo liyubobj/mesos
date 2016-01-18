@@ -29,12 +29,14 @@ set(STOUT_TESTS_SRC
   interval_tests.cpp
   ip_tests.cpp
   json_tests.cpp
+  jsonify_tests.cpp
   linkedhashmap_tests.cpp
   main.cpp
   multimap_tests.cpp
   none_tests.cpp
   numify_tests.cpp
   option_tests.cpp
+  os/filesystem_tests.cpp
   protobuf_tests.pb.h
   protobuf_tests.proto
   result_tests.cpp

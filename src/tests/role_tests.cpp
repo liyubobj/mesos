@@ -38,6 +38,8 @@ using process::PID;
 using process::http::OK;
 using process::http::Response;
 
+using testing::AtMost;
+
 namespace mesos {
 namespace internal {
 namespace tests {
@@ -242,6 +244,9 @@ TEST_F(RoleTest, ImplicitRoleStaticReservation)
   driver.acceptOffers({offer.id()}, {LAUNCH({taskInfo})}, filters);
 
   AWAIT_READY(launchTask);
+
+  EXPECT_CALL(exec, shutdown(_))
+    .Times(AtMost(1));
 
   driver.stop();
   driver.join();
@@ -472,8 +477,7 @@ TEST_F(RoleTest, EndpointImplicitRolesQuotas)
   Try<PID<Master>> master = StartMaster();
   ASSERT_SOME(master);
 
-  Resources quotaResources =
-    Resources::parse("cpus:1;mem:512", "non-existent-role").get();
+  Resources quotaResources = Resources::parse("cpus:1;mem:512").get();
   const RepeatedPtrField<Resource>& jsonQuotaResources =
     static_cast<const RepeatedPtrField<Resource>&>(quotaResources);
 
@@ -482,7 +486,7 @@ TEST_F(RoleTest, EndpointImplicitRolesQuotas)
   // currently be satisfied by the resources in the cluster (because
   // there are no slaves registered).
   string quotaRequestBody = strings::format(
-      "{\"resources\":%s,\"force\":true}",
+      "{\"role\":\"non-existent-role\",\"resources\":%s,\"force\":true}",
       JSON::protobuf(jsonQuotaResources)).get();
 
   Future<Response> quotaResponse = process::http::post(

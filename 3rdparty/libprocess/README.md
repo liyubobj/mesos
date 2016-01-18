@@ -101,6 +101,230 @@ int main(int argc, char** argv)
 ---->
 
 
+### `defer`
+
+Objects like `Future` allow attaching callbacks that get executed
+_synchronously_ on certain events, such as the completion of a future
+(e.g., `Future::then` and `Future::onReady`) or the failure of a
+future (e.g., `Future::onFailed`). It's usually desireable, however, to
+execute these callbacks _asynchronously_, and `defer` provides a mechanism
+to do so.
+
+`defer` is similar to [`dispatch`](#dispatch), but rather than
+enqueing the execution of a method or function on the specified
+process immediately (i.e., synchronously), it returns a `Deferred`,
+which is a callable object that only after getting _invoked_ will
+dispatch the method or function on the specified process. Said another
+way, using `defer` is a way to _defer_ a `dispatch`.
+
+As an example, consider the following function, which spawns a process
+and registers two callbacks on it, one using `defer` and another
+without it:
+
+~~~{.cpp}
+using namespace process;
+
+void foo()
+{
+  ProcessBase process;
+  spawn(process);
+
+  Deferred<void(int)> deferred = defer(
+      process,
+      [](int i) {
+        // Invoked _asynchronously_ using `process` as the
+        // execution context.
+      });
+
+  Promise<int> promise;
+
+  promise.future().then(deferred);
+
+  promise.future().then([](int i) {
+    // Invoked synchronously from the execution context of
+    // the thread that completes the future!
+  });
+
+  // Executes both callbacks synchronously, which _dispatches_
+  // the deferred lambda to run asynchronously in the execution
+  // context of `process` but invokes the other lambda immediately.
+  promise.set(42);
+
+  terminate(process);
+}
+~~~
+
+As another example, consider this excerpt from the Mesos project's
+`src/master/master.cpp`:
+
+~~~{.cpp}
+// Start contending to be a leading master and detecting the current leader.
+// NOTE: `.onAny` passes the relevant future to its callback as a parameter, and
+// `lambda::_1` facilitates this when using `defer`.
+contender->contend()
+  .onAny(defer(self(), &Master::contended, lambda::_1));
+~~~
+
+Why use `defer` in this context rather than just executing
+`Master::detected` synchronously? To answer this, we need to remember
+that when the promise associated with the future returned from
+`contender->contend()` is completed that will synchronously invoke all
+registered callbacks (i.e., the `Future::onAny` one in the example
+above), _which may be in a different process_! Without using `defer`
+the process responsible for executing `contender->contend()` will
+potentially cause `&Master::contended` to get executed simultaneously
+(i.e., on a different thread) than the `Master` process! This creates
+the potential for a data race in which two threads access members of
+`Master` concurrently. Instead, using `defer` (with `self()`) will
+dispatch the method _back_ to the `Master` process to be executed at a
+later point in time within the single-threaded execution context of
+the `Master`. Using `defer` here precisely allows us to capture these
+semantics.
+
+A natural question that folks often ask is whether or not we ever
+_don't_ want to use `defer(self(), ...)`, or even just 'defer`. In
+some circumstances, you actually don't need to defer back to your own
+process, but you often want to defer. A good example of that is
+handling HTTP requests. Consider this example:
+
+~~~{.cpp}
+using namespace process;
+
+using std::string;
+
+class HttpProcess : public Process<HttpProcess>
+{
+public:
+  virtual void initialize()
+  {
+    route("/route", None(), [](const http::Request& request) {
+      return functionWhichReturnsAFutureOfString()
+        .then(defer(self(), [](const string& s) {
+          return http::OK("String returned in body: " + s);
+        }));
+    });
+  }
+};
+~~~
+
+Now, while this is totally legal and correct code, the callback
+executed after `functionWhichReturnsAFutureOfString` is completed
+_does not_ need to be executed within the execution context of
+`HttpProcess` because it doesn't require any state from `HttpProcess`!
+In this case, rather than forcing the execution of the callback within
+the execution context of `HttpProcess`, which will block other
+callbacks _that must_ be executed by `HttpProcess`, we can simply just
+run this lambda using an execution context that libprocess can pick
+for us (from a pool of threads). We do so by removing `self()` as the
+first argument to `defer`:
+
+~~~{.cpp}
+using namespace process;
+
+using std::string;
+
+class HttpProcess : public Process<HttpProcess>
+{
+public:
+  virtual void initialize()
+  {
+    route("/route", None(), [](const http::Request& request) {
+      return functionWhichReturnsAFutureOfString()
+        .then(defer([](const string& s) {
+          return http::OK("String returned in body: " + s);
+        }));
+    });
+  }
+};
+~~~
+
+_Note that even in this example_ we still want to use `defer`! Why?
+Because otherwise we are blocking the execution context (i.e.,
+process, thread, etc) that is _completing_ the future because it is
+synchronously executing the callbacks! Instead, we want to let the
+callback get executed asynchronously by using `defer.`
+
+Let's construct a simple example that illustrates a problem that can
+be introduced by omitting `defer` from callback registrations. We'll
+define a method for our `HttpProcess` class which accepts an input
+string and returns a future via an asyncronous method called
+`asyncStoreData`:
+
+~~~{.cpp}
+using namespace process;
+
+using std::string;
+
+class HttpProcess : public Process<HttpProcess>
+{
+public:
+  // Returns the number of bytes stored.
+  Future<int> inputHandler(const string input);
+
+protected:
+  // Returns the number of bytes stored.
+  Future<int> asyncStoreData(const string input);
+
+  int storedCount;
+}
+
+
+Future<int> HttpProcess::inputHandler(const string input)
+{
+  LOG(INFO) << "HttpProcess received input: " << input;
+
+  return asyncStoreData(input)
+    .then([this](int bytes) -> Future<int> {
+      this->storedCount += bytes;
+
+      LOG(INFO) << "Successfully stored input. "
+                << "Total bytes stored so far: " << this->storedCount;
+
+      return bytes;
+    });
+}
+~~~
+
+When the callback is registered on the `Future<int>` returned by
+`asyncStoreData`, a lambda is passed directly to `then`. This means
+that the lambda will be executed in whatever execution context
+eventually fulfills the future. If the future is fulfilled in a
+different execution context (i.e., inside a different libprocess
+process), then it's possible that the instance of `HttpProcess` that
+originally invoked `inputHandler` will have been destroyed, making
+`this` a dangling pointer. In order to avoid this possibility, the
+callback should be registered as follows:
+
+~~~{.cpp}
+  return asyncStoreData(input)
+    .then(defer(self(), [this](int bytes) -> Future<int> {
+      ...
+    }));
+~~~
+
+The lambda is then guaranteed to execute within the execution context
+of the current process, and we know that `this` will still be a valid
+pointer. We should write libprocess code that makes no assumptions
+about the execution context in which a given future is fulfilled. Even
+if we can verify that a future will be fulfilled in the current
+process, registering a callback without `defer` makes the code more
+fragile by allowing the possibility that another contributor will make
+changes without considering the impact of those changes on the
+registered callbacks' execution contexts. Thus, `defer` should always
+be used. We offer the following rule to determine which form of
+`defer` should be used in a given situation:
+
+* If the callback being registered accesses the state of a process,
+  then it should be registered using `defer(pid, callback)`, where
+  `pid` is the PID of the process whose state is being accessed.
+* If the callback doesn't access any process state, or only makes use
+  of process variables that are captured _by value_ so that the
+  context of the process is not directly accessed when the callback is
+  executed, then it can be run in an arbitrary execution context
+  chosen by libprocess, and it should be registered using
+  `defer(callback)`.
+
+
 ### `ID`
 
 Generates a unique identifier string given a prefix. This is used to
@@ -315,28 +539,6 @@ int main(int argc, char** argv)
 ~~~
 
 
-### `defer`
-
-`defer` allows the caller to postpone the decision whether to [dispatch](#dispatch) something by creating a callable object which can perform the dispatch at a later point in time.
-
-~~~{.cpp}
-using namespace process;
-
-class SomeProcess : public Process<SomeProcess>
-{
-public:
-  void merge()
-  {
-    queue.get()
-      .then(defer(self(), [] (int i) {
-        ...;
-      }));
-  }
-
-private:
-  Queue<int> queue;
-};
-~~~
 -->
 
 ## `HTTP`
