@@ -179,13 +179,15 @@ public:
    *     includes resources that are dynamically "checkpointed" on the agent
    *     (e.g. persistent volumes, dynamic reservations, etc).
    * @param used Resources that are allocated on the current agent.
+   * @param tasks that are running on the current agent.
    */
   virtual void addSlave(
       const SlaveID& slaveId,
       const SlaveInfo& slaveInfo,
       const Option<Unavailability>& unavailability,
       const Resources& total,
-      const hashmap<FrameworkID, Resources>& used) = 0;
+      const hashmap<FrameworkID, Resources>& used,
+      const hashmap<FrameworkID, std::vector<TaskID>>& tasks) = 0;
 
   /**
    * Removes an agent from the Mesos cluster. All resources belonging to this

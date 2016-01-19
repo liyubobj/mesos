@@ -122,7 +122,8 @@ public:
       const SlaveInfo& slaveInfo,
       const Option<Unavailability>& unavailability,
       const Resources& total,
-      const hashmap<FrameworkID, Resources>& used);
+      const hashmap<FrameworkID, Resources>& used,
+      const hashmap<FrameworkID, std::vector<TaskID>>& tasks);
 
   void removeSlave(
       const SlaveID& slaveId);

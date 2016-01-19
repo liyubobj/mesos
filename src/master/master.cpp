@@ -6286,12 +6286,22 @@ void Master::addSlave(
     unavailability = machines[slave->machineId].info.unavailability();
   }
 
+  hashmap<FrameworkID, vector<TaskID>> tasks;
+  foreachkey (const FrameworkID& frameworkId, slave->tasks) {
+    vector<TaskID> taskIds;
+    foreachvalue (Task* task, slave->tasks[frameworkId]) {
+      taskIds.push_back(task->task_id());
+    }
+    tasks.put(frameworkId, taskIds);
+  }
+
   allocator->addSlave(
       slave->id,
       slave->info,
       unavailability,
       slave->totalResources,
-      slave->usedResources);
+      slave->usedResources,
+      tasks);
 }
 
 

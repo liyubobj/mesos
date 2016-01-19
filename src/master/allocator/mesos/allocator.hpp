@@ -87,7 +87,8 @@ public:
       const SlaveInfo& slaveInfo,
       const Option<Unavailability>& unavailability,
       const Resources& total,
-      const hashmap<FrameworkID, Resources>& used);
+      const hashmap<FrameworkID, Resources>& used,
+      const hashmap<FrameworkID, std::vector<TaskID>>& tasks);
 
   void removeSlave(
       const SlaveID& slaveId);
@@ -222,7 +223,8 @@ public:
       const SlaveInfo& slaveInfo,
       const Option<Unavailability>& unavailability,
       const Resources& total,
-      const hashmap<FrameworkID, Resources>& used) = 0;
+      const hashmap<FrameworkID, Resources>& used,
+      const hashmap<FrameworkID, std::vector<TaskID>>& tasks) = 0;
 
   virtual void removeSlave(
       const SlaveID& slaveId) = 0;
@@ -431,7 +433,8 @@ inline void MesosAllocator<AllocatorProcess>::addSlave(
     const SlaveInfo& slaveInfo,
     const Option<Unavailability>& unavailability,
     const Resources& total,
-    const hashmap<FrameworkID, Resources>& used)
+    const hashmap<FrameworkID, Resources>& used,
+    const hashmap<FrameworkID, std::vector<TaskID>>& tasks)
 {
   process::dispatch(
       process,
@@ -440,7 +443,8 @@ inline void MesosAllocator<AllocatorProcess>::addSlave(
       slaveInfo,
       unavailability,
       total,
-      used);
+      used,
+      tasks);
 }
 
 

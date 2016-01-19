@@ -585,7 +585,7 @@ TEST_F(MasterQuotaTest, InsufficientResourcesSingleAgent)
 
   // Start an agent and wait until its resources are available.
   Future<Resources> agentTotalResources;
-  EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
+  EXPECT_CALL(allocator, addSlave(_, _, _, _, _, _))
     .WillOnce(DoAll(InvokeAddSlave(&allocator),
                     FutureArg<3>(&agentTotalResources)));
 
@@ -647,7 +647,7 @@ TEST_F(MasterQuotaTest, InsufficientResourcesMultipleAgents)
 
   // Start one agent and wait until its resources are available.
   Future<Resources> agent1TotalResources;
-  EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
+  EXPECT_CALL(allocator, addSlave(_, _, _, _, _, _))
     .WillOnce(DoAll(InvokeAddSlave(&allocator),
                     FutureArg<3>(&agent1TotalResources)));
 
@@ -659,7 +659,7 @@ TEST_F(MasterQuotaTest, InsufficientResourcesMultipleAgents)
 
   // Start another agent and wait until its resources are available.
   Future<Resources> agent2TotalResources;
-  EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
+  EXPECT_CALL(allocator, addSlave(_, _, _, _, _, _))
     .WillOnce(DoAll(InvokeAddSlave(&allocator),
                     FutureArg<3>(&agent2TotalResources)));
 
@@ -725,7 +725,7 @@ TEST_F(MasterQuotaTest, AvailableResourcesSingleAgent)
 
   // Start an agent and wait until its resources are available.
   Future<Resources> agentTotalResources;
-  EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
+  EXPECT_CALL(allocator, addSlave(_, _, _, _, _, _))
     .WillOnce(DoAll(InvokeAddSlave(&allocator),
                     FutureArg<3>(&agentTotalResources)));
 
@@ -776,7 +776,7 @@ TEST_F(MasterQuotaTest, AvailableResourcesMultipleAgents)
 
   // Start one agent and wait until its resources are available.
   Future<Resources> agent1TotalResources;
-  EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
+  EXPECT_CALL(allocator, addSlave(_, _, _, _, _, _))
     .WillOnce(DoAll(InvokeAddSlave(&allocator),
                     FutureArg<3>(&agent1TotalResources)));
 
@@ -788,7 +788,7 @@ TEST_F(MasterQuotaTest, AvailableResourcesMultipleAgents)
 
   // Start another agent and wait until its resources are available.
   Future<Resources> agent2TotalResources;
-  EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
+  EXPECT_CALL(allocator, addSlave(_, _, _, _, _, _))
     .WillOnce(DoAll(InvokeAddSlave(&allocator),
                     FutureArg<3>(&agent2TotalResources)));
 
@@ -846,7 +846,7 @@ TEST_F(MasterQuotaTest, AvailableResourcesAfterRescinding)
 
   // Start one agent and wait until its resources are available.
   Future<Resources> agent1TotalResources;
-  EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
+  EXPECT_CALL(allocator, addSlave(_, _, _, _, _, _))
     .WillOnce(DoAll(InvokeAddSlave(&allocator),
                     FutureArg<3>(&agent1TotalResources)));
 
@@ -858,7 +858,7 @@ TEST_F(MasterQuotaTest, AvailableResourcesAfterRescinding)
 
   // Start another agent and wait until its resources are available.
   Future<Resources> agent2TotalResources;
-  EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
+  EXPECT_CALL(allocator, addSlave(_, _, _, _, _, _))
     .WillOnce(DoAll(InvokeAddSlave(&allocator),
                     FutureArg<3>(&agent2TotalResources)));
 
@@ -870,7 +870,7 @@ TEST_F(MasterQuotaTest, AvailableResourcesAfterRescinding)
 
   // Start one more agent and wait until its resources are available.
   Future<Resources> agent3TotalResources;
-  EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
+  EXPECT_CALL(allocator, addSlave(_, _, _, _, _, _))
     .WillOnce(DoAll(InvokeAddSlave(&allocator),
                     FutureArg<3>(&agent3TotalResources)));
 
