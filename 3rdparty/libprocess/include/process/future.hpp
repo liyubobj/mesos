@@ -41,6 +41,7 @@
 #include <stout/option.hpp>
 #include <stout/preprocessor.hpp>
 #include <stout/result.hpp>
+#include <stout/result_of.hpp>
 #include <stout/synchronized.hpp>
 #include <stout/try.hpp>
 
@@ -170,31 +171,32 @@ public:
   template <typename F>
   const Future<T>& onDiscard(_Deferred<F>&& deferred) const
   {
-    return onDiscard(std::function<void()>(deferred));
+    return onDiscard(deferred.operator std::function<void()>());
   }
 
   template <typename F>
   const Future<T>& onReady(_Deferred<F>&& deferred) const
   {
-    return onReady(std::function<void(const T&)>(deferred));
+    return onReady(deferred.operator std::function<void(const T&)>());
   }
 
   template <typename F>
   const Future<T>& onFailed(_Deferred<F>&& deferred) const
   {
-    return onFailed(std::function<void(const std::string&)>(deferred));
+    return onFailed(
+        deferred.operator std::function<void(const std::string&)>());
   }
 
   template <typename F>
   const Future<T>& onDiscarded(_Deferred<F>&& deferred) const
   {
-    return onDiscarded(std::function<void()>(deferred));
+    return onDiscarded(deferred.operator std::function<void()>());
   }
 
   template <typename F>
   const Future<T>& onAny(_Deferred<F>&& deferred) const
   {
-    return onAny(std::function<void(const Future<T>&)>(deferred));
+    return onAny(deferred.operator std::function<void(const Future<T>&)>());
   }
 
 private:
@@ -209,7 +211,7 @@ private:
   struct LessPrefer {};
   struct Prefer : LessPrefer {};
 
-  template <typename F, typename = typename std::result_of<F(const T&)>::type>
+  template <typename F, typename = typename result_of<F(const T&)>::type>
   const Future<T>& onReady(F&& f, Prefer) const
   {
     return onReady(std::function<void(const T&)>(
@@ -218,7 +220,19 @@ private:
         }));
   }
 
-  template <typename F, typename = typename std::result_of<F()>::type>
+  // This is the less prefered `onReady`, we prefer the `onReady` method which
+  // has `f` taking a `const T&` parameter. Unfortunately, to complicate
+  // matters, if `F` is the result of a `std::bind` expression we need to SFINAE
+  // out this version of `onReady` and force the use of the preferred `onReady`
+  // (which works because `std::bind` will just ignore the `const T&` argument).
+  // This is necessary because Visual Studio 2015 doesn't support using the
+  // `std::bind` call operator with `std::result_of` as it's technically not a
+  // requirement by the C++ standard.
+  template <
+      typename F,
+      typename = typename std::result_of<typename std::enable_if<
+          !std::is_bind_expression<typename std::decay<F>::type>::value,
+          F>::type()>::type>
   const Future<T>& onReady(F&& f, LessPrefer) const
   {
     return onReady(std::function<void(const T&)>(
@@ -227,7 +241,7 @@ private:
         }));
   }
 
-  template <typename F, typename = typename std::result_of<F(const std::string&)>::type> // NOLINT(whitespace/line_length)
+  template <typename F, typename = typename result_of<F(const std::string&)>::type> // NOLINT(whitespace/line_length)
   const Future<T>& onFailed(F&& f, Prefer) const
   {
     return onFailed(std::function<void(const std::string&)>(
@@ -236,7 +250,13 @@ private:
         }));
   }
 
-  template <typename F, typename = typename std::result_of<F()>::type>
+  // Refer to the less preferred version of `onReady` for why these SFINAE
+  // conditions are necessary.
+  template <
+      typename F,
+      typename = typename std::result_of<typename std::enable_if<
+          !std::is_bind_expression<typename std::decay<F>::type>::value,
+          F>::type()>::type>
   const Future<T>& onFailed(F&& f, LessPrefer) const
   {
     return onFailed(std::function<void(const std::string&)>(
@@ -245,7 +265,7 @@ private:
         }));
   }
 
-  template <typename F, typename = typename std::result_of<F(const Future<T>&)>::type> // NOLINT(whitespace/line_length)
+  template <typename F, typename = typename result_of<F(const Future<T>&)>::type> // NOLINT(whitespace/line_length)
   const Future<T>& onAny(F&& f, Prefer) const
   {
     return onAny(std::function<void(const Future<T>&)>(
@@ -254,7 +274,13 @@ private:
         }));
   }
 
-  template <typename F, typename = typename std::result_of<F()>::type>
+  // Refer to the less preferred version of `onReady` for why these SFINAE
+  // conditions are necessary.
+  template <
+      typename F,
+      typename = typename std::result_of<typename std::enable_if<
+          !std::is_bind_expression<typename std::decay<F>::type>::value,
+          F>::type()>::type>
   const Future<T>& onAny(F&& f, LessPrefer) const
   {
     return onAny(std::function<void(const Future<T>&)>(
@@ -322,27 +348,44 @@ public:
   }
 
 private:
-  template <typename F, typename X = typename internal::unwrap<typename std::result_of<F(const T&)>::type>::type> // NOLINT(whitespace/line_length)
+  template <
+      typename F,
+      typename X =
+        typename internal::unwrap<typename result_of<F(const T&)>::type>::type>
   Future<X> then(_Deferred<F>&& f, Prefer) const
   {
     // note the then<X> is necessary to not have an infinite loop with
     // then(F&& f)
-    return then<X>(std::function<Future<X>(const T&)>(f));
+    return then<X>(f.operator std::function<Future<X>(const T&)>());
   }
 
-  template <typename F, typename X = typename internal::unwrap<typename std::result_of<F()>::type>::type> // NOLINT(whitespace/line_length)
+  // Refer to the less preferred version of `onReady` for why these SFINAE
+  // conditions are necessary.
+  template <
+      typename F,
+      typename X = typename internal::unwrap<
+          typename std::result_of<typename std::enable_if<
+              !std::is_bind_expression<typename std::decay<F>::type>::value,
+              F>::type()>::type>::type>
   Future<X> then(_Deferred<F>&& f, LessPrefer) const
   {
-    return then<X>(std::function<Future<X>()>(f));
+    return then<X>(f.operator std::function<Future<X>()>());
   }
 
-  template <typename F, typename X = typename internal::unwrap<typename std::result_of<F(const T&)>::type>::type> // NOLINT(whitespace/line_length)
+  template <typename F, typename X = typename internal::unwrap<typename result_of<F(const T&)>::type>::type> // NOLINT(whitespace/line_length)
   Future<X> then(F&& f, Prefer) const
   {
     return then<X>(std::function<Future<X>(const T&)>(f));
   }
 
-  template <typename F, typename X = typename internal::unwrap<typename std::result_of<F()>::type>::type> // NOLINT(whitespace/line_length)
+  // Refer to the less preferred version of `onReady` for why these SFINAE
+  // conditions are necessary.
+  template <
+      typename F,
+      typename X = typename internal::unwrap<
+          typename std::result_of<typename std::enable_if<
+              !std::is_bind_expression<typename std::decay<F>::type>::value,
+              F>::type()>::type>::type>
   Future<X> then(F&& f, LessPrefer) const
   {
     return then<X>(std::function<Future<X>()>(f));
