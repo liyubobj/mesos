@@ -231,6 +231,14 @@ public:
       const SlaveID& slaveId) = 0;
 
   /**
+   * Detected Leader Master
+   *
+   * This is triggered if a Leader Master was detected. In standalone case,
+   * the Leader Master is the Master itself.
+   */
+  virtual void detectedLeader(){};
+
+  /**
    * Updates the list of trusted agents.
    *
    * This is invoked when the master starts up with the --whitelist flag.

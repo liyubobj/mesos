@@ -1727,6 +1727,9 @@ void Master::detected(const Future<Option<MasterInfo>>& _leader)
     if (!wasElected) {
       LOG(INFO) << "Elected as the leading master!";
 
+      // Call detectedLeader() when elected Leader Master.
+      allocator->detectedLeader();
+
       // Begin the recovery process, bail if it fails or is discarded.
       recover()
         .onFailed(lambda::bind(fail, "Recovery failed", lambda::_1))
