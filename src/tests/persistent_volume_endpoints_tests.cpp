@@ -55,6 +55,7 @@ using process::PID;
 
 using process::http::BadRequest;
 using process::http::Conflict;
+using process::http::Forbidden;
 using process::http::OK;
 using process::http::Response;
 using process::http::Unauthorized;
@@ -638,7 +639,7 @@ TEST_F(PersistentVolumeEndpointsTest, NoHeader)
       createRequestBody(slaveId.get(), "volumes", volume));
 
   AWAIT_EXPECT_RESPONSE_STATUS_EQ(
-      Unauthorized("Mesos master").status,
+      Unauthorized({}).status,
       response);
 
   response = process::http::post(
@@ -648,7 +649,7 @@ TEST_F(PersistentVolumeEndpointsTest, NoHeader)
       createRequestBody(slaveId.get(), "volumes", volume));
 
   AWAIT_EXPECT_RESPONSE_STATUS_EQ(
-      Unauthorized("Mesos master").status,
+      Unauthorized({}).status,
       response);
 
   Shutdown();
@@ -694,14 +695,14 @@ TEST_F(PersistentVolumeEndpointsTest, BadCredentials)
     process::http::post(master.get(), "create-volumes", headers, body);
 
   AWAIT_EXPECT_RESPONSE_STATUS_EQ(
-      Unauthorized("Mesos master").status,
+      Unauthorized({}).status,
       response);
 
   response =
     process::http::post(master.get(), "destroy-volumes", headers, body);
 
   AWAIT_EXPECT_RESPONSE_STATUS_EQ(
-      Unauthorized("Mesos master").status,
+      Unauthorized({}).status,
       response);
 
   Shutdown();
@@ -896,9 +897,7 @@ TEST_F(PersistentVolumeEndpointsTest, BadCreateAndDestroyACL)
       createBasicAuthHeaders(DEFAULT_CREDENTIAL),
       createRequestBody(slaveId.get(), "volumes", volume));
 
-  AWAIT_EXPECT_RESPONSE_STATUS_EQ(
-      Unauthorized("Mesos master").status,
-      createResponse);
+  AWAIT_EXPECT_RESPONSE_STATUS_EQ(Forbidden().status, createResponse);
 
   // The successful creation attempt.
   createResponse = process::http::post(
@@ -941,9 +940,7 @@ TEST_F(PersistentVolumeEndpointsTest, BadCreateAndDestroyACL)
       createBasicAuthHeaders(DEFAULT_CREDENTIAL),
       createRequestBody(slaveId.get(), "volumes", volume));
 
-  AWAIT_EXPECT_RESPONSE_STATUS_EQ(
-      Unauthorized("Mesos master").status,
-      destroyResponse);
+  AWAIT_EXPECT_RESPONSE_STATUS_EQ(Forbidden().status, destroyResponse);
 
   driver.stop();
   driver.join();
@@ -1024,7 +1021,7 @@ TEST_F(PersistentVolumeEndpointsTest, GoodCreateAndDestroyACLBadCredential)
       createRequestBody(slaveId.get(), "volumes", volume));
 
   AWAIT_EXPECT_RESPONSE_STATUS_EQ(
-      Unauthorized("Mesos master").status,
+      Unauthorized({}).status,
       createResponse);
 
   // The successful creation attempt.
@@ -1069,7 +1066,7 @@ TEST_F(PersistentVolumeEndpointsTest, GoodCreateAndDestroyACLBadCredential)
       createRequestBody(slaveId.get(), "volumes", volume));
 
   AWAIT_EXPECT_RESPONSE_STATUS_EQ(
-      Unauthorized("Mesos master").status,
+      Unauthorized({}).status,
       destroyResponse);
 
   driver.stop();

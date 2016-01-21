@@ -89,7 +89,6 @@ public:
 protected:
   virtual void initialize()
   {
-    route("/auth", None(), &HttpProcess::auth);
     route("/body", None(), &HttpProcess::body);
     route("/pipe", None(), &HttpProcess::pipe);
     route("/get", None(), &HttpProcess::get);
@@ -98,16 +97,6 @@ protected:
     route("/a", None(), &HttpProcess::a);
     route("/a/b/c", None(), &HttpProcess::abc);
     route("/authenticated", "realm", None(), &HttpProcess::authenticated);
-  }
-
-  Future<http::Response> auth(const http::Request& request)
-  {
-    string encodedAuth = base64::encode("testuser:testpass");
-    Option<string> authHeader = request.headers.get("Authorization");
-    if (!authHeader.isSome() || (authHeader.get() != "Basic " + encodedAuth)) {
-      return http::Unauthorized("testrealm");
-    }
-    return http::OK();
   }
 };
 
@@ -131,47 +120,6 @@ public:
 
 
 // TODO(vinod): Use AWAIT_EXPECT_RESPONSE_STATUS_EQ in the tests.
-
-TEST(HTTPTest, Auth)
-{
-  Http http;
-
-  // Test the case where there is no auth.
-  Future<http::Response> noAuthFuture = http::get(http.process->self(), "auth");
-
-  AWAIT_READY(noAuthFuture);
-  EXPECT_EQ(http::Status::UNAUTHORIZED, noAuthFuture->code);
-  EXPECT_EQ(http::Status::string(http::Status::UNAUTHORIZED),
-            noAuthFuture->status);
-  ASSERT_SOME_EQ("Basic realm=\"testrealm\"",
-                 noAuthFuture->headers.get("WWW-authenticate"));
-
-  // Now test passing wrong auth header.
-  http::Headers headers;
-  headers["Authorization"] = "Basic " + base64::encode("testuser:wrongpass");
-
-  Future<http::Response> wrongAuthFuture =
-    http::get(http.process->self(), "auth", None(), headers);
-
-  AWAIT_READY(wrongAuthFuture);
-  EXPECT_EQ(http::Status::UNAUTHORIZED, wrongAuthFuture->code);
-  EXPECT_EQ(http::Status::string(http::Status::UNAUTHORIZED),
-            wrongAuthFuture->status);
-
-  ASSERT_SOME_EQ("Basic realm=\"testrealm\"",
-                 wrongAuthFuture->headers.get("WWW-authenticate"));
-
-  // Now test passing right auth header.
-  headers["Authorization"] = "Basic " + base64::encode("testuser:testpass");
-
-  Future<http::Response> rightAuthFuture =
-    http::get(http.process->self(), "auth", None(), headers);
-
-  AWAIT_READY(rightAuthFuture);
-  EXPECT_EQ(http::Status::OK, rightAuthFuture->code);
-  EXPECT_EQ(http::Status::string(http::Status::OK),
-            rightAuthFuture->status);
-}
 
 
 TEST(HTTPTest, Endpoints)
@@ -909,12 +857,8 @@ TEST(HTTPConnectionTest, ClosingRequest)
   AWAIT_READY(connection.disconnected());
 }
 
-// TODO(dforsyth): The test suite doesn't see the second call on FreeBSD
-#ifndef __FreeBSD__
+
 TEST(HTTPConnectionTest, ClosingResponse)
-#else
-TEST(HTTPConnectionTest, DISABLED_ClosingResponse)
-#endif
 {
   Http http;
 
@@ -1298,7 +1242,7 @@ TEST_F(HttpAuthenticationTest, Unauthorized)
 
   AuthenticationResult authentication;
   authentication.unauthorized =
-    http::Unauthorized(vector<string>({"Basic realm=\"realm\""}));
+    http::Unauthorized({"Basic realm=\"realm\""});
 
   EXPECT_CALL(*authenticator, authenticate(_))
     .WillOnce(Return(authentication));
@@ -1307,7 +1251,7 @@ TEST_F(HttpAuthenticationTest, Unauthorized)
     http::get(http.process->self(), "authenticated");
 
   AWAIT_EXPECT_RESPONSE_STATUS_EQ(
-      http::Unauthorized(vector<string>()).status,
+      http::Unauthorized({}).status,
       response);
 
   EXPECT_EQ(
@@ -1442,7 +1386,7 @@ TEST_F(HttpAuthenticationTest, Basic)
     Future<http::Response> response = http::get(*http.process, "authenticated");
 
     AWAIT_EXPECT_RESPONSE_STATUS_EQ(
-        http::Unauthorized(vector<string>()).status,
+        http::Unauthorized({}).status,
         response);
   }
 
@@ -1456,7 +1400,7 @@ TEST_F(HttpAuthenticationTest, Basic)
       http::get(http.process->self(), "authenticated", None(), headers);
 
     AWAIT_EXPECT_RESPONSE_STATUS_EQ(
-        http::Unauthorized(vector<string>()).status,
+        http::Unauthorized({}).status,
         response);
   }
 
@@ -1470,7 +1414,7 @@ TEST_F(HttpAuthenticationTest, Basic)
       http::get(http.process->self(), "authenticated", None(), headers);
 
     AWAIT_EXPECT_RESPONSE_STATUS_EQ(
-        http::Unauthorized(vector<string>()).status,
+        http::Unauthorized({}).status,
         response);
   }
 

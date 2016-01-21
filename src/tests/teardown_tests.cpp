@@ -14,8 +14,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <string>
-
 #include <gmock/gmock.h>
 
 #include <mesos/executor.hpp>
@@ -36,8 +34,6 @@
 #include "tests/mesos.hpp"
 #include "tests/utils.hpp"
 
-using std::string;
-
 using mesos::internal::master::Master;
 using mesos::internal::slave::Slave;
 
@@ -45,6 +41,7 @@ using process::Future;
 using process::PID;
 
 using process::http::BadRequest;
+using process::http::Forbidden;
 using process::http::OK;
 using process::http::Response;
 using process::http::Unauthorized;
@@ -130,9 +127,7 @@ TEST_F(TeardownTest, TeardownEndpointBadCredentials)
       "frameworkId=" + frameworkId.get().value());
 
   AWAIT_READY(response);
-  AWAIT_EXPECT_RESPONSE_STATUS_EQ(
-      Unauthorized("Mesos master").status,
-      response);
+  AWAIT_EXPECT_RESPONSE_STATUS_EQ(Unauthorized({}).status, response);
 
   driver.stop();
   driver.join();
@@ -229,9 +224,7 @@ TEST_F(TeardownTest, TeardownEndpointBadACLs)
       "frameworkId=" + frameworkId.get().value());
 
   AWAIT_READY(response);
-  AWAIT_EXPECT_RESPONSE_STATUS_EQ(
-      Unauthorized("Mesos master").status,
-      response);
+  AWAIT_EXPECT_RESPONSE_STATUS_EQ(Forbidden().status, response);
 
   driver.stop();
   driver.join();
@@ -299,9 +292,7 @@ TEST_F(TeardownTest, TeardownEndpointNoHeader)
       "frameworkId=" + frameworkId.get().value());
 
   AWAIT_READY(response);
-  AWAIT_EXPECT_RESPONSE_STATUS_EQ(
-      Unauthorized("Mesos master").status,
-      response);
+  AWAIT_EXPECT_RESPONSE_STATUS_EQ(Unauthorized({}).status, response);
 
   driver.stop();
   driver.join();

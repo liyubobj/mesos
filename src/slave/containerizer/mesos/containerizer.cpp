@@ -26,6 +26,8 @@
 #include <process/reap.hpp>
 #include <process/subprocess.hpp>
 
+#include <stout/adaptor.hpp>
+#include <stout/foreach.hpp>
 #include <stout/fs.hpp>
 #include <stout/lambda.hpp>
 #include <stout/os.hpp>
@@ -54,6 +56,7 @@
 #ifdef __linux__
 #include "slave/containerizer/mesos/isolators/cgroups/cpushare.hpp"
 #include "slave/containerizer/mesos/isolators/cgroups/mem.hpp"
+#include "slave/containerizer/mesos/isolators/cgroups/net_cls.hpp"
 #include "slave/containerizer/mesos/isolators/cgroups/perf_event.hpp"
 #endif
 
@@ -203,6 +206,7 @@ Try<MesosContainerizer*> MesosContainerizer::create(
 #ifdef __linux__
     {"cgroups/cpu", &CgroupsCpushareIsolatorProcess::create},
     {"cgroups/mem", &CgroupsMemIsolatorProcess::create},
+    {"cgroups/net_cls", &CgroupsNetClsIsolatorProcess::create},
     {"cgroups/perf_event", &CgroupsPerfEventIsolatorProcess::create},
     {"namespaces/pid", &NamespacesPidIsolatorProcess::create},
 #endif
@@ -1499,9 +1503,7 @@ Future<list<Future<Nothing>>> MesosContainerizerProcess::cleanupIsolators(
 
   // NOTE: We clean up each isolator in the reverse order they were
   // prepared (see comment in prepare()).
-  for (auto it = isolators.crbegin(); it != isolators.crend(); ++it) {
-    const Owned<Isolator>& isolator = *it;
-
+  foreach (const Owned<Isolator>& isolator, adaptor::reverse(isolators)) {
     // We'll try to clean up all isolators, waiting for each to
     // complete and continuing if one fails.
     // TODO(jieyu): Technically, we cannot bind 'isolator' here
