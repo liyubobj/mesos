@@ -493,7 +493,8 @@ TEST_F(HierarchicalAllocatorTest, OfferFilter)
       agent1,
       None(),
       agent1.resources(),
-      EMPTY);
+      EMPTY,
+      EMPTYRUNNINGS);
 
   // `framework1` will be offered all of `agent1` resources
   // because it is the only framework in the cluster.
@@ -590,7 +591,8 @@ TEST_F(HierarchicalAllocatorTest, SmallOfferFilterTimeout)
       agent1,
       None(),
       agent1.resources(),
-      {std::make_pair(framework1.id(), agent1.resources())});
+      {std::make_pair(framework1.id(), agent1.resources())},
+      EMPTYRUNNINGS);
 
   // Process all triggered allocation events.
   //
@@ -604,7 +606,8 @@ TEST_F(HierarchicalAllocatorTest, SmallOfferFilterTimeout)
       agent2,
       None(),
       agent2.resources(),
-      EMPTY);
+      EMPTY,
+      EMPTYRUNNINGS);
 
   // Process the allocation triggered by the agent addition.
   Clock::settle();
