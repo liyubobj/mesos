@@ -154,6 +154,11 @@ Try<Resources> Containerizer::resources(const Flags& flags)
         flags.default_role).get();
   }
 
+  Option<Error> error = Resources::validate(resources);
+  if (error.isSome()) {
+    return error.get();
+  }
+
   return resources;
 }
 
@@ -349,7 +354,6 @@ map<string, string> executorEnvironment(
 
   return environment;
 }
-
 
 } // namespace slave {
 } // namespace internal {

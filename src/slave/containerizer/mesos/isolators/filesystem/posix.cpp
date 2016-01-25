@@ -71,12 +71,13 @@ Future<Nothing> PosixFilesystemIsolatorProcess::recover(
 
 Future<Option<ContainerLaunchInfo>> PosixFilesystemIsolatorProcess::prepare(
     const ContainerID& containerId,
-    const ExecutorInfo& executorInfo,
     const ContainerConfig& containerConfig)
 {
   if (infos.contains(containerId)) {
     return Failure("Container has already been prepared");
   }
+
+  const ExecutorInfo& executorInfo = containerConfig.executorinfo();
 
   if (executorInfo.has_container()) {
     CHECK_EQ(executorInfo.container().type(), ContainerInfo::MESOS);
@@ -182,10 +183,7 @@ Future<Nothing> PosixFilesystemIsolatorProcess::update(
       continue;
     }
 
-    string original = paths::getPersistentVolumePath(
-        flags.work_dir,
-        resource.role(),
-        resource.disk().persistence().id());
+    string original = paths::getPersistentVolumePath(flags.work_dir, resource);
 
     // Set the ownership of the persistent volume to match that of the
     // sandbox directory.

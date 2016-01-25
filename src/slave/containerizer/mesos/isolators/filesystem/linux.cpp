@@ -258,7 +258,6 @@ Future<Nothing> LinuxFilesystemIsolatorProcess::recover(
 
 Future<Option<ContainerLaunchInfo>> LinuxFilesystemIsolatorProcess::prepare(
     const ContainerID& containerId,
-    const ExecutorInfo& executorInfo,
     const ContainerConfig& containerConfig)
 {
   const string& directory = containerConfig.directory();
@@ -348,6 +347,8 @@ Future<Option<ContainerLaunchInfo>> LinuxFilesystemIsolatorProcess::prepare(
 
     launchInfo.set_rootfs(rootfs);
   }
+
+  const ExecutorInfo& executorInfo = containerConfig.executorinfo();
 
   // Prepare the commands that will be run in the container's mount
   // namespace right after forking the executor process. We use these
@@ -610,10 +611,7 @@ Future<Nothing> LinuxFilesystemIsolatorProcess::update(
     }
 
     // Determine the source of the mount.
-    string source = paths::getPersistentVolumePath(
-        flags.work_dir,
-        resource.role(),
-        resource.disk().persistence().id());
+    string source = paths::getPersistentVolumePath(flags.work_dir, resource);
 
     // Set the ownership of the persistent volume to match that of the
     // sandbox directory.

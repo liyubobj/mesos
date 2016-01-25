@@ -476,10 +476,14 @@ inline TaskInfo createTask(
 
 
 inline Resource::ReservationInfo createReservationInfo(
-    const std::string& principal)
+    const Option<std::string>& principal = None())
 {
   Resource::ReservationInfo info;
-  info.set_principal(principal);
+
+  if (principal.isSome()) {
+    info.set_principal(principal.get());
+  }
+
   return info;
 }
 
@@ -491,7 +495,8 @@ inline Resource::DiskInfo createDiskInfo(
     const Option<std::string>& persistenceId,
     const Option<std::string>& containerPath,
     const Option<Volume::Mode>& mode = None(),
-    const Option<std::string>& hostPath = None())
+    const Option<std::string>& hostPath = None(),
+    const Option<Resource::DiskInfo::Source>& source = None())
 {
   Resource::DiskInfo info;
 
@@ -511,7 +516,54 @@ inline Resource::DiskInfo createDiskInfo(
     info.mutable_volume()->CopyFrom(volume);
   }
 
+  if (source.isSome()) {
+    info.mutable_source()->CopyFrom(source.get());
+  }
+
   return info;
+}
+
+
+// Helper for creating a disk source with type `PATH`.
+inline Resource::DiskInfo::Source createDiskSourcePath(const std::string& root)
+{
+  Resource::DiskInfo::Source source;
+
+  source.set_type(Resource::DiskInfo::Source::PATH);
+  source.mutable_path()->set_root(root);
+
+  return source;
+}
+
+
+// Helper for creating a disk source with type `MOUNT`.
+inline Resource::DiskInfo::Source createDiskSourceMount(const std::string& root)
+{
+  Resource::DiskInfo::Source source;
+
+  source.set_type(Resource::DiskInfo::Source::MOUNT);
+  source.mutable_mount()->set_root(root);
+
+  return source;
+}
+
+
+// Helper for creating a disk resource.
+inline Resource createDiskResource(
+    const std::string& value,
+    const std::string& role,
+    const Option<std::string>& persistenceID,
+    const Option<std::string>& containerPath,
+    const Option<Resource::DiskInfo::Source>& source = None())
+{
+  Resource resource = Resources::parse("disk", value, role).get();
+
+  if (persistenceID.isSome() || containerPath.isSome() || source.isSome()) {
+    resource.mutable_disk()->CopyFrom(
+        createDiskInfo(persistenceID, containerPath, None(), None(), source));
+  }
+
+  return resource;
 }
 
 
@@ -522,7 +574,8 @@ inline Resource createPersistentVolume(
     const std::string& role,
     const std::string& persistenceId,
     const std::string& containerPath,
-    const Option<std::string>& reservationPrincipal = None())
+    const Option<std::string>& reservationPrincipal = None(),
+    const Option<Resource::DiskInfo::Source>& source = None())
 {
   Resource volume = Resources::parse(
       "disk",
@@ -530,7 +583,31 @@ inline Resource createPersistentVolume(
       role).get();
 
   volume.mutable_disk()->CopyFrom(
-      createDiskInfo(persistenceId, containerPath));
+      createDiskInfo(persistenceId, containerPath, None(), None(), source));
+
+  if (reservationPrincipal.isSome()) {
+    volume.mutable_reservation()->set_principal(reservationPrincipal.get());
+  }
+
+  return volume;
+}
+
+
+// Note that `reservationPrincipal` should be specified if and only if
+// the volume uses dynamically reserved resources.
+inline Resource createPersistentVolume(
+    Resource volume,
+    const std::string& persistenceId,
+    const std::string& containerPath,
+    const Option<std::string>& reservationPrincipal = None())
+{
+  Option<Resource::DiskInfo::Source> source = None();
+  if (volume.has_disk() && volume.disk().has_source()) {
+    source = volume.disk().source();
+  }
+
+  volume.mutable_disk()->CopyFrom(
+      createDiskInfo(persistenceId, containerPath, None(), None(), source));
 
   if (reservationPrincipal.isSome()) {
     volume.mutable_reservation()->set_principal(reservationPrincipal.get());
