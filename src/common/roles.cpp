@@ -51,25 +51,28 @@ Try<vector<string>> parse(const string& text)
 // \x20 is space (whitespace);
 // \x2f is slash ('/');
 // \x7f is backspace (del);
-static const string INVALID_CHARACTERS = "\x09\x0a\x0b\x0c\x0d\x20\x2f\x7f";
+static const string* INVALID_CHARACTERS =
+  new string("\x09\x0a\x0b\x0c\x0d\x20\x2f\x7f");
 
 
 Option<Error> validate(const string& role)
 {
+  static const string* dot = new string(".");
+  static const string* dotdot = new string("..");
   if (role.empty()) {
-    return Error("Empty role name is invalid.");
-  } else if (role == ".") {
-    return Error("Role name '.' is invalid.");
-  } else if (role == "..") {
-    return Error("Role name '..' is invalid.");
-  } else if (strings::startsWith(role, "-")) {
+    return Error("Empty role name is invalid");
+  } else if (role == *dot) {
+    return Error("Role name '.' is invalid");
+  } else if (role == *dotdot) {
+    return Error("Role name '..' is invalid");
+  } else if (role[0] == '-') {
     return Error("Role name '" + role + "' is invalid "
-                 "because it starts with a dash.");
+                 "because it starts with a dash");
   }
 
-  if (role.find_first_of(INVALID_CHARACTERS) != string::npos) {
+  if (role.find_first_of(*INVALID_CHARACTERS) != string::npos) {
     return Error("Role name '" + role + "' is invalid "
-                 "because it contains slash, backspace or whitespace.");
+                 "because it contains slash, backspace or whitespace");
   }
 
   return None();

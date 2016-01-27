@@ -518,6 +518,7 @@ v1dir = $(pkgincludedir)/v1
 
 v1_HEADERS =								\
   $(top_srcdir)/include/mesos/v1/attributes.hpp				\
+  $(top_srcdir)/include/mesos/v1/executor.hpp				\
   $(top_srcdir)/include/mesos/v1/mesos.hpp				\
   $(top_srcdir)/include/mesos/v1/mesos.proto				\
   $(top_srcdir)/include/mesos/v1/resources.hpp				\
@@ -582,6 +583,7 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   docker/docker.cpp							\
   docker/spec.cpp							\
   exec/exec.cpp								\
+  executor/executor.cpp							\
   files/files.cpp							\
   hdfs/hdfs.cpp								\
   hook/manager.cpp							\
