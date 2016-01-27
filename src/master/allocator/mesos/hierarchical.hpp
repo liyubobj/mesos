@@ -404,12 +404,19 @@ protected:
   //
   // Each stage comprises two levels of sorting, hence "hierarchical".
   // Level 1 sorts across roles:
-  //   Reserved resources are excluded from fairness calculation,
-  //   since they are forcibly pinned to a role.
+  //   Currently, only the allocated portion of the reserved resources are
+  //   accounted for fairness calculation.
+  //
+  // TODO(mpark): Reserved resources should be accounted for fairness
+  // calculation whether they are allocated or not, since they model a long or
+  // forever running task. That is, the effect of reserving resources is
+  // equivalent to launching a task in that the resources that make up the
+  // reservation are not available to other roles as non-revocable.
+  //
   // Level 2 sorts across frameworks within a particular role:
-  //   Both reserved resources and unreserved resources are used
-  //   in the fairness calculation. This is because reserved
-  //   resources can be allocated to any framework in the role.
+  //   Reserved resources at this level are, and should be accounted for
+  //   fairness calculation only if they are allocated. This is because
+  //   reserved resources are fairly shared across the frameworks in the role.
   //
   // The allocator relies on `Sorter`s to employ a particular sorting
   // algorithm. Each level has its own sorter and hence may have different
@@ -436,9 +443,11 @@ protected:
   // `roleSorter` only contains entries for roles with one or more
   // registered frameworks.
   //
-  // NOTE: This sorter counts only unreserved non-revocable resources.
-  //
-  // TODO(alexr): Consider including dynamically reserved resources.
+  // NOTE: We do not include revocable resources in the quota role sorter,
+  // because the quota role sorter's job is to perform fair sharing between
+  // the quota roles as it pertains to their level of quota satisfaction.
+  // Since revocable resources do not increase a role's level of satisfaction
+  // toward its quota, we choose to exclude them from the quota role sorter.
   Sorter* quotaRoleSorter;
 
   // A collection of sorters, one per active role. Each sorter determines

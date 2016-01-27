@@ -385,9 +385,7 @@ TEST_F(HierarchicalAllocatorTest, UnreservedDRF)
 }
 
 
-// This test ensures that reserved resources do not affect the sharing
-// across roles. However, reserved resources should be shared fairly
-// *within* a role.
+// This test ensures that reserved resources do affect the sharing across roles.
 TEST_F(HierarchicalAllocatorTest, ReservedDRF)
 {
   // Pausing the clock is not necessary, but ensures that the test
@@ -429,17 +427,15 @@ TEST_F(HierarchicalAllocatorTest, ReservedDRF)
   EXPECT_EQ(framework2.id(), allocation.get().frameworkId);
   EXPECT_EQ(slave2.resources(), Resources::sum(allocation.get().resources));
 
-  // Now, even though framework1 has more resources allocated to
-  // it than framework2, reserved resources are not considered for
-  // fairness across roles! We expect framework1 to receive this
-  // slave's resources, since it has fewer unreserved resources.
+  // Since `framework1` has more resources allocated to it than `framework2`,
+  // We expect `framework2` to receive this agent's resources.
   SlaveInfo slave3 = createSlaveInfo("cpus:2;mem:512;disk:0");
   allocator->addSlave(
       slave3.id(), slave3, None(), slave3.resources(), EMPTY, EMPTYRUNNINGS);
 
   allocation = allocations.get();
   AWAIT_READY(allocation);
-  EXPECT_EQ(framework1.id(), allocation.get().frameworkId);
+  EXPECT_EQ(framework2.id(), allocation.get().frameworkId);
   EXPECT_EQ(slave3.resources(), Resources::sum(allocation.get().resources));
 
   // Now add another framework in role1. Since the reserved resources
@@ -1856,7 +1852,8 @@ TEST_F(HierarchicalAllocatorTest, QuotaAllocationGranularity)
 
 
 // This test verifies, that the free pool (what is left after all quotas
-// are satisfied) is allocated according to the DRF algorithm.
+// are satisfied) is allocated according to the DRF algorithm across the roles
+// which do not have quota set.
 TEST_F(HierarchicalAllocatorTest, DRFWithQuota)
 {
   // Pausing the clock is not necessary, but ensures that the test
@@ -1937,12 +1934,12 @@ TEST_F(HierarchicalAllocatorTest, DRFWithQuota)
       hashmap<FrameworkID, Resources>(),
       EMPTYRUNNINGS);
 
-  // `framework1` will be offered all of `agent2`'s resources
-  // (coarse-grained allocation) because its share is less than
-  // `framework2`'s share.
+  // `framework2` will be offered all of `agent2`'s resources (coarse-grained
+  // allocation). `framework1` does not receive them even though it has a
+  // smaller allocation, since we have already satisfied its role's quota.
   allocation = allocations.get();
   AWAIT_READY(allocation);
-  EXPECT_EQ(framework1.id(), allocation.get().frameworkId);
+  EXPECT_EQ(framework2.id(), allocation.get().frameworkId);
   EXPECT_EQ(agent2.resources(), Resources::sum(allocation.get().resources));
 }
 
@@ -2301,6 +2298,81 @@ TEST_F(HierarchicalAllocatorTest, MultiQuotaWithFrameworks)
   AWAIT_READY(allocation);
   EXPECT_EQ(framework2.id(), allocation.get().frameworkId);
   EXPECT_EQ(agent3.resources(), Resources::sum(allocation.get().resources));
+}
+
+
+// This tests that reserved resources are accounted for in the role's quota.
+TEST_F(HierarchicalAllocatorTest, ReservationWithinQuota)
+{
+  // Pausing the clock is not necessary, but ensures that the test
+  // doesn't rely on the periodic allocation in the allocator, which
+  // would slow down the test.
+  Clock::pause();
+
+  const string QUOTA_ROLE{"quota-role"};
+  const string NON_QUOTA_ROLE{"non-quota-role"};
+
+  initialize();
+
+  FrameworkInfo framework1 = createFrameworkInfo(QUOTA_ROLE);
+  FrameworkInfo framework2 = createFrameworkInfo(NON_QUOTA_ROLE);
+
+  const Quota quota = createQuota(QUOTA_ROLE, "cpus:2;mem:256");
+
+  // Notify allocator of agents, frameworks, quota and current allocations.
+  allocator->setQuota(QUOTA_ROLE, quota);
+
+  allocator->addFramework(
+      framework1.id(),
+      framework1,
+      hashmap<SlaveID, Resources>());
+
+  allocator->addFramework(
+      framework2.id(),
+      framework2,
+      hashmap<SlaveID, Resources>());
+
+  // Process all triggered allocation events.
+  //
+  // NOTE: No allocations happen because there are no resources to allocate.
+  Clock::settle();
+
+  // Some resources on `agent1` are now being used by `framework1` as part
+  // of its role quota. `framework2` will be offered the rest of `agent1`'s
+  // resources since `framework1`'s quota is satisfied, and `framework2` has
+  // no resources.
+  SlaveInfo agent1 = createSlaveInfo("cpus:8;mem(" + QUOTA_ROLE + "):256");
+  allocator->addSlave(
+      agent1.id(),
+      agent1,
+      None(),
+      agent1.resources(),
+      {std::make_pair(
+          framework1.id(),
+          // The `mem` portion is used to test that reserved resources are
+          // accounted for, and the `cpus` portion is allocated to show that
+          // the result of DRF would be different if `mem` was not accounted.
+          Resources::parse("cpus:2;mem(" + QUOTA_ROLE + "):256").get())});
+
+  Future<Allocation> allocation = allocations.get();
+  AWAIT_READY(allocation);
+  EXPECT_EQ(framework2.id(), allocation.get().frameworkId);
+
+  EXPECT_EQ(Resources::parse("cpus:6").get(),
+            Resources::sum(allocation.get().resources));
+
+  // Since the reserved resources account towards the quota as well as being
+  // accounted for DRF, we expect these resources to also be allocated to
+  // `framework2`.
+  SlaveInfo agent2 = createSlaveInfo("cpus:4");
+  allocator->addSlave(agent2.id(), agent2, None(), agent2.resources(), {});
+
+  allocation = allocations.get();
+  AWAIT_READY(allocation);
+  EXPECT_EQ(framework2.id(), allocation.get().frameworkId);
+
+  EXPECT_EQ(Resources::parse("cpus:4").get(),
+            Resources::sum(allocation.get().resources));
 }
 
 
