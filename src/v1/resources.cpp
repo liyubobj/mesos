@@ -25,6 +25,8 @@
 
 #include <google/protobuf/repeated_field.h>
 
+#include <mesos/roles.hpp>
+
 #include <mesos/v1/mesos.hpp>
 #include <mesos/v1/resources.hpp>
 #include <mesos/v1/values.hpp>
@@ -705,6 +707,12 @@ Option<Error> Resources::validate(const Resource& resource)
   if (resource.role() == "*" && resource.has_reservation()) {
     return Error(
         "Invalid reservation: role \"*\" cannot be dynamically reserved");
+  }
+
+  // Check role name.
+  Option<Error> error = roles::validate(resource.role());
+  if (error.isSome()) {
+    return error;
   }
 
   return None();
