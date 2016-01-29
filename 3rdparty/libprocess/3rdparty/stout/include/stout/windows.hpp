@@ -299,6 +299,10 @@ const mode_t S_ISGID = 0x04000000;        // No-op.
 const mode_t S_ISVTX = 0x02000000;        // No-op.
 
 
+// Flags not supported by Windows.
+const mode_t O_SYNC = 0x00000000;         // No-op.
+
+
 inline auto strerror_r(int errnum, char* buffer, size_t length) ->
 decltype(strerror_s(buffer, length, errnum))
 {
@@ -393,5 +397,14 @@ decltype(_access(fileName, accessMode))
   return _access(fileName, accessMode);
 }
 
+// `os::system` returns -1 if the processor cannot be started
+// therefore any return value indicates the process has been started
+#ifndef WIFEXITED
+  #define WIFEXITED(x) ((x) != -1)
+#endif // WIFWXITED
+
+#ifndef WEXITSTATUS
+  #define WEXITSTATUS(x) (x)
+#endif // WEXITSTATUS
 
 #endif // __STOUT_WINDOWS_HPP__
