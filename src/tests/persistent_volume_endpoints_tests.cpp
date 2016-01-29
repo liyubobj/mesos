@@ -1091,7 +1091,7 @@ TEST_F(PersistentVolumeEndpointsTest, NoAuthentication)
   master::Flags masterFlags = CreateMasterFlags();
   masterFlags.authenticate_http = false;
 
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   Try<PID<Master>> master = StartMaster(&allocator, masterFlags);
   ASSERT_SOME(master);
@@ -1102,7 +1102,7 @@ TEST_F(PersistentVolumeEndpointsTest, NoAuthentication)
   agentFlags.resources = "cpus:1;mem:512;disk(" + TEST_ROLE + "):1024";
 
   Future<SlaveID> agentId;
-  EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
+  EXPECT_CALL(allocator, addSlave(_, _, _, _, _, _))
     .WillOnce(DoAll(InvokeAddSlave(&allocator), FutureArg<0>(&agentId)));
 
   Try<PID<Slave>> agent = StartSlave(agentFlags);

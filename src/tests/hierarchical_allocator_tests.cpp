@@ -2352,7 +2352,8 @@ TEST_F(HierarchicalAllocatorTest, ReservationWithinQuota)
           // The `mem` portion is used to test that reserved resources are
           // accounted for, and the `cpus` portion is allocated to show that
           // the result of DRF would be different if `mem` was not accounted.
-          Resources::parse("cpus:2;mem(" + QUOTA_ROLE + "):256").get())});
+          Resources::parse("cpus:2;mem(" + QUOTA_ROLE + "):256").get())},
+      {});
 
   Future<Allocation> allocation = allocations.get();
   AWAIT_READY(allocation);
@@ -2365,7 +2366,7 @@ TEST_F(HierarchicalAllocatorTest, ReservationWithinQuota)
   // accounted for DRF, we expect these resources to also be allocated to
   // `framework2`.
   SlaveInfo agent2 = createSlaveInfo("cpus:4");
-  allocator->addSlave(agent2.id(), agent2, None(), agent2.resources(), {});
+  allocator->addSlave(agent2.id(), agent2, None(), agent2.resources(), {}, {});
 
   allocation = allocations.get();
   AWAIT_READY(allocation);
