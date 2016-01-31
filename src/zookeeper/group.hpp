@@ -121,13 +121,13 @@ public:
   };
 
   // Constructs this group using the specified ZooKeeper servers (list
-  // of host:port) with the given timeout at the specified znode.
+  // of host:port) with the given session timeout at the specified znode.
   Group(const std::string& servers,
-        const Duration& timeout,
+        const Duration& sessionTimeout,
         const std::string& znode,
         const Option<Authentication>& auth = None());
   Group(const URL& url,
-        const Duration& timeout);
+        const Duration& sessionTimeout);
 
   ~Group();
 
@@ -170,12 +170,12 @@ class GroupProcess : public process::Process<GroupProcess>
 {
 public:
   GroupProcess(const std::string& servers,
-               const Duration& timeout,
+               const Duration& sessionTimeout,
                const std::string& znode,
                const Option<Authentication>& auth);
 
   GroupProcess(const URL& url,
-               const Duration& timeout);
+               const Duration& sessionTimeout);
 
   virtual ~GroupProcess();
 
@@ -208,6 +208,8 @@ public:
   void deleted(int64_t sessionId, const std::string& path);
 
 private:
+  void startConnection();
+
   Result<Group::Membership> doJoin(
       const std::string& data,
       const Option<std::string>& label);
@@ -256,7 +258,7 @@ private:
   const std::string servers;
 
   // The session timeout requested by the client.
-  const Duration timeout;
+  const Duration sessionTimeout;
 
   const std::string znode;
 
@@ -339,9 +341,9 @@ private:
   // cache and 'Some' represents a valid cache.
   Option<std::set<Group::Membership> > memberships;
 
-  // The timer that determines whether we should quit waiting for the
-  // connection to be restored.
-  Option<process::Timer> timer;
+  // A timer that controls when we should give up on waiting for the
+  // current connection attempt to succeed and try to reconnect.
+  Option<process::Timer> connectTimer;
 };
 
 } // namespace zookeeper {
