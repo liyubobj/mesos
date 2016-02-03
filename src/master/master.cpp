@@ -6295,7 +6295,9 @@ void Master::addSlave(
   foreachkey (const FrameworkID& frameworkId, slave->tasks) {
     vector<TaskID> taskIds;
     foreachvalue (Task* task, slave->tasks[frameworkId]) {
-      taskIds.push_back(task->task_id());
+      if (!protobuf::isTerminalState(task->state())) {
+        taskIds.push_back(task->task_id());
+      }
     }
     tasks.put(frameworkId, taskIds);
   }
