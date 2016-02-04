@@ -22,9 +22,11 @@
 #include <process/collect.hpp>
 #include <process/defer.hpp>
 #include <process/io.hpp>
-#include <process/metrics/metrics.hpp>
+#include <process/owned.hpp>
 #include <process/reap.hpp>
 #include <process/subprocess.hpp>
+
+#include <process/metrics/metrics.hpp>
 
 #include <stout/adaptor.hpp>
 #include <stout/foreach.hpp>
@@ -58,6 +60,10 @@
 #include "slave/containerizer/mesos/isolators/cgroups/mem.hpp"
 #include "slave/containerizer/mesos/isolators/cgroups/net_cls.hpp"
 #include "slave/containerizer/mesos/isolators/cgroups/perf_event.hpp"
+#endif
+
+#ifdef __linux__
+#include "slave/containerizer/mesos/isolators/docker/runtime.hpp"
 #endif
 
 #ifdef __linux__
@@ -208,6 +214,7 @@ Try<MesosContainerizer*> MesosContainerizer::create(
     {"cgroups/mem", &CgroupsMemIsolatorProcess::create},
     {"cgroups/net_cls", &CgroupsNetClsIsolatorProcess::create},
     {"cgroups/perf_event", &CgroupsPerfEventIsolatorProcess::create},
+    {"docker/runtime", &DockerRuntimeIsolatorProcess::create},
     {"namespaces/pid", &NamespacesPidIsolatorProcess::create},
 #endif
 #ifdef WITH_NETWORK_ISOLATOR
@@ -722,6 +729,14 @@ Future<bool> MesosContainerizerProcess::_launch(
   // paths to the provisioned root filesystems (by setting the
   // 'host_path') if the volume specifies an image as the source.
   Owned<ExecutorInfo> _executorInfo(new ExecutorInfo(executorInfo));
+
+  // NOTE: For the command task (i.e., taskInfo.isSome()), the
+  // filesystem image for the task is specified in a volume
+  // (COMMAND_EXECUTOR_ROOTFS_CONTAINER_PATH). We need to pass the
+  // provisionInfo from that image to isolators through 'prepare'.
+  Owned<Option<ProvisionInfo>> _provisionInfo(
+      new Option<ProvisionInfo>(provisionInfo));
+
   list<Future<Nothing>> futures;
 
   for (int i = 0; i < _executorInfo->container().volumes_size(); i++) {
@@ -733,12 +748,18 @@ Future<bool> MesosContainerizerProcess::_launch(
 
     const Image& image = volume->image();
 
-    futures.push_back(
-        provisioner->provision(containerId, image)
-          .then([volume](const ProvisionInfo& info) -> Future<Nothing> {
-            volume->set_host_path(info.rootfs);
-            return Nothing();
-          }));
+    futures.push_back(provisioner->provision(containerId, image)
+      .then([=](const ProvisionInfo& info) mutable -> Future<Nothing> {
+        volume->set_host_path(info.rootfs);
+
+        if (taskInfo.isSome() &&
+            volume->container_path() ==
+              COMMAND_EXECUTOR_ROOTFS_CONTAINER_PATH) {
+          _provisionInfo.reset(new Option<ProvisionInfo>(info));
+        }
+
+        return Nothing();
+      }));
   }
 
   // TODO(gilbert): For command executors, we modify the executorInfo
@@ -755,7 +776,7 @@ Future<bool> MesosContainerizerProcess::_launch(
                      *_executorInfo,
                      directory,
                      user,
-                     provisionInfo)
+                     *_provisionInfo)
         .then(defer(self(),
                     &Self::__launch,
                     containerId,
@@ -804,9 +825,17 @@ Future<list<Option<ContainerLaunchInfo>>> MesosContainerizerProcess::prepare(
   // Construct ContainerConfig.
   ContainerConfig containerConfig;
   containerConfig.set_directory(directory);
+  containerConfig.mutable_executor_info()->CopyFrom(executorInfo);
+
+  // TODO(gilbert): Remove this in 0.29.0. The camel case protobuf
+  // field 'executorInfo' will be deprecated and removed in 0.29.0.
   containerConfig.mutable_executorinfo()->CopyFrom(executorInfo);
 
   if (taskInfo.isSome()) {
+    containerConfig.mutable_task_info()->CopyFrom(taskInfo.get());
+
+    // TODO(gilbert): Remove this in 0.29.0. The camel case protobuf
+    // field 'taskInfo' will be deprecated and removed in 0.29.0.
     containerConfig.mutable_taskinfo()->CopyFrom(taskInfo.get());
   }
 
@@ -815,7 +844,12 @@ Future<list<Option<ContainerLaunchInfo>>> MesosContainerizerProcess::prepare(
   }
 
   if (provisionInfo.isSome()) {
-    containerConfig.set_rootfs(provisionInfo.get().rootfs);
+    containerConfig.set_rootfs(provisionInfo->rootfs);
+
+    if (provisionInfo->dockerManifest.isSome()) {
+      ContainerConfig::Docker* docker = containerConfig.mutable_docker();
+      docker->mutable_manifest()->CopyFrom(provisionInfo->dockerManifest.get());
+    }
   }
 
   // We prepare the isolators sequentially according to their ordering
@@ -878,6 +912,15 @@ Future<bool> MesosContainerizerProcess::__launch(
     return Failure("Container is currently being destroyed");
   }
 
+  // Prepare environment variables for the executor.
+  map<string, string> environment = executorEnvironment(
+      executorInfo,
+      directory,
+      slaveId,
+      slavePid,
+      checkpoint,
+      flags);
+
   // Determine the root filesystem for the container. Only one
   // isolator should return the container root filesystem.
   Option<string> rootfs;
@@ -889,16 +932,25 @@ Future<bool> MesosContainerizerProcess::__launch(
         rootfs = launchInfo->rootfs();
       }
     }
-  }
 
-  // Prepare environment variables for the executor.
-  map<string, string> environment = executorEnvironment(
-      executorInfo,
-      directory,
-      slaveId,
-      slavePid,
-      checkpoint,
-      flags);
+    if (launchInfo.isSome() && launchInfo->has_environment()) {
+      foreach (const Environment::Variable& variable,
+               launchInfo->environment().variables()) {
+        const string& name = variable.name();
+        const string& value = variable.value();
+
+        if (environment.count(name)) {
+          VLOG(1) << "Overwriting environment variable '"
+                  << name << "', original: '"
+                  << environment[name] << "', new: '"
+                  << value << "', for container "
+                  << containerId;
+        }
+
+        environment[name] = value;
+      }
+    }
+  }
 
   // TODO(jieyu): Consider moving this to 'executorEnvironment' and
   // consolidating with docker containerizer.
