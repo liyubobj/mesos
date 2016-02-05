@@ -147,6 +147,7 @@ endif
 # First, let's define necessary protocol buffer files.
 
 ALLOCATOR_PROTO = $(top_srcdir)/include/mesos/master/allocator.proto
+APPC_SPEC_PROTO = $(top_srcdir)/include/mesos/appc/spec.proto
 AUTHENTICATION_PROTO = $(top_srcdir)/include/mesos/authentication/authentication.proto
 AUTHORIZATION_PROTO = $(top_srcdir)/include/mesos/authorizer/authorizer.proto
 CONTAINERIZER_PROTO = $(top_srcdir)/include/mesos/containerizer/containerizer.proto
@@ -171,6 +172,8 @@ V1_SCHEDULER_PROTO = $(top_srcdir)/include/mesos/v1/scheduler/scheduler.proto
 CXX_PROTOS =								\
   ../include/mesos/mesos.pb.cc						\
   ../include/mesos/mesos.pb.h						\
+  ../include/mesos/appc/spec.pb.cc					\
+  ../include/mesos/appc/spec.pb.h					\
   ../include/mesos/authentication/authentication.pb.cc			\
   ../include/mesos/authentication/authentication.pb.h			\
   ../include/mesos/authorizer/authorizer.pb.cc				\
@@ -370,6 +373,15 @@ nodist_pkginclude_HEADERS =						\
   ../include/mesos/version.hpp						\
   ../include/mesos/mesos.pb.h
 
+appcdir = $(pkgincludedir)/appc
+
+appc_HEADERS =						\
+  $(top_srcdir)/include/mesos/appc/spec.hpp				\
+  $(top_srcdir)/include/mesos/appc/spec.proto
+
+nodist_appc_HEADERS =							\
+  ../include/mesos/appc/spec.pb.h
+
 authenticationdir = $(pkgincludedir)/authentication
 
 authentication_HEADERS =						\
@@ -565,6 +577,7 @@ libmesos_no_3rdparty_la_SOURCES =					\
 # TODO(tillt): Remove authentication/cram_md5/* which will enable us to
 # lose the immediate cyrus-sasl2 dependency.
 libmesos_no_3rdparty_la_SOURCES +=					\
+  appc/spec.cpp								\
   authentication/cram_md5/authenticatee.cpp				\
   authentication/cram_md5/authenticator.cpp				\
   authentication/cram_md5/auxprop.cpp					\
@@ -646,8 +659,8 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   slave/containerizer/mesos/provisioner/paths.cpp			\
   slave/containerizer/mesos/provisioner/provisioner.cpp			\
   slave/containerizer/mesos/provisioner/store.cpp			\
+  slave/containerizer/mesos/provisioner/appc/cache.cpp			\
   slave/containerizer/mesos/provisioner/appc/paths.cpp			\
-  slave/containerizer/mesos/provisioner/appc/spec.cpp			\
   slave/containerizer/mesos/provisioner/appc/store.cpp			\
   slave/containerizer/mesos/provisioner/backends/copy.cpp		\
   slave/containerizer/mesos/provisioner/docker/local_puller.cpp		\
@@ -756,8 +769,8 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   slave/containerizer/mesos/provisioner/paths.hpp			\
   slave/containerizer/mesos/provisioner/provisioner.hpp			\
   slave/containerizer/mesos/provisioner/store.hpp			\
+  slave/containerizer/mesos/provisioner/appc/cache.hpp			\
   slave/containerizer/mesos/provisioner/appc/paths.hpp			\
-  slave/containerizer/mesos/provisioner/appc/spec.hpp			\
   slave/containerizer/mesos/provisioner/appc/store.hpp			\
   slave/containerizer/mesos/provisioner/backends/copy.hpp		\
   slave/containerizer/mesos/provisioner/docker/local_puller.hpp		\
@@ -1005,6 +1018,7 @@ lib_LTLIBRARIES += libmesos.la
 # Include as part of the distribution.
 libmesos_la_SOURCES =							\
   $(ALLOCATOR_PROTO)							\
+  $(APPC_SPEC_PROTO)							\
   $(AUTHENTICATION_PROTO)						\
   $(AUTHORIZATION_PROTO)						\
   $(CONTAINERIZER_PROTO)						\
@@ -1586,6 +1600,11 @@ check_PROGRAMS += test-executor
 test_executor_SOURCES = examples/test_executor.cpp
 test_executor_CPPFLAGS = $(MESOS_CPPFLAGS)
 test_executor_LDADD = libmesos.la $(LDADD)
+
+check_PROGRAMS += test-http-executor
+test_http_executor_SOURCES = examples/test_http_executor.cpp
+test_http_executor_CPPFLAGS = $(MESOS_CPPFLAGS)
+test_http_executor_LDADD = libmesos.la $(LDADD)
 
 check_PROGRAMS += long-lived-framework
 long_lived_framework_SOURCES = examples/long_lived_framework.cpp

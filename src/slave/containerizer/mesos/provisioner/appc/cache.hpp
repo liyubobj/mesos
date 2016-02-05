@@ -14,58 +14,46 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <list>
+#ifndef __APPC_PROVISIONER_CACHE_HPP__
+#define __APPC_PROVISIONER_CACHE_HPP__
 
-#include <glog/logging.h>
+#include <string>
 
-#include <stout/path.hpp>
-
-#include "slave/containerizer/mesos/provisioner/appc/paths.hpp"
-
-using std::list;
-using std::string;
+#include <mesos/appc/spec.hpp>
+#include <mesos/mesos.pb.h>
 
 namespace mesos {
 namespace internal {
 namespace slave {
 namespace appc {
-namespace paths {
 
-string getStagingDir(const string& storeDir)
+// Defines a locally cached image (which has passed validation).
+struct CachedImage
 {
-  return path::join(storeDir, "staging");
-}
+  static Try<CachedImage> create(const std::string& imagePath);
 
+  CachedImage(
+      const ::appc::spec::ImageManifest& _manifest,
+      const std::string& _id,
+      const std::string& _path)
+    : manifest(_manifest), id(_id), path(_path) {}
 
-string getImagesDir(const string& storeDir)
-{
-  return path::join(storeDir, "images");
-}
+  std::string rootfs() const;
 
+  const ::appc::spec::ImageManifest manifest;
 
-string getImagePath(const string& storeDir, const string& imageId)
-{
-  return path::join(getImagesDir(storeDir), imageId);
-}
+  // Image ID of the format "sha512-value" where "value" is the hex
+  // encoded string of the sha512 digest of the uncompressed tar file
+  // of the image.
+  const std::string id;
 
+  // Absolute path to the extracted image.
+  const std::string path;
+};
 
-string getImageRootfsPath(
-    const string& storeDir,
-    const string& imageId)
-{
-  return path::join(getImagePath(storeDir, imageId), "rootfs");
-}
-
-
-string getImageManifestPath(
-    const string& storeDir,
-    const string& imageId)
-{
-  return path::join(getImagePath(storeDir, imageId), "manifest");
-}
-
-} // namespace paths {
 } // namespace appc {
 } // namespace slave {
 } // namespace internal {
 } // namespace mesos {
+
+#endif // __APPC_PROVISIONER_CACHE_HPP__

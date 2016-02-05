@@ -14,57 +14,54 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <list>
+#include <stout/os.hpp>
 
-#include <glog/logging.h>
+#include <mesos/appc/spec.hpp>
 
-#include <stout/path.hpp>
+#include "slave/containerizer/mesos/provisioner/appc/cache.hpp"
 
-#include "slave/containerizer/mesos/provisioner/appc/paths.hpp"
-
-using std::list;
 using std::string;
+
+namespace spec = appc::spec;
 
 namespace mesos {
 namespace internal {
 namespace slave {
 namespace appc {
-namespace paths {
 
-string getStagingDir(const string& storeDir)
+Try<CachedImage> CachedImage::create(const string& imagePath)
 {
-  return path::join(storeDir, "staging");
+  Option<Error> error = spec::validateLayout(imagePath);
+  if (error.isSome()) {
+    return Error("Invalid image layout: " + error.get().message);
+  }
+
+  string imageId = Path(imagePath).basename();
+
+  error = spec::validateImageID(imageId);
+  if (error.isSome()) {
+    return Error("Invalid image ID: " + error.get().message);
+  }
+
+  Try<string> read = os::read(spec::getImageManifestPath(imagePath));
+  if (read.isError()) {
+    return Error("Failed to read manifest: " + read.error());
+  }
+
+  Try<spec::ImageManifest> manifest = spec::parse(read.get());
+  if (manifest.isError()) {
+    return Error("Failed to parse manifest: " + manifest.error());
+  }
+
+  return CachedImage(manifest.get(), imageId, imagePath);
 }
 
 
-string getImagesDir(const string& storeDir)
+string CachedImage::rootfs() const
 {
-  return path::join(storeDir, "images");
+  return path::join(path, "rootfs");
 }
 
-
-string getImagePath(const string& storeDir, const string& imageId)
-{
-  return path::join(getImagesDir(storeDir), imageId);
-}
-
-
-string getImageRootfsPath(
-    const string& storeDir,
-    const string& imageId)
-{
-  return path::join(getImagePath(storeDir, imageId), "rootfs");
-}
-
-
-string getImageManifestPath(
-    const string& storeDir,
-    const string& imageId)
-{
-  return path::join(getImagePath(storeDir, imageId), "manifest");
-}
-
-} // namespace paths {
 } // namespace appc {
 } // namespace slave {
 } // namespace internal {

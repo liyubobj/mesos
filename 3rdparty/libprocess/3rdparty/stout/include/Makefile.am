@@ -40,8 +40,8 @@ nobase_include_HEADERS =		\
   stout/internal/windows/dirent.hpp	\
   stout/internal/windows/grp.hpp	\
   stout/internal/windows/pwd.hpp	\
-  stout/internal/windows/symlink.hpp	\
   stout/internal/windows/reparsepoint.hpp	\
+  stout/internal/windows/symlink.hpp	\
   stout/interval.hpp			\
   stout/ip.hpp				\
   stout/json.hpp			\
@@ -67,6 +67,7 @@ nobase_include_HEADERS =		\
   stout/os/fcntl.hpp			\
   stout/os/find.hpp			\
   stout/os/fork.hpp			\
+  stout/os/freebsd.hpp			\
   stout/os/ftruncate.hpp		\
   stout/os/getcwd.hpp			\
   stout/os/killtree.hpp			\
