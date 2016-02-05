@@ -31,6 +31,7 @@
 #include <stout/stringify.hpp>
 #include <stout/strings.hpp>
 
+using std::map;
 using std::string;
 using std::vector;
 
@@ -101,9 +102,68 @@ void Help::add(
 }
 
 
+bool Help::remove(const string& id, const string& name)
+{
+  if (helps.count(id) == 0 || helps[id].count(name) == 0) {
+    return false;
+  }
+
+  helps[id].erase(name);
+
+  if (helps[id].empty()) {
+    helps.erase(id);
+  }
+
+  return true;
+}
+
+
+bool Help::remove(const string& id)
+{
+  return helps.erase(id) == 1;
+}
+
+
 void Help::initialize()
 {
   route("/", None(), &Help::help);
+}
+
+
+// Write the help strings contained in the help process to JSON.
+// The schema looks as follows:
+// {
+//   "processes":
+//   [
+//     {
+//       "id": id,
+//       "endpoints": [ { "name" : name, "text" : text }, ... ]
+//     },
+//     ...
+//   ]
+// }
+void json(JSON::ObjectWriter* writer, const Help& help)
+{
+  // We must declare this temporary typedef in order to make the
+  // foreachpair macro happy. Otherwise it interprets the ',' in the
+  // map definition to denote a new parameter in the macro invocation.
+  typedef map<string, string> StringStringMap;
+
+  writer->field("processes", [&help](JSON::ArrayWriter* writer) {
+    foreachpair (const string& id, const StringStringMap& names, help.helps) {
+      writer->element([&id, &names](JSON::ObjectWriter* writer) {
+        writer->field("id", id);
+        writer->field("endpoints", [&names](JSON::ArrayWriter* writer) {
+          foreachpair (const string& name, const string& text, names) {
+            writer->element([&name, &text](JSON::ObjectWriter* writer) {
+              writer->field("name", name);
+              writer->field("text", text);
+            });
+          }
+        });
+      });
+    }
+  });
 }
 
 
@@ -128,6 +188,19 @@ Future<http::Response> Help::help(const http::Request& request)
   string references;
 
   if (id.isNone()) {             // http://ip:port/help
+    // If the request query string has format=json, return the JSON
+    // representation of the helps strings.
+    //
+    // NOTE: We avoided relying on the 'Accept' header to specify the
+    // format because if users are hitting the endpoint from a browser
+    // it is difficult to change the 'Accept' header.
+    //
+    // TODO(klueska): add the ability for all /help/* endpoints to be
+    // returned as json, not just /help.
+    if (request.url.query.get("format") == Some("json")) {
+      return http::OK(jsonify(*this));
+    }
+
     document += "## HELP\n";
     foreachkey (const string& id, helps) {
       document += "> [/" + id + "][" + id + "]\n";

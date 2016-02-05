@@ -97,6 +97,16 @@ public:
            const std::string& name,
            const Option<std::string>& help);
 
+  // Remove a previously installed 'help' string for '/id/name'.
+  bool remove(const std::string& id, const std::string& name);
+
+  // Remove all previously installed 'help' strings for '/id/*'.
+  bool remove(const std::string& id);
+
+  // Allow the global json function to dump this object to its
+  // canonical JSON representation.
+  friend void json(JSON::ObjectWriter* writer, const Help& help);
+
 protected:
   virtual void initialize();
 
