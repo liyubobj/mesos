@@ -260,7 +260,7 @@ class HierarchicalAllocatorTest : public HierarchicalAllocatorTestBase {};
 TEST_F(HierarchicalAllocatorTest, UnreservedDRF)
 {
   // Pausing the clock is not necessary, but ensures that the test
-  // doesn't rely on the periodic allocation in the allocator, which
+  // doesn't rely on the batch allocation in the allocator, which
   // would slow down the test.
   Clock::pause();
 
@@ -389,7 +389,7 @@ TEST_F(HierarchicalAllocatorTest, UnreservedDRF)
 TEST_F(HierarchicalAllocatorTest, ReservedDRF)
 {
   // Pausing the clock is not necessary, but ensures that the test
-  // doesn't rely on the periodic allocation in the allocator, which
+  // doesn't rely on the batch allocation in the allocator, which
   // would slow down the test.
   Clock::pause();
 
@@ -561,12 +561,6 @@ TEST_F(HierarchicalAllocatorTest, SmallOfferFilterTimeout)
 
   initialize(flags_);
 
-  // We start with the following cluster setup.
-  // Total cluster resources (1 agent): cpus=1, mem=512.
-  // ROLE1 share = 1 (cpus=1, mem=512)
-  //   framework1 share = 1 (cpus=1, mem=512)
-  //   framework2 share = 0
-
   FrameworkInfo framework1 = createFrameworkInfo(ROLE);
   FrameworkInfo framework2 = createFrameworkInfo(ROLE);
 
@@ -594,6 +588,11 @@ TEST_F(HierarchicalAllocatorTest, SmallOfferFilterTimeout)
   //
   // NOTE: No allocations happen because there are no resources to allocate.
   Clock::settle();
+
+  // Total cluster resources (1 agent): cpus=1, mem=512.
+  // ROLE1 share = 1 (cpus=1, mem=512)
+  //   framework1 share = 1 (cpus=1, mem=512)
+  //   framework2 share = 0
 
   // Add one more agent with some free resources.
   SlaveInfo agent2 = createSlaveInfo("cpus:1;mem:512;disk:0");
@@ -699,9 +698,9 @@ TEST_F(HierarchicalAllocatorTest, SmallOfferFilterTimeout)
 // properly sent inverse offers after they have accepted or reserved resources.
 TEST_F(HierarchicalAllocatorTest, MaintenanceInverseOffers)
 {
-  // Pausing the clock is not necessary, but ensures that the test doesn't rely
-  // on the periodic allocation in the allocator, which would slow down the
-  // test.
+  // Pausing the clock is not necessary, but ensures that the test
+  // doesn't rely on the batch allocation in the allocator, which
+  // would slow down the test.
   Clock::pause();
 
   initialize();
@@ -1004,7 +1003,7 @@ TEST_F(HierarchicalAllocatorTest, RecoverResources)
 TEST_F(HierarchicalAllocatorTest, Allocatable)
 {
   // Pausing the clock is not necessary, but ensures that the test
-  // doesn't rely on the periodic allocation in the allocator, which
+  // doesn't rely on the batch allocation in the allocator, which
   // would slow down the test.
   Clock::pause();
 
@@ -1235,7 +1234,7 @@ TEST_F(HierarchicalAllocatorTest, UpdateAvailableFail)
 // subsequent allocations properly account for that.
 TEST_F(HierarchicalAllocatorTest, UpdateSlave)
 {
-  // Pause clock to disable periodic allocation.
+  // Pause clock to disable batch allocation.
   Clock::pause();
 
   initialize();
@@ -1294,7 +1293,7 @@ TEST_F(HierarchicalAllocatorTest, UpdateSlave)
 // revocable resources do not get allocated oversubscribed resources.
 TEST_F(HierarchicalAllocatorTest, OversubscribedNotAllocated)
 {
-  // Pause clock to disable periodic allocation.
+  // Pause clock to disable batch allocation.
   Clock::pause();
 
   initialize();
@@ -1331,7 +1330,7 @@ TEST_F(HierarchicalAllocatorTest, OversubscribedNotAllocated)
 // recovered subsequent allocation properly accounts for that.
 TEST_F(HierarchicalAllocatorTest, RecoverOversubscribedResources)
 {
-  // Pause clock to disable periodic allocation.
+  // Pause clock to disable batch allocation.
   Clock::pause();
 
   initialize();
@@ -1451,10 +1450,10 @@ TEST_F(HierarchicalAllocatorTest, Whitelist)
 // the quota'ed role declines offers, some resources are laid away for
 // the role, so that a greedy framework from a non-quota'ed role cannot
 // eat up all free resources.
-TEST_F(HierarchicalAllocatorTest, QuotaProvidesQuarantee)
+TEST_F(HierarchicalAllocatorTest, QuotaProvidesGuarantee)
 {
   // Pausing the clock is not necessary, but ensures that the test
-  // doesn't rely on the periodic allocation in the allocator, which
+  // doesn't rely on the batch allocation in the allocator, which
   // would slow down the test.
   Clock::pause();
 
@@ -1518,17 +1517,19 @@ TEST_F(HierarchicalAllocatorTest, QuotaProvidesQuarantee)
   // NO_QUOTA_ROLE share = 0
   //   framework2 share = 0
 
-  // Now `framework1` declines the second offer and sets a filter for 5
-  // seconds. The declined resources should not be offered to `framework2`
-  // because by doing so they may not be available to `framework1` when
-  // the filter expires.
-  Filters filter5s;
-  filter5s.set_refuse_seconds(5.);
+  // Now `framework1` declines the second offer and sets a filter for twice
+  // the allocation interval. The declined resources should not be offered
+  // to `framework2` because by doing so they may not be available to
+  // `framework1` when the filter expires.
+  Duration filterTimeout = flags.allocation_interval * 2;
+  Filters offerFilter;
+  offerFilter.set_refuse_seconds(filterTimeout.secs());
+
   allocator->recoverResources(
       framework1.id(),
       agent2.id(),
       allocation.get().resources.get(agent2.id()).get(),
-      filter5s);
+      offerFilter);
 
   // Total cluster resources: cpus=1, mem=512.
   // QUOTA_ROLE share = 0.5 (cpus=1, mem=512) [quota: cpus=2, mem=1024]
@@ -1536,33 +1537,23 @@ TEST_F(HierarchicalAllocatorTest, QuotaProvidesQuarantee)
   // NO_QUOTA_ROLE share = 0
   //   framework2 share = 0
 
-  // Assuming the default batch allocation interval is less than 5 seconds,
-  // all periodic allocations that happen while the refuse filter is active
-  // should yield no new allocations.
-  ASSERT_LT(flags.allocation_interval.secs(), filter5s.refuse_seconds());
+  // Ensure the offer filter timeout is set before advancing the clock.
+  Clock::settle();
+
+  // Trigger a batch allocation.
   Clock::advance(flags.allocation_interval);
   Clock::settle();
 
-  // TODO(alexr): There is currently no way to check the absence of
-  // allocations. The `process::Queue` class does not support any size
-  // checking methods. Consider adding `process::Queue::empty()` or
-  // refactor the test harness so that we can reason about whether the
-  // Hierarchical allocator has assigned expected allocations or not.
-  //
-  // NOTE: It is hard to capture the absense of an allocation in a
-  // general case, because an allocator may be complex enough to postpone
-  // decisions beyond its allocation cycle.
-
-  // Now advance the clock to make sure the filter is expired and removed.
-  Clock::advance(Duration::create(filter5s.refuse_seconds()).get());
-  Clock::settle();
-
-  // Trigger the next periodic allocation. It should offer the previously
-  // declined resources to the quota'ed role.
-  Clock::advance(flags.allocation_interval);
-  Clock::settle();
-
+  // There should be no allocation due to the offer filter.
   allocation = allocations.get();
+  ASSERT_TRUE(allocation.isPending());
+
+  // Ensure the offer filter times out (2x the allocation interval)
+  // and the next batch allocation occurs.
+  Clock::advance(flags.allocation_interval);
+  Clock::settle();
+
+  // Previously declined resources should be offered to the quota'ed role.
   AWAIT_READY(allocation);
   EXPECT_EQ(framework1.id(), allocation.get().frameworkId);
   EXPECT_EQ(agent2.resources(), Resources::sum(allocation.get().resources));
@@ -1580,7 +1571,7 @@ TEST_F(HierarchicalAllocatorTest, QuotaProvidesQuarantee)
 TEST_F(HierarchicalAllocatorTest, RemoveQuota)
 {
   // Pausing the clock is not necessary, but ensures that the test
-  // doesn't rely on the periodic allocation in the allocator, which
+  // doesn't rely on the batch allocation in the allocator, which
   // would slow down the test.
   Clock::pause();
 
@@ -1588,13 +1579,6 @@ TEST_F(HierarchicalAllocatorTest, RemoveQuota)
   const string NO_QUOTA_ROLE{"no-quota-role"};
 
   initialize();
-
-  // We start with the following cluster setup.
-  // Total cluster resources (2 identical agents): cpus=2, mem=1024.
-  // QUOTA_ROLE share = 1 (cpus=2, mem=1024) [quota: cpus=2, mem=1024]
-  //   framework1 share = 1
-  // NO_QUOTA_ROLE share = 0
-  //   framework2 share = 0
 
   // Create framework and agent descriptions.
   FrameworkInfo framework1 = createFrameworkInfo(QUOTA_ROLE);
@@ -1634,6 +1618,12 @@ TEST_F(HierarchicalAllocatorTest, RemoveQuota)
       {std::make_pair(framework1.id(), agent2.resources())},
       EMPTYRUNNINGS);
 
+  // Total cluster resources (2 identical agents): cpus=2, mem=1024.
+  // QUOTA_ROLE share = 1 (cpus=2, mem=1024) [quota: cpus=2, mem=1024]
+  //   framework1 share = 1
+  // NO_QUOTA_ROLE share = 0
+  //   framework2 share = 0
+
   // All cluster resources are now being used by `framework1` as part of
   // its role quota, no further allocations are expected. However, once the
   // quota is removed, quota guarantee does not apply any more and released
@@ -1652,7 +1642,7 @@ TEST_F(HierarchicalAllocatorTest, RemoveQuota)
       agent1.resources(),
       None());
 
-  // Trigger the next periodic allocation.
+  // Trigger the next batch allocation.
   Clock::advance(flags.allocation_interval);
   Clock::settle();
 
@@ -1676,7 +1666,7 @@ TEST_F(HierarchicalAllocatorTest, RemoveQuota)
 TEST_F(HierarchicalAllocatorTest, MultipleFrameworksInRoleWithQuota)
 {
   // Pausing the clock is not necessary, but ensures that the test
-  // doesn't rely on the periodic allocation in the allocator, which
+  // doesn't rely on the batch allocation in the allocator, which
   // would slow down the test.
   Clock::pause();
 
@@ -1775,7 +1765,7 @@ TEST_F(HierarchicalAllocatorTest, MultipleFrameworksInRoleWithQuota)
       agent3.resources(),
       filter5s);
 
-  // Trigger the next periodic allocation.
+  // Trigger the next batch allocation.
   Clock::advance(flags.allocation_interval);
   Clock::settle();
 
@@ -1800,7 +1790,7 @@ TEST_F(HierarchicalAllocatorTest, MultipleFrameworksInRoleWithQuota)
 TEST_F(HierarchicalAllocatorTest, QuotaAllocationGranularity)
 {
   // Pausing the clock is not necessary, but ensures that the test
-  // doesn't rely on the periodic allocation in the allocator, which
+  // doesn't rely on the batch allocation in the allocator, which
   // would slow down the test.
   Clock::pause();
 
@@ -1857,7 +1847,7 @@ TEST_F(HierarchicalAllocatorTest, QuotaAllocationGranularity)
 TEST_F(HierarchicalAllocatorTest, DRFWithQuota)
 {
   // Pausing the clock is not necessary, but ensures that the test
-  // doesn't rely on the periodic allocation in the allocator, which
+  // doesn't rely on the batch allocation in the allocator, which
   // would slow down the test.
   Clock::pause();
 
@@ -1865,13 +1855,6 @@ TEST_F(HierarchicalAllocatorTest, DRFWithQuota)
   const string NO_QUOTA_ROLE{"no-quota-role"};
 
   initialize();
-
-  // We start with the following cluster setup.
-  // Total cluster resources (1 agent): cpus=1, mem=512.
-  // QUOTA_ROLE share = 0.25 (cpus=0.25, mem=128) [quota: cpus=0.25, mem=128]
-  //   framework1 share = 1
-  // NO_QUOTA_ROLE share = 0
-  //   framework2 share = 0
 
   // Create framework and agent descriptions.
   FrameworkInfo framework1 = createFrameworkInfo(QUOTA_ROLE);
@@ -1906,6 +1889,12 @@ TEST_F(HierarchicalAllocatorTest, DRFWithQuota)
       agent1.resources(),
       {std::make_pair(framework1.id(), Resources(quota1.info.guarantee()))},
       EMPTYRUNNINGS);
+
+  // Total cluster resources (1 agent): cpus=1, mem=512.
+  // QUOTA_ROLE share = 0.25 (cpus=0.25, mem=128) [quota: cpus=0.25, mem=128]
+  //   framework1 share = 1
+  // NO_QUOTA_ROLE share = 0
+  //   framework2 share = 0
 
   // Some resources on `agent1` are now being used by `framework1` as part
   // of its role quota. All quotas are satisfied, all available resources
@@ -1957,7 +1946,7 @@ TEST_F(HierarchicalAllocatorTest, DRFWithQuota)
 TEST_F(HierarchicalAllocatorTest, QuotaAgainstStarvation)
 {
   // Pausing the clock is not necessary, but ensures that the test
-  // doesn't rely on the periodic allocation in the allocator, which
+  // doesn't rely on the batch allocation in the allocator, which
   // would slow down the test.
   Clock::pause();
 
@@ -1965,13 +1954,6 @@ TEST_F(HierarchicalAllocatorTest, QuotaAgainstStarvation)
   const string NO_QUOTA_ROLE{"no-quota-role"};
 
   initialize();
-
-  // We start with the following cluster setup.
-  // Total cluster resources (2 identical agents): cpus=2, mem=1024.
-  // QUOTA_ROLE share = 0.5 (cpus=1, mem=512)
-  //   framework1 share = 1
-  // NO_QUOTA_ROLE share = 0
-  //   framework2 share = 0
 
   // Create framework and agent descriptions.
   FrameworkInfo framework1 = createFrameworkInfo(QUOTA_ROLE);
@@ -2003,6 +1985,12 @@ TEST_F(HierarchicalAllocatorTest, QuotaAgainstStarvation)
   //
   // NOTE: No allocations happen because all resources are already allocated.
   Clock::settle();
+
+  // Total cluster resources (1 agent): cpus=1, mem=512.
+  // QUOTA_ROLE share = 1 (cpus=1, mem=512)
+  //   framework1 share = 1
+  // NO_QUOTA_ROLE share = 0
+  //   framework2 share = 0
 
   allocator->addSlave(
       agent2.id(),
@@ -2043,7 +2031,7 @@ TEST_F(HierarchicalAllocatorTest, QuotaAgainstStarvation)
   // NO_QUOTA_ROLE share = 0
   //   framework2 share = 0
 
-  // Trigger the next periodic allocation.
+  // Trigger the next batch allocation.
   Clock::advance(flags.allocation_interval);
   Clock::settle();
 
@@ -2086,7 +2074,7 @@ TEST_F(HierarchicalAllocatorTest, QuotaAgainstStarvation)
 TEST_F(HierarchicalAllocatorTest, QuotaAbsentFramework)
 {
   // Pausing the clock is not necessary, but ensures that the test
-  // doesn't rely on the periodic allocation in the allocator, which
+  // doesn't rely on the batch allocation in the allocator, which
   // would slow down the test.
   Clock::pause();
 
@@ -2096,13 +2084,6 @@ TEST_F(HierarchicalAllocatorTest, QuotaAbsentFramework)
   hashmap<FrameworkID, Resources> EMPTY;
 
   initialize();
-
-  // We start with the following cluster setup.
-  // Total cluster resources (2 agents): cpus=3, mem=1536.
-  // QUOTA_ROLE share = 0 [quota: cpus=2, mem=1024]
-  //   no frameworks
-  // NO_QUOTA_ROLE share = 0
-  //   framework share = 1
 
   // Set quota for the quota'ed role. This role isn't registered with
   // the allocator yet.
@@ -2122,6 +2103,12 @@ TEST_F(HierarchicalAllocatorTest, QuotaAbsentFramework)
   SlaveInfo agent1 = createSlaveInfo("cpus:2;mem:1024;disk:0");
   SlaveInfo agent2 = createSlaveInfo("cpus:1;mem:512;disk:0");
 
+  // Total cluster resources (0 agents): 0.
+  // QUOTA_ROLE share = 0 [quota: cpus=2, mem=1024]
+  //   no frameworks
+  // NO_QUOTA_ROLE share = 0
+  //   framework share = 0
+
   // Each `addSlave()` triggers an event-based allocation.
   //
   // NOTE: The second event-based allocation for `agent2` takes into account
@@ -2131,13 +2118,6 @@ TEST_F(HierarchicalAllocatorTest, QuotaAbsentFramework)
       agent1.id(), agent1, None(), agent1.resources(), EMPTY, EMPTYRUNNINGS);
   allocator->addSlave(
       agent2.id(), agent2, None(), agent2.resources(), EMPTY, EMPTYRUNNINGS);
-
-  // Total cluster resources (2 agents): cpus=3, mem=1536.
-  // QUOTA_ROLE share = 0 [quota: cpus=2, mem=1024], but
-  //                    some resources (cpus=2, mem=1024) are laid away
-  //   no frameworks
-  // NO_QUOTA_ROLE share = 0.33
-  //   framework share = 1 (cpus=1, mem=512)
 
   // `framework` can only be allocated resources on `agent2`. This
   // is due to the coarse-grained nature of the allocations. All the
@@ -2153,6 +2133,13 @@ TEST_F(HierarchicalAllocatorTest, QuotaAbsentFramework)
   AWAIT_READY(allocation);
   EXPECT_EQ(framework.id(), allocation.get().frameworkId);
   EXPECT_EQ(agent2.resources(), Resources::sum(allocation.get().resources));
+
+  // Total cluster resources (2 agents): cpus=3, mem=1536.
+  // QUOTA_ROLE share = 0 [quota: cpus=2, mem=1024], but
+  //                    (cpus=2, mem=1024) are laid away
+  //   no frameworks
+  // NO_QUOTA_ROLE share = 0.33
+  //   framework share = 1 (cpus=1, mem=512)
 }
 
 
@@ -2167,7 +2154,7 @@ TEST_F(HierarchicalAllocatorTest, QuotaAbsentFramework)
 TEST_F(HierarchicalAllocatorTest, MultiQuotaAbsentFrameworks)
 {
   // Pausing the clock is not necessary, but ensures that the test
-  // doesn't rely on the periodic allocation in the allocator, which
+  // doesn't rely on the batch allocation in the allocator, which
   // would slow down the test.
   Clock::pause();
 
@@ -2213,7 +2200,7 @@ TEST_F(HierarchicalAllocatorTest, MultiQuotaAbsentFrameworks)
 TEST_F(HierarchicalAllocatorTest, MultiQuotaWithFrameworks)
 {
   // Pausing the clock is not necessary, but ensures that the test
-  // doesn't rely on the periodic allocation in the allocator, which
+  // doesn't rely on the batch allocation in the allocator, which
   // would slow down the test.
   Clock::pause();
 
@@ -2223,13 +2210,6 @@ TEST_F(HierarchicalAllocatorTest, MultiQuotaWithFrameworks)
   hashmap<FrameworkID, Resources> EMPTY;
 
   initialize();
-
-  // We start with the following cluster setup.
-  // Total cluster resources (2 identical agents): cpus=2, mem=2048.
-  // QUOTA_ROLE1 share = 0.5 (cpus=1, mem=1024) [quota: cpus=1, mem=200]
-  //   framework1 share = 1
-  // QUOTA_ROLE2 share = 0.5 (cpus=1, mem=1024) [quota: cpus=2, mem=2000]
-  //   framework2 share = 1
 
   SlaveInfo agent1 = createSlaveInfo("cpus:1;mem:1024;disk:0");
   SlaveInfo agent2 = createSlaveInfo("cpus:1;mem:1024;disk:0");
@@ -2272,6 +2252,12 @@ TEST_F(HierarchicalAllocatorTest, MultiQuotaWithFrameworks)
       {std::make_pair(framework2.id(), agent2.resources())},
       EMPTYRUNNINGS);
 
+  // Total cluster resources (2 identical agents): cpus=2, mem=2048.
+  // QUOTA_ROLE1 share = 0.5 (cpus=1, mem=1024) [quota: cpus=1, mem=200]
+  //   framework1 share = 1
+  // QUOTA_ROLE2 share = 0.5 (cpus=1, mem=1024) [quota: cpus=2, mem=2000]
+  //   framework2 share = 1
+
   // Quota for the `QUOTA_ROLE1` role is satisfied, while `QUOTA_ROLE2` is
   // under quota. Hence resources of the newly added agent should be offered
   // to the framework in `QUOTA_ROLE2`.
@@ -2286,18 +2272,18 @@ TEST_F(HierarchicalAllocatorTest, MultiQuotaWithFrameworks)
       EMPTY,
       EMPTYRUNNINGS);
 
-  // Total cluster resources (3 agents): cpus=4, mem=4096.
-  // QUOTA_ROLE1 share = 0.25 (cpus=1, mem=1024) [quota: cpus=1, mem=200]
-  //   framework1 share = 1
-  // QUOTA_ROLE2 share = 0.75 (cpus=3, mem=3072) [quota: cpus=2, mem=2000]
-  //   framework2 share = 1
-
   // `framework2` will get all agent3's resources because its role is under
   // quota, while other roles' quotas are satisfied.
   Future<Allocation> allocation = allocations.get();
   AWAIT_READY(allocation);
   EXPECT_EQ(framework2.id(), allocation.get().frameworkId);
   EXPECT_EQ(agent3.resources(), Resources::sum(allocation.get().resources));
+
+  // Total cluster resources (3 agents): cpus=4, mem=4096.
+  // QUOTA_ROLE1 share = 0.25 (cpus=1, mem=1024) [quota: cpus=1, mem=200]
+  //   framework1 share = 1
+  // QUOTA_ROLE2 share = 0.75 (cpus=3, mem=3072) [quota: cpus=2, mem=2000]
+  //   framework2 share = 1
 }
 
 
@@ -2305,7 +2291,7 @@ TEST_F(HierarchicalAllocatorTest, MultiQuotaWithFrameworks)
 TEST_F(HierarchicalAllocatorTest, ReservationWithinQuota)
 {
   // Pausing the clock is not necessary, but ensures that the test
-  // doesn't rely on the periodic allocation in the allocator, which
+  // doesn't rely on the batch allocation in the allocator, which
   // would slow down the test.
   Clock::pause();
 
@@ -2382,7 +2368,7 @@ TEST_F(HierarchicalAllocatorTest, ReservationWithinQuota)
 TEST_F(HierarchicalAllocatorTest, DeactivateAndReactivateFramework)
 {
   // Pausing the clock is not necessary, but ensures that the test
-  // doesn't rely on the periodic allocation in the allocator, which
+  // doesn't rely on the batch allocation in the allocator, which
   // would slow down the test.
   Clock::pause();
 
