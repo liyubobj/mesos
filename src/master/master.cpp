@@ -1646,6 +1646,8 @@ Nothing Master::removeSlave(const Registry::Slave& slave)
       .onFailed(lambda::bind(fail, message, lambda::_1));
   }
 
+  allocator->slaveRemoved(slave.info());
+
   return Nothing();
 }
 

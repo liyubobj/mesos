@@ -424,6 +424,15 @@ public:
    */
   virtual void removeQuota(
       const std::string& role) = 0;
+
+  /**
+   * Informs the allocator to do some clean up when slave is removed.
+   *
+   * Currently this interface is only using in EGO allocator case, If
+   * this slave does not reregister within the timeout after master failover,
+   * it needs to call allocator to release the corresponding EGO decisions.
+   */
+  virtual void slaveRemoved(const SlaveInfo& slaveInfo){};
 };
 
 } // namespace allocator {
