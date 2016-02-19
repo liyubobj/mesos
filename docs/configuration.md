@@ -547,8 +547,8 @@ Currently there is no support for multiple HTTP authenticators. (default: basic)
     --[no-]log_auto_initialize
   </td>
   <td>
-Whether to automatically initialize the replicated log used for the
-registry. If this is set to false, the log has to be manually
+Whether to automatically initialize the [replicated log](replicated-log-internals.md)
+used for the registry. If this is set to false, the log has to be manually
 initialized when used for the very first time. (default: true)
   </td>
 </tr>
@@ -1631,6 +1631,16 @@ This flag is used for the <code>network/port_mapping</code> isolator.
   <td>
 Whether to collect socket statistics details (e.g., TCP RTT) for
 each container. This flag is used for the <code>network/port_mapping</code>
+isolator. (default: false)
+  </td>
+</tr>
+<tr>
+  <td>
+    --[no-]network_enable_snmp_statistics
+  </td>
+  <td>
+Whether to collect SNMP statistics details (e.g., TCPRetransSegs) for
+each container. This flag is used for the 'network/port_mapping'
 isolator. (default: false)
   </td>
 </tr>
