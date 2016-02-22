@@ -3910,8 +3910,11 @@ void Master::kill(Framework* framework, const scheduler::Call::Kill& kill)
   // doesn't know it yet.
   slave->killedTasks.put(framework->id(), taskId);
 
-  // NOTE: This task will be properly reconciled when the
-  // disconnected slave re-registers with the master.
+  // NOTE: This task will be properly reconciled when the disconnected slave
+  // re-registers with the master.
+  // We send the KillTaskMessage even if we have already sent one, just in case
+  // the previous one was dropped by the network but it didn't trigger a slave
+  // re-registration (and hence reconciliation).
   if (slave->connected) {
     LOG(INFO) << "Telling slave " << *slave
               << " to kill task " << taskId
@@ -7008,6 +7011,25 @@ double Master::_tasks_running()
     foreachvalue (const TaskMap& tasks, slave->tasks) {
       foreachvalue (const Task* task, tasks) {
         if (task->state() == TASK_RUNNING) {
+          count++;
+        }
+      }
+    }
+  }
+
+  return count;
+}
+
+
+double Master::_tasks_killing()
+{
+  double count = 0.0;
+
+  foreachvalue (Slave* slave, slaves.registered) {
+    typedef hashmap<TaskID, Task*> TaskMap;
+    foreachvalue (const TaskMap& tasks, slave->tasks) {
+      foreachvalue (const Task* task, tasks) {
+        if (task->state() == TASK_KILLING) {
           count++;
         }
       }

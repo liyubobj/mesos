@@ -164,6 +164,9 @@ public:
   void removeQuota(
       const std::string& role);
 
+  void updateWeights(
+      const std::vector<WeightInfo>& weightInfos);
+
 private:
   MesosAllocator();
   MesosAllocator(const MesosAllocator&); // Not copyable.
@@ -299,6 +302,9 @@ public:
 
   virtual void removeQuota(
       const std::string& role) = 0;
+
+  virtual void updateWeights(
+      const std::vector<WeightInfo>& weightInfos) = 0;
 };
 
 
@@ -680,6 +686,17 @@ inline void MesosAllocator<AllocatorProcess>::removeQuota(
       process,
       &MesosAllocatorProcess::removeQuota,
       role);
+}
+
+
+template <typename AllocatorProcess>
+inline void MesosAllocator<AllocatorProcess>::updateWeights(
+    const std::vector<WeightInfo>& weightInfos)
+{
+  process::dispatch(
+      process,
+      &MesosAllocatorProcess::updateWeights,
+      weightInfos);
 }
 
 } // namespace allocator {

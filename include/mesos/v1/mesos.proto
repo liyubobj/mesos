@@ -262,6 +262,11 @@ message FrameworkInfo {
       // message for details.
       // TODO(vinod): This is currently a no-op.
       REVOCABLE_RESOURCES = 1;
+
+      // Receive the TASK_KILLING TaskState when a task is being
+      // killed by an executor. The executor will examine this
+      // capability to determine whether it can send TASK_KILLING.
+      TASK_KILLING_STATE = 2;
     }
 
     required Type type = 1;
@@ -275,6 +280,7 @@ message FrameworkInfo {
   // Labels are free-form key value pairs supplied by the framework
   // scheduler (e.g., to describe additional functionality offered by
   // the framework). These labels are not interpreted by Mesos itself.
+  // Labels should not contain duplicate key-value pairs.
   optional Labels labels = 11;
 }
 
@@ -593,7 +599,8 @@ message Resource {
     // associate arbitrary metadata with a reserved resource.  For
     // example, frameworks can use labels to identify the intended
     // purpose for a portion of the resources the framework has
-    // reserved at a given agent.
+    // reserved at a given agent. Labels should not contain duplicate
+    // key-value pairs.
     optional Labels labels = 2;
   }
 
@@ -1095,6 +1102,7 @@ message TaskInfo {
   // acted upon by Mesos itself. As opposed to the data field, labels
   // will be kept in memory on master and agent processes. Therefore,
   // labels should be used to tag tasks with light-weight meta-data.
+  // Labels should not contain duplicate key-value pairs.
   optional Labels labels = 10;
 
   // Service discovery information for the task. It is not interpreted
@@ -1113,14 +1121,19 @@ message TaskInfo {
  * another task).
  */
 enum TaskState {
-  TASK_STAGING = 6; // Initial state. Framework status updates should not use.
-  TASK_STARTING = 0;
+  TASK_STAGING = 6;  // Initial state. Framework status updates should not use.
+  TASK_STARTING = 0; // The task is being launched by the executor.
   TASK_RUNNING = 1;
-  TASK_FINISHED = 2; // TERMINAL. The task finished successfully.
-  TASK_FAILED = 3; // TERMINAL. The task failed to finish successfully.
-  TASK_KILLED = 4; // TERMINAL. The task was killed by the executor.
-  TASK_LOST = 5; // TERMINAL. The task failed but can be rescheduled.
-  TASK_ERROR = 7; // TERMINAL. The task description contains an error.
+
+  // NOTE: This should only be sent when the framework has
+  // the TASK_KILLING_STATE capability.
+  TASK_KILLING = 8;  // The task is being killed by the executor.
+
+  TASK_FINISHED = 2; // TERMINAL: The task finished successfully.
+  TASK_FAILED = 3;   // TERMINAL: The task failed to finish successfully.
+  TASK_KILLED = 4;   // TERMINAL: The task was killed by the executor.
+  TASK_LOST = 5;     // TERMINAL: The task failed but can be rescheduled.
+  TASK_ERROR = 7;    // TERMINAL: The task description contains an error.
 }
 
 
@@ -1202,7 +1215,7 @@ message TaskStatus {
   // acted upon by Mesos itself. As opposed to the data field, labels
   // will be kept in memory on master and agent processes. Therefore,
   // labels should be used to tag TaskStatus message with light-weight
-  // meta-data.
+  // meta-data.  Labels should not contain duplicate key-value pairs.
   optional Labels labels = 12;
 
   // Container related information that is resolved dynamically such as
@@ -1591,7 +1604,8 @@ message CgroupInfo {
 
 
 /**
- * Collection of labels.
+ * Collection of labels. Labels should not contain duplicate key-value
+ * pairs.
  */
 message Labels {
   repeated Label labels = 1;
@@ -1664,4 +1678,16 @@ message DiscoveryInfo {
   optional string version = 5;
   optional Ports ports = 6;
   optional Labels labels = 7;
+}
+
+
+/**
+ * Named WeightInfo to indicate resource allocation
+ * priority between the different roles.
+ */
+message WeightInfo {
+  required double weight = 1;
+
+  // Related role name.
+  optional string role = 2;
 }

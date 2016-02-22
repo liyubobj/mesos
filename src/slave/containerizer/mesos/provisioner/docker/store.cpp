@@ -169,9 +169,10 @@ Future<ImageInfo> StoreProcess::get(const mesos::Image& image)
 
   Try<spec::ImageReference> reference =
     spec::parseImageReference(image.docker().name());
+
   if (reference.isError()) {
     return Failure("Failed to parse docker image '" + image.docker().name() +
-                   "' as 'reference': " + reference.error());
+                   "': " + reference.error());
   }
 
   return metadataManager->get(reference.get())
@@ -184,6 +185,12 @@ Future<Image> StoreProcess::_get(
     const spec::ImageReference& reference,
     const Option<Image>& image)
 {
+  // NOTE: Here, we assume that image layers are not removed without
+  // first removing the metadata in the metadata manager first.
+  // Otherwise, the image we return here might miss some layers. At
+  // the time we introduce cache eviction, we also want to avoid the
+  // situation where a layer was returned to the provisioner but is
+  // later evicted.
   if (image.isSome()) {
     return image.get();
   }
@@ -203,16 +210,15 @@ Future<Image> StoreProcess::_get(
     Future<Image> future = puller->pull(reference, Path(staging.get()))
       .then(defer(self(), &Self::moveLayers, lambda::_1))
       .then(defer(self(), &Self::storeImage, reference, lambda::_1))
-      .onAny(defer(self(), [this, imageReference](const Future<Image>&) {
+      .onAny(defer(self(), [=](const Future<Image>&) {
         pulling.erase(imageReference);
-      }))
-      .onAny([staging, imageReference]() {
+
         Try<Nothing> rmdir = os::rmdir(staging.get());
         if (rmdir.isError()) {
           LOG(WARNING) << "Failed to remove staging directory: "
                        << rmdir.error();
         }
-      });
+      }));
 
     promise->associate(future);
     pulling[imageReference] = promise;

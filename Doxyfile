@@ -114,7 +114,13 @@ FULL_PATH_NAMES        = YES
 # If left blank the directory from which doxygen is run is used as the
 # path to strip.
 
-STRIP_FROM_PATH        =
+# Since we are setting FULL_PATH_NAMES, we should strip out '/path/to/mesos/'.
+# Otherwise, the html links also contain '/path/to/mesos/' and aren't relative.
+# We use '../' here because this file is invoked from within the 'site/'
+# directory as `doxygen -f ../Doxyfile` and thus the value '../' is equivalent
+# to specifying '/path/to/mesos/'.
+
+STRIP_FROM_PATH        = ../
 
 # The STRIP_FROM_INC_PATH tag can be used to strip a user-defined part of
 # the path mentioned in the documentation of a class, which tells
@@ -570,7 +576,6 @@ WARN_LOGFILE           =
 
 INPUT                  = ../include/ ../src/ \
                          ../3rdparty \
-                         ../docs \
                          ../src/main.dox
 
 # This tag can be used to specify the character encoding of the source files
@@ -588,7 +593,7 @@ INPUT_ENCODING         = UTF-8
 # *.c *.cc *.cxx *.cpp *.c++ *.java *.ii *.ixx *.ipp *.i++ *.inl *.h *.hh *.hxx
 # *.hpp *.h++ *.idl *.odl *.cs *.php *.php3 *.inc *.m *.mm *.py *.f90
 
-FILE_PATTERNS          = *.h *.hpp *.md
+FILE_PATTERNS          = *.h *.hpp
 
 # The RECURSIVE tag can be used to turn specify whether or not subdirectories
 # should be searched for input files as well. Possible values are YES and NO.

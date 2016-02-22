@@ -216,6 +216,12 @@ ACTION_P(InvokeResolveConflicts, allocator){
 }
 
 
+ACTION_P(InvokeUpdateWeights, allocator)
+{
+  allocator->real->updateWeights(arg0);
+}
+
+
 template <typename T = master::allocator::HierarchicalDRFAllocator>
 mesos::master::allocator::Allocator* createAllocator()
 {
@@ -372,6 +378,11 @@ public:
       .WillByDefault(InvokeResolveConflicts(this));
     EXPECT_CALL(*this, resolveConflicts(_, _))
       .WillRepeatedly(DoDefault());
+
+    ON_CALL(*this, updateWeights(_))
+      .WillByDefault(InvokeUpdateWeights(this));
+    EXPECT_CALL(*this, updateWeights(_))
+      .WillRepeatedly(DoDefault());
   }
 
   virtual ~TestAllocator() {}
@@ -494,6 +505,9 @@ public:
   MOCK_METHOD2(resolveConflicts, process::Future<Nothing>(
       const FrameworkID&,
       const TaskInfo&));
+
+  MOCK_METHOD1(updateWeights, void(
+      const std::vector<WeightInfo>&));
 
   process::Owned<mesos::master::allocator::Allocator> real;
 };

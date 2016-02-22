@@ -433,6 +433,13 @@ public:
    * it needs to call allocator to release the corresponding EGO decisions.
    */
   virtual void slaveRemoved(const SlaveInfo& slaveInfo){};
+
+  /**
+   * Updates the weight of each provided role.
+   * Subsequent allocation calculations will use these updated weights.
+   */
+  virtual void updateWeights(
+      const std::vector<WeightInfo>& weightInfos) = 0;
 };
 
 } // namespace allocator {

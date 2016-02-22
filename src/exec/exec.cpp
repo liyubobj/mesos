@@ -72,12 +72,21 @@ using process::wait; // Necessary on some OS's to disambiguate.
 namespace mesos {
 namespace internal {
 
+// The ShutdownProcess is a relic of the pre-cgroup process isolation
+// days. It ensures that the executor process tree is killed after a
+// shutdown has been sent.
+//
+// TODO(bmahler): Update 'delay' to handle deferred callbacks without
+// needing a Process. This would eliminate the need for an explicit
+// Process here, see: MESOS-4729.
 class ShutdownProcess : public Process<ShutdownProcess>
 {
 protected:
   virtual void initialize()
   {
-    VLOG(1) << "Scheduling shutdown of the executor";
+    VLOG(1) << "Scheduling shutdown of the executor in "
+            << slave::EXECUTOR_SHUTDOWN_GRACE_PERIOD;
+
     // TODO(benh): Pass the shutdown timeout with ExecutorRegistered
     // since it might have gotten configured on the command line.
     delay(slave::EXECUTOR_SHUTDOWN_GRACE_PERIOD, self(), &Self::kill);
@@ -646,7 +655,8 @@ Status MesosExecutorDriver::start()
     // Get slave PID from environment.
     value = os::getenv("MESOS_SLAVE_PID");
     if (value.isNone()) {
-      EXIT(1) << "Expecting 'MESOS_SLAVE_PID' to be set in the environment";
+      EXIT(EXIT_FAILURE)
+        << "Expecting 'MESOS_SLAVE_PID' to be set in the environment";
     }
 
     slave = UPID(value.get());
@@ -655,28 +665,32 @@ Status MesosExecutorDriver::start()
     // Get slave ID from environment.
     value = os::getenv("MESOS_SLAVE_ID");
     if (value.isNone()) {
-      EXIT(1) << "Expecting 'MESOS_SLAVE_ID' to be set in the environment";
+      EXIT(EXIT_FAILURE)
+        << "Expecting 'MESOS_SLAVE_ID' to be set in the environment";
     }
     slaveId.set_value(value.get());
 
     // Get framework ID from environment.
     value = os::getenv("MESOS_FRAMEWORK_ID");
     if (value.isNone()) {
-      EXIT(1) << "Expecting 'MESOS_FRAMEWORK_ID' to be set in the environment";
+      EXIT(EXIT_FAILURE)
+        << "Expecting 'MESOS_FRAMEWORK_ID' to be set in the environment";
     }
     frameworkId.set_value(value.get());
 
     // Get executor ID from environment.
     value = os::getenv("MESOS_EXECUTOR_ID");
     if (value.isNone()) {
-      EXIT(1) << "Expecting 'MESOS_EXECUTOR_ID' to be set in the environment";
+      EXIT(EXIT_FAILURE)
+        << "Expecting 'MESOS_EXECUTOR_ID' to be set in the environment";
     }
     executorId.set_value(value.get());
 
     // Get working directory from environment.
     value = os::getenv("MESOS_DIRECTORY");
     if (value.isNone()) {
-      EXIT(1) << "Expecting 'MESOS_DIRECTORY' to be set in the environment";
+      EXIT(EXIT_FAILURE)
+        << "Expecting 'MESOS_DIRECTORY' to be set in the environment";
     }
     workDirectory = value.get();
 
