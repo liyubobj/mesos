@@ -377,21 +377,21 @@ TEST_F(UnreserveOperationValidationTest, WithoutACL)
   Offer::Operation::Unreserve unreserve;
   unreserve.add_resources()->CopyFrom(resource);
 
-  EXPECT_NONE(operation::validate(unreserve, true));
+  EXPECT_NONE(operation::validate(unreserve));
 }
 
 
-// This test verifies that validation fails if the framework's
-// 'principal' is not set.
+// This test verifies that validation succeeds if the framework's
+// `principal` is not set.
 TEST_F(UnreserveOperationValidationTest, FrameworkMissingPrincipal)
 {
   Resource resource = Resources::parse("cpus", "8", "role").get();
-  resource.mutable_reservation()->CopyFrom(createReservationInfo("principal"));
+  resource.mutable_reservation()->CopyFrom(createReservationInfo());
 
   Offer::Operation::Unreserve unreserve;
   unreserve.add_resources()->CopyFrom(resource);
 
-  EXPECT_SOME(operation::validate(unreserve, false));
+  EXPECT_NONE(operation::validate(unreserve));
 }
 
 
@@ -404,7 +404,7 @@ TEST_F(UnreserveOperationValidationTest, StaticReservation)
   Offer::Operation::Unreserve unreserve;
   unreserve.add_resources()->CopyFrom(staticallyReserved);
 
-  EXPECT_SOME(operation::validate(unreserve, true));
+  EXPECT_SOME(operation::validate(unreserve));
 }
 
 
@@ -418,7 +418,7 @@ TEST_F(UnreserveOperationValidationTest, NoPersistentVolumes)
   Offer::Operation::Unreserve unreserve;
   unreserve.add_resources()->CopyFrom(reserved);
 
-  EXPECT_NONE(operation::validate(unreserve, true));
+  EXPECT_NONE(operation::validate(unreserve));
 }
 
 
@@ -436,7 +436,7 @@ TEST_F(UnreserveOperationValidationTest, PersistentVolumes)
   unreserve.add_resources()->CopyFrom(reserved);
   unreserve.add_resources()->CopyFrom(volume);
 
-  EXPECT_SOME(operation::validate(unreserve, true));
+  EXPECT_SOME(operation::validate(unreserve));
 }
 
 
