@@ -2697,7 +2697,8 @@ TEST_F(HierarchicalAllocatorTest, UpdateWeight)
         slave,
         None(),
         slave.resources(),
-        hashmap<FrameworkID, Resources>());
+        hashmap<FrameworkID, Resources>(),
+        EMPTYRUNNINGS);
   }
 
   // Framework1 registers with 'role1' which uses the default
