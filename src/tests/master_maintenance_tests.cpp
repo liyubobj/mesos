@@ -590,7 +590,8 @@ TEST_F(MasterMaintenanceTest, EnterMaintenanceMode)
 
   MockExecutor exec(DEFAULT_EXECUTOR_ID);
 
-  Try<PID<Slave>> slave = StartSlave(&exec);
+  slave::Flags slaveFlags = CreateSlaveFlags();
+  Try<PID<Slave>> slave = StartSlave(&exec, slaveFlags);
   ASSERT_SOME(slave);
 
   MockScheduler sched;
@@ -685,6 +686,11 @@ TEST_F(MasterMaintenanceTest, EnterMaintenanceMode)
 
   // Verify that the framework received the slave lost message.
   AWAIT_READY(slaveLost);
+
+  Clock::pause();
+  Clock::settle();
+  Clock::advance(slaveFlags.executor_shutdown_grace_period);
+  Clock::resume();
 
   // Wait on the agent to terminate so that it wipes out it's latest symlink.
   // This way when we launch a new agent it will register with a new agent id.
@@ -1034,7 +1040,8 @@ TEST_F(MasterMaintenanceTest, MachineStatus)
 TEST_F(MasterMaintenanceTest, InverseOffers)
 {
   // Set up a master.
-  Try<PID<Master>> master = StartMaster();
+  master::Flags masterFlags = CreateMasterFlags();
+  Try<PID<Master>> master = StartMaster(masterFlags);
   ASSERT_SOME(master);
 
   MockExecutor exec(DEFAULT_EXECUTOR_ID);
@@ -1206,10 +1213,16 @@ TEST_F(MasterMaintenanceTest, InverseOffers)
     mesos.send(call);
   }
 
+  Clock::pause();
+  Clock::settle();
+  Clock::advance(masterFlags.allocation_interval);
+
   // Expect another inverse offer.
   event = events.get();
   AWAIT_READY(event);
   EXPECT_EQ(Event::OFFERS, event.get().type());
+  Clock::resume();
+
   EXPECT_EQ(0, event.get().offers().offers().size());
   EXPECT_EQ(1, event.get().offers().inverse_offers().size());
   inverseOffer = event.get().offers().inverse_offers(0);
@@ -1255,10 +1268,16 @@ TEST_F(MasterMaintenanceTest, InverseOffers)
     mesos.send(call);
   }
 
+  Clock::pause();
+  Clock::settle();
+  Clock::advance(masterFlags.allocation_interval);
+
   // Expect yet another inverse offer.
   event = events.get();
   AWAIT_READY(event);
   EXPECT_EQ(Event::OFFERS, event.get().type());
+  Clock::resume();
+
   EXPECT_EQ(0, event.get().offers().offers().size());
   EXPECT_EQ(1, event.get().offers().inverse_offers().size());
 
