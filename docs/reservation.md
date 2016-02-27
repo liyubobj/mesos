@@ -45,20 +45,20 @@ That is, statically reserved resources cannot be reserved for another role nor
 be unreserved. Dynamic reservation enables operators and authorized frameworks
 to reserve and unreserve resources after slave-startup.
 
-We require a `principal` from the operator or framework in order to
-authenticate/authorize the operations. Permissions are specified via the
-existing ACL mechanism. To use authorization with reserve/unreserve operations,
-the Mesos master must be configured with the desired ACLs. For more information,
-see the [authorization documentation](authorization.md).
+By default, frameworks and operators can reserve resources for any role, and can
+unreserve any dynamically reserved resources. [Authorization](authorization.md)
+allows this behavior to be limited so that only particular roles can be reserved
+for, and only particular resources can be unreserved. For these operations to be
+authorized, the framework or operator should provide a `principal` to identify
+itself. To use authorization with reserve/unreserve operations, the Mesos master
+must be configured with the appropriate ACLs. For more information, see the
+[authorization documentation](authorization.md).
 
 * `Offer::Operation::Reserve` and `Offer::Operation::Unreserve` messages are
   available for __frameworks__ to send back via the `acceptOffers` API as a
-  response to a resource offer. Each framework may only reserve resources for
-  its own role.
+  response to a resource offer.
 * `/reserve` and `/unreserve` HTTP endpoints allow __operators__ to manage
-  dynamic reservations through the master. Operators may currently reserve
-  resources for any role, although this
-  [will change](https://issues.apache.org/jira/browse/MESOS-4591).
+  dynamic reservations through the master.
 
 In the following sections, we will walk through examples of each of the
 interfaces described above.
@@ -258,7 +258,8 @@ slave that hosts the desired resources; the request will fail if sufficient
 unreserved resources cannot be found on the slave). In this case, the principal
 included in the request will be the principal of an authorized operator rather
 than the principal of a framework registered under the `ads` role. We send an
-HTTP POST request to the `/reserve` HTTP endpoint like so:
+HTTP POST request to the master's [/reserve](endpoints/master/reserve.md)
+endpoint like so:
 
         $ curl -i \
           -u <operator_principal>:<password> \
@@ -300,12 +301,13 @@ reservation request is then forwarded asynchronously to the Mesos slave where
 the resources are located. That asynchronous message may not be delivered, in
 which case no resources will be reserved. To determine if a reserve operation
 has succeeded, the user can examine the state of the appropriate Mesos slave
-(e.g., via the slave's `/state` HTTP endpoint).
+(e.g., via the slave's [/state](endpoints/slave/state.md) HTTP endpoint).
 
 #### `/unreserve` (since 0.25.0)
 
 Suppose we want to unreserve the resources that we dynamically reserved above.
-We can send an HTTP POST request to the `/unreserve` HTTP endpoint like so:
+We can send an HTTP POST request to the master's
+[/unreserve](endpoints/master/unreserve.md) endpoint like so:
 
         $ curl -i \
           -u <operator_principal>:<password> \
@@ -353,4 +355,4 @@ master. The request is then forwarded asynchronously to the Mesos slave where
 the resources are located. That asynchronous message may not be delivered, in
 which case no resources will be unreserved. To determine if an unreserve
 operation has succeeded, the user can examine the state of the appropriate Mesos
-slave (e.g., via the slave's `/state` HTTP endpoint).
+slave (e.g., via the slave's [/state](endpoints/slave/state.md) HTTP endpoint).

@@ -2865,9 +2865,16 @@ Future<bool> Master::authorizeReserveResources(
     request.mutable_principals()->set_type(ACL::Entity::ANY);
   }
 
-  // TODO(mpark): Determine what kinds of constraints we may want to
-  // enforce on resources. Currently, we simply use ANY.
-  request.mutable_resources()->set_type(ACL::Entity::ANY);
+  // The operation will be authorized if the principal is allowed to make
+  // reservations for all roles included in `reserve.resources`.
+  // Add an element to `request.roles` for each unique role in the resources.
+  hashset<string> roles;
+  foreach (const Resource& resource, reserve.resources()) {
+    if (!roles.contains(resource.role())) {
+      request.mutable_roles()->add_values(resource.role());
+      roles.insert(resource.role());
+    }
+  }
 
   LOG(INFO) << "Authorizing principal '"
             << (principal.isSome() ? principal.get() : "ANY")
@@ -2898,7 +2905,8 @@ Future<bool> Master::authorizeUnreserveResources(
     // authorization, we must check here that this resource is
     // dynamically reserved. If it isn't, the error will be caught
     // during validation.
-    if (Resources::isDynamicallyReserved(resource)) {
+    if (Resources::isDynamicallyReserved(resource) &&
+        resource.reservation().has_principal()) {
       request.mutable_reserver_principals()->add_values(
           resource.reservation().principal());
     }
@@ -2929,9 +2937,16 @@ Future<bool> Master::authorizeCreateVolume(
     request.mutable_principals()->set_type(ACL::Entity::ANY);
   }
 
-  // TODO(greggomann): Determine what `volume_types` we may want to
-  // allow/prevent creation of. Currently, we simply use ANY.
-  request.mutable_volume_types()->set_type(ACL::Entity::ANY);
+  // The operation will be authorized if the principal is allowed to create
+  // volumes for all roles included in `create.volumes`.
+  // Add an element to `request.roles` for each unique role in the volumes.
+  hashset<string> roles;
+  foreach (const Resource& volume, create.volumes()) {
+    if (!roles.contains(volume.role())) {
+      request.mutable_roles()->add_values(volume.role());
+      roles.insert(volume.role());
+    }
+  }
 
   LOG(INFO)
     << "Authorizing principal '"
@@ -3356,7 +3371,7 @@ void Master::_accept(
 
         // Make sure this reserve operation is valid.
         Option<Error> error = validation::operation::validate(
-            operation.reserve(), framework->info.role(), principal);
+            operation.reserve(), principal);
 
         if (error.isSome()) {
           drop(framework, operation, error.get().message);

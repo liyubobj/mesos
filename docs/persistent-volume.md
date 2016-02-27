@@ -29,11 +29,14 @@ Persistent volumes can also be created on isolated and auxiliary disks by
 reserving [multiple disk resources](multiple-disk.md).
 
 Persistent volumes can be created by __operators__ and authorized
-__frameworks__. We require a `principal` from the operator or framework in order
-to authenticate/authorize the operations. Permissions are specified via the
-existing ACL mechanism. To use authorization with reserve, unreserve, create,
-and destroy operations, the Mesos master must be configured with the desired
-ACLs. For more information, see the
+__frameworks__. By default, frameworks and operators can create volumes for any
+role and destroy any persistent volumes. [Authorization](authorization.md)
+allows this behavior to be limited so that volumes can only be created for
+particular roles and only particular volumes can be destroyed. For these
+operations to be authorized, the framework or operator should provide a
+`principal` to identify itself. To use authorization with reserve, unreserve,
+create, and destroy operations, the Mesos master must be configured with the
+appropriate ACLs. For more information, see the
 [authorization documentation](authorization.md).
 
 * `Offer::Operation::Create` and `Offer::Operation::Destroy` messages are
@@ -255,10 +258,12 @@ by operators and administrative tools.
 
 To use this endpoint, the operator should first ensure that a reservation for
 the necessary resources has been made on the appropriate slave (e.g., by using
-the `/reserve` HTTP endpoint or by configuring a static reservation).
+the [/reserve](endpoints/master/reserve.md) HTTP endpoint or by configuring a
+static reservation).
 
 To create a 512MB persistent volume for the `ads` role on a dynamically reserved
-disk resource, we can send a request like so:
+disk resource, we can send an HTTP POST request to the master's
+[/create-volumes](endpoints/master/create-volumes.md) endpoint like so:
 
 ```
 curl -i \
@@ -306,11 +311,12 @@ the reserved resources are located. That asynchronous message may not be
 delivered or creating the volumes at the slave might fail, in which case no
 volumes will be created. To determine if a create operation has succeeded, the
 user can examine the state of the appropriate Mesos slave (e.g., via the slave's
-`/state` HTTP endpoint).
+[/state](endpoints/slave/state.md) HTTP endpoint).
 
 #### `/destroy-volumes`
 
-To destroy the volume created above, we can send an HTTP POST like so:
+To destroy the volume created above, we can send an HTTP POST to the master's
+[/destroy-volumes](endpoints/master/destroy-volumes.md) endpoint like so:
 
 ```
 curl -i \
@@ -358,7 +364,7 @@ the persistent volumes are located. That asynchronous message may not be
 delivered or destroying the volumes at the slave might fail, in which case no
 volumes will be destroyed. To determine if a destroy operation has succeeded,
 the user can examine the state of the appropriate Mesos slave (e.g., via the
-slave's `/state` HTTP endpoint).
+slave's [/state](endpoints/slave/state.md) HTTP endpoint).
 
 ### Programming with Persistent Volumes
 
@@ -416,7 +422,7 @@ volumes:
   succeed, the result will be a single reservation of 4 CPUs. To handle this
   situation, applications should be prepared for resource offers that contain
   more resources than expected. Some applications may also want to detect this
-  situation and unreserve an additional reserved resources that will not be
+  situation and unreserve any additional reserved resources that will not be
   required.
 
 * It often makes sense to structure application logic as a "state machine",
@@ -438,7 +444,7 @@ volumes:
   succeeded: as discussed above, frameworks need to wait for an offer that
   contains the "expected" reserved resources to determine when a reservation
   request has succeeded. Determining what a framework should "expect" to find in
-  an offer is more difficult when multiple frameworks can be making reservations
+  an offer is more difficult when multiple frameworks can make reservations
   for the same role concurrently. In general, whenever multiple frameworks are
   allowed to register in the same role, the operator should ensure that those
   frameworks are configured to collaborate with one another when using

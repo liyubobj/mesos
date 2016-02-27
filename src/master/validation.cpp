@@ -652,7 +652,6 @@ namespace operation {
 
 Option<Error> validate(
     const Offer::Operation::Reserve& reserve,
-    const Option<string>& role,
     const Option<string>& principal)
 {
   Option<Error> error = resource::validate(reserve.resources());
@@ -664,12 +663,6 @@ Option<Error> validate(
     if (!Resources::isDynamicallyReserved(resource)) {
       return Error(
           "Resource " + stringify(resource) + " is not dynamically reserved");
-    }
-
-    if (role.isSome() && resource.role() != role.get()) {
-      return Error(
-          "The reserved resource's role '" + resource.role() +
-          "' does not match the framework's role '" + role.get() + "'");
     }
 
     if (principal.isSome()) {
