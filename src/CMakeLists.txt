@@ -106,7 +106,6 @@ set(AUTHORIZER_SRC
 set(COMMON_SRC
   common/attributes.cpp
   common/command_utils.cpp
-  common/date_utils.cpp
   common/http.cpp
   common/protobuf_utils.cpp
   common/resources.cpp
@@ -137,6 +136,7 @@ set(LINUX_SRC
   slave/containerizer/mesos/isolators/filesystem/shared.cpp
   slave/containerizer/mesos/isolators/namespaces/pid.cpp
   slave/containerizer/mesos/provisioner/backends/bind.cpp
+  slave/containerizer/mesos/provisioner/backends/overlay.cpp
   )
 
 set(DOCKER_SRC

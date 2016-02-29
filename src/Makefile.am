@@ -594,7 +594,6 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   authorizer/local/authorizer.cpp					\
   common/attributes.cpp							\
   common/command_utils.cpp						\
-  common/date_utils.cpp							\
   common/http.cpp							\
   common/protobuf_utils.cpp						\
   common/resources.cpp							\
@@ -704,7 +703,6 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   authorizer/local/authorizer.hpp					\
   common/build.hpp							\
   common/command_utils.hpp						\
-  common/date_utils.hpp							\
   common/http.hpp							\
   common/parse.hpp							\
   common/protobuf_utils.hpp						\
@@ -842,7 +840,8 @@ MESOS_LINUX_FILES =							\
   slave/containerizer/mesos/isolators/filesystem/linux.cpp		\
   slave/containerizer/mesos/isolators/filesystem/shared.cpp		\
   slave/containerizer/mesos/isolators/namespaces/pid.cpp		\
-  slave/containerizer/mesos/provisioner/backends/bind.cpp
+  slave/containerizer/mesos/provisioner/backends/bind.cpp		\
+  slave/containerizer/mesos/provisioner/backends/overlay.cpp
 
 MESOS_LINUX_FILES +=							\
   linux/cgroups.hpp							\
@@ -861,7 +860,8 @@ MESOS_LINUX_FILES +=							\
   slave/containerizer/mesos/isolators/filesystem/linux.hpp		\
   slave/containerizer/mesos/isolators/filesystem/shared.hpp		\
   slave/containerizer/mesos/isolators/namespaces/pid.hpp		\
-  slave/containerizer/mesos/provisioner/backends/bind.hpp
+  slave/containerizer/mesos/provisioner/backends/bind.hpp		\
+  slave/containerizer/mesos/provisioner/backends/overlay.hpp
 
 MESOS_NETWORK_ISOLATOR_FILES =						\
   linux/routing/handle.cpp						\
