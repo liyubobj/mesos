@@ -117,8 +117,7 @@ ACTION_P(Enqueue, queue)
 }
 
 
-// This test verifies that when a scheduler resubscribes it receives
-// SUBSCRIBED event with the previously assigned framework id.
+// This test verifies that a scheduler can subscribe with the master.
 TEST_P(SchedulerTest, Subscribe)
 {
   master::Flags flags = CreateMasterFlags();
@@ -131,7 +130,8 @@ TEST_P(SchedulerTest, Subscribe)
 
   Future<Nothing> connected;
   EXPECT_CALL(callbacks, connected())
-    .WillOnce(FutureSatisfy(&connected));
+    .WillOnce(FutureSatisfy(&connected))
+    .WillRepeatedly(Return()); // Ignore future invocations.
 
   Mesos mesos(
       master.get(),
@@ -147,41 +147,206 @@ TEST_P(SchedulerTest, Subscribe)
   EXPECT_CALL(callbacks, received(_))
     .WillRepeatedly(Enqueue(&events));
 
-  {
-    Call call;
-    call.set_type(Call::SUBSCRIBE);
+  Call call;
+  call.set_type(Call::SUBSCRIBE);
+  Call::Subscribe* subscribe = call.mutable_subscribe();
+  subscribe->mutable_framework_info()->CopyFrom(DEFAULT_V1_FRAMEWORK_INFO);
 
-    Call::Subscribe* subscribe = call.mutable_subscribe();
-    subscribe->mutable_framework_info()->CopyFrom(DEFAULT_V1_FRAMEWORK_INFO);
-    subscribe->set_force(true);
-
-    mesos.send(call);
-  }
+  mesos.send(call);
 
   Future<Event> event = events.get();
   AWAIT_READY(event);
   EXPECT_EQ(Event::SUBSCRIBED, event.get().type());
 
-  v1::FrameworkID id(event.get().subscribed().framework_id());
+  EXPECT_CALL(callbacks, disconnected())
+    .Times(AtMost(1));
 
-  // Resubscribe with the same framework id.
+  Shutdown();
+}
+
+
+// This test verifies that a scheduler can subscribe with the master after
+// failing over to another instance.
+TEST_P(SchedulerTest, SchedulerFailover)
+{
+  master::Flags flags = CreateMasterFlags();
+  flags.authenticate_frameworks = false;
+
+  Try<PID<Master>> master = StartMaster(flags);
+  ASSERT_SOME(master);
+
+  auto scheduler = std::make_shared<MockV1HTTPScheduler>();
+
+  EXPECT_CALL(*scheduler, heartbeat(_))
+    .WillRepeatedly(Return()); // Ignore heartbeats.
+
+  Future<Nothing> connected;
+  EXPECT_CALL(*scheduler, connected(_))
+    .WillOnce(FutureSatisfy(&connected))
+    .WillRepeatedly(Return()); // Ignore future invocations.
+
+  ContentType contentType = GetParam();
+
+  scheduler::TestV1Mesos mesos(master.get(), contentType, scheduler);
+
+  AWAIT_READY(connected);
+
+  Future<Event::Subscribed> subscribed;
+  EXPECT_CALL(*scheduler, subscribed(_, _))
+    .WillOnce(FutureArg<1>(&subscribed));
+
   {
     Call call;
-    call.mutable_framework_id()->CopyFrom(id);
     call.set_type(Call::SUBSCRIBE);
 
     Call::Subscribe* subscribe = call.mutable_subscribe();
     subscribe->mutable_framework_info()->CopyFrom(DEFAULT_V1_FRAMEWORK_INFO);
-    subscribe->mutable_framework_info()->mutable_id()->CopyFrom(id);
-    subscribe->set_force(true);
 
     mesos.send(call);
   }
 
-  event = events.get();
-  AWAIT_READY(event);
-  EXPECT_EQ(Event::SUBSCRIBED, event.get().type());
-  EXPECT_EQ(id, event.get().subscribed().framework_id());
+  AWAIT_READY(subscribed);
+
+  v1::FrameworkID frameworkId = subscribed.get().framework_id();
+
+  auto scheduler2 = std::make_shared<MockV1HTTPScheduler>();
+
+  EXPECT_CALL(*scheduler2, heartbeat(_))
+    .WillRepeatedly(Return()); // Ignore heartbeats.
+
+  EXPECT_CALL(*scheduler2, connected(_))
+    .WillOnce(FutureSatisfy(&connected))
+    .WillRepeatedly(Return()); // Ignore future invocations.
+
+  // Failover to another scheduler instance.
+  scheduler::TestV1Mesos mesos2(master.get(), contentType, scheduler2);
+
+  AWAIT_READY(connected);
+
+  // The previously connected scheduler instance should receive an
+  // error/disconnected event.
+  Future<Nothing> error;
+  EXPECT_CALL(*scheduler, error(_, _))
+    .WillOnce(FutureSatisfy(&error));
+
+  Future<Nothing> disconnected;
+  EXPECT_CALL(*scheduler, disconnected(_))
+    .WillOnce(FutureSatisfy(&disconnected));
+
+  EXPECT_CALL(*scheduler2, subscribed(_, _))
+    .WillOnce(FutureArg<1>(&subscribed));
+
+  {
+    Call call;
+    call.mutable_framework_id()->CopyFrom(frameworkId);
+    call.set_type(Call::SUBSCRIBE);
+
+    Call::Subscribe* subscribe = call.mutable_subscribe();
+    subscribe->mutable_framework_info()->CopyFrom(DEFAULT_V1_FRAMEWORK_INFO);
+    subscribe->mutable_framework_info()->mutable_id()->CopyFrom(frameworkId);
+    subscribe->set_force(true);
+
+    mesos2.send(call);
+  }
+
+  AWAIT_READY(error);
+  AWAIT_READY(disconnected);
+  AWAIT_READY(subscribed);
+
+  EXPECT_EQ(frameworkId, subscribed.get().framework_id());
+
+  EXPECT_CALL(*scheduler, disconnected(_))
+    .Times(AtMost(1));
+
+  EXPECT_CALL(*scheduler2, disconnected(_))
+    .Times(AtMost(1));
+
+  Shutdown();
+}
+
+
+// This test verifies that the scheduler can subscribe after a master failover.
+TEST_P(SchedulerTest, MasterFailover)
+{
+  master::Flags flags = CreateMasterFlags();
+  flags.authenticate_frameworks = false;
+
+  Try<PID<Master>> master = StartMaster(flags);
+  ASSERT_SOME(master);
+
+  auto scheduler = std::make_shared<MockV1HTTPScheduler>();
+  auto detector = std::make_shared<StandaloneMasterDetector>(master.get());
+
+  EXPECT_CALL(*scheduler, heartbeat(_))
+    .WillRepeatedly(Return()); // Ignore heartbeats.
+
+  Future<Nothing> connected;
+  EXPECT_CALL(*scheduler, connected(_))
+    .WillOnce(FutureSatisfy(&connected))
+    .WillRepeatedly(Return()); // Ignore future invocations.
+
+  ContentType contentType = GetParam();
+
+  scheduler::TestV1Mesos mesos(master.get(), contentType, scheduler, detector);
+
+  AWAIT_READY(connected);
+
+  Future<Event::Subscribed> subscribed;
+  EXPECT_CALL(*scheduler, subscribed(_, _))
+    .WillOnce(FutureArg<1>(&subscribed));
+
+  {
+    Call call;
+    call.set_type(Call::SUBSCRIBE);
+
+    Call::Subscribe* subscribe = call.mutable_subscribe();
+    subscribe->mutable_framework_info()->CopyFrom(DEFAULT_V1_FRAMEWORK_INFO);
+
+    mesos.send(call);
+  }
+
+  AWAIT_READY(subscribed);
+
+  v1::FrameworkID frameworkId = subscribed.get().framework_id();
+
+  Future<Nothing> disconnected;
+  EXPECT_CALL(*scheduler, disconnected(_))
+    .WillOnce(FutureSatisfy(&disconnected))
+    .WillRepeatedly(Return()); // Ignore future invocations.
+
+  // Failover the master.
+  Stop(master.get());
+  master = StartMaster(flags);
+  ASSERT_SOME(master);
+
+  AWAIT_READY(disconnected);
+
+  EXPECT_CALL(*scheduler, connected(_))
+    .WillOnce(FutureSatisfy(&connected))
+    .WillRepeatedly(Return()); // Ignore future invocations.
+
+  detector->appoint(master.get());
+
+  AWAIT_READY(connected);
+
+  EXPECT_CALL(*scheduler, subscribed(_, _))
+    .WillOnce(FutureArg<1>(&subscribed));
+
+  {
+    Call call;
+    call.mutable_framework_id()->CopyFrom(frameworkId);
+    call.set_type(Call::SUBSCRIBE);
+
+    Call::Subscribe* subscribe = call.mutable_subscribe();
+    subscribe->mutable_framework_info()->CopyFrom(DEFAULT_V1_FRAMEWORK_INFO);
+    subscribe->mutable_framework_info()->mutable_id()->CopyFrom(frameworkId);
+
+    mesos.send(call);
+  }
+
+  AWAIT_READY(subscribed);
+
+  EXPECT_EQ(frameworkId, subscribed.get().framework_id());
 
   Shutdown();
 }
@@ -207,7 +372,8 @@ TEST_P(SchedulerTest, TaskRunning)
 
   Future<Nothing> connected;
   EXPECT_CALL(callbacks, connected())
-    .WillOnce(FutureSatisfy(&connected));
+    .WillOnce(FutureSatisfy(&connected))
+    .WillRepeatedly(Return()); // Ignore future invocations.
 
   Mesos mesos(
       master.get(),
@@ -307,6 +473,9 @@ TEST_P(SchedulerTest, TaskRunning)
   EXPECT_CALL(*executor, disconnected(_))
     .Times(AtMost(1));
 
+  EXPECT_CALL(callbacks, disconnected())
+    .Times(AtMost(1));
+
   Shutdown(); // Must shutdown before 'containerizer' gets deallocated.
 }
 
@@ -331,7 +500,8 @@ TEST_P(SchedulerTest, ReconcileTask)
 
   Future<Nothing> connected;
   EXPECT_CALL(callbacks, connected())
-    .WillOnce(FutureSatisfy(&connected));
+    .WillOnce(FutureSatisfy(&connected))
+    .WillRepeatedly(Return()); // Ignore future invocations.
 
   Mesos mesos(
       master.get(),
@@ -433,6 +603,9 @@ TEST_P(SchedulerTest, ReconcileTask)
   EXPECT_CALL(*executor, disconnected(_))
     .Times(AtMost(1));
 
+  EXPECT_CALL(callbacks, disconnected())
+    .Times(AtMost(1));
+
   Shutdown(); // Must shutdown before 'containerizer' gets deallocated.
 }
 
@@ -457,7 +630,8 @@ TEST_P(SchedulerTest, KillTask)
 
   Future<Nothing> connected;
   EXPECT_CALL(callbacks, connected())
-    .WillOnce(FutureSatisfy(&connected));
+    .WillOnce(FutureSatisfy(&connected))
+    .WillRepeatedly(Return()); // Ignore future invocations.
 
   Mesos mesos(
       master.get(),
@@ -576,6 +750,9 @@ TEST_P(SchedulerTest, KillTask)
   EXPECT_CALL(*executor, disconnected(_))
     .Times(AtMost(1));
 
+  EXPECT_CALL(callbacks, disconnected())
+    .Times(AtMost(1));
+
   Shutdown(); // Must shutdown before 'containerizer' gets deallocated.
 }
 
@@ -600,7 +777,8 @@ TEST_P(SchedulerTest, ShutdownExecutor)
 
   Future<Nothing> connected;
   EXPECT_CALL(callbacks, connected())
-    .WillOnce(FutureSatisfy(&connected));
+    .WillOnce(FutureSatisfy(&connected))
+    .WillRepeatedly(Return()); // Ignore future invocations.
 
   Mesos mesos(
       master.get(),
@@ -702,6 +880,9 @@ TEST_P(SchedulerTest, ShutdownExecutor)
   EXPECT_EQ(Event::FAILURE, event.get().type());
   EXPECT_EQ(evolve(executorId), event.get().failure().executor_id());
 
+  EXPECT_CALL(callbacks, disconnected())
+    .Times(AtMost(1));
+
   Shutdown(); // Must shutdown before 'containerizer' gets deallocated.
 }
 
@@ -726,7 +907,8 @@ TEST_P(SchedulerTest, Teardown)
 
   Future<Nothing> connected;
   EXPECT_CALL(callbacks, connected())
-    .WillOnce(FutureSatisfy(&connected));
+    .WillOnce(FutureSatisfy(&connected))
+    .WillRepeatedly(Return()); // Ignore future invocations.
 
   Mesos mesos(
       master.get(),
@@ -817,6 +999,9 @@ TEST_P(SchedulerTest, Teardown)
 
   AWAIT_READY(shutdown);
 
+  EXPECT_CALL(callbacks, disconnected())
+    .Times(AtMost(1));
+
   Shutdown(); // Must shutdown before 'containerizer' gets deallocated.
 }
 
@@ -836,7 +1021,8 @@ TEST_P(SchedulerTest, Decline)
 
   Future<Nothing> connected;
   EXPECT_CALL(callbacks, connected())
-    .WillOnce(FutureSatisfy(&connected));
+    .WillOnce(FutureSatisfy(&connected))
+    .WillRepeatedly(Return()); // Ignore future invocations.
 
   Mesos mesos(
       master.get(),
@@ -898,6 +1084,9 @@ TEST_P(SchedulerTest, Decline)
   ASSERT_EQ(1, event.get().offers().offers().size());
   ASSERT_EQ(offer.resources(), event.get().offers().offers(0).resources());
 
+  EXPECT_CALL(callbacks, disconnected())
+    .Times(AtMost(1));
+
   Shutdown(); // Must shutdown before 'containerizer' gets deallocated.
 }
 
@@ -917,7 +1106,8 @@ TEST_P(SchedulerTest, Revive)
 
   Future<Nothing> connected;
   EXPECT_CALL(callbacks, connected())
-    .WillOnce(FutureSatisfy(&connected));
+    .WillOnce(FutureSatisfy(&connected))
+    .WillRepeatedly(Return()); // Ignore future invocations.
 
   Mesos mesos(
       master.get(),
@@ -995,6 +1185,9 @@ TEST_P(SchedulerTest, Revive)
   EXPECT_NE(0, event.get().offers().offers().size());
   ASSERT_EQ(offer.resources(), event.get().offers().offers(0).resources());
 
+  EXPECT_CALL(callbacks, disconnected())
+    .Times(AtMost(1));
+
   Shutdown(); // Must shutdown before 'containerizer' gets deallocated.
 }
 
@@ -1014,7 +1207,8 @@ TEST_P(SchedulerTest, Suppress)
 
   Future<Nothing> connected;
   EXPECT_CALL(callbacks, connected())
-    .WillOnce(FutureSatisfy(&connected));
+    .WillOnce(FutureSatisfy(&connected))
+    .WillRepeatedly(Return()); // Ignore future invocations.
 
   Mesos mesos(
       master.get(),
@@ -1108,6 +1302,9 @@ TEST_P(SchedulerTest, Suppress)
   EXPECT_NE(0, event.get().offers().offers().size());
   ASSERT_EQ(offer.resources(), event.get().offers().offers(0).resources());
 
+  EXPECT_CALL(callbacks, disconnected())
+    .Times(AtMost(1));
+
   Shutdown(); // Must shutdown before 'containerizer' gets deallocated.
 }
 
@@ -1132,7 +1329,8 @@ TEST_P(SchedulerTest, Message)
 
   Future<Nothing> connected;
   EXPECT_CALL(callbacks, connected())
-    .WillOnce(FutureSatisfy(&connected));
+    .WillOnce(FutureSatisfy(&connected))
+    .WillRepeatedly(Return()); // Ignore future invocations.
 
   Mesos mesos(
       master.get(),
@@ -1235,6 +1433,9 @@ TEST_P(SchedulerTest, Message)
   EXPECT_CALL(*executor, disconnected(_))
     .Times(AtMost(1));
 
+  EXPECT_CALL(callbacks, disconnected())
+    .Times(AtMost(1));
+
   Shutdown(); // Must shutdown before 'containerizer' gets deallocated.
 }
 
@@ -1251,7 +1452,8 @@ TEST_P(SchedulerTest, Request)
 
   Future<Nothing> connected;
   EXPECT_CALL(callbacks, connected())
-    .WillOnce(FutureSatisfy(&connected));
+    .WillOnce(FutureSatisfy(&connected))
+    .WillRepeatedly(Return()); // Ignore future invocations.
 
   Mesos mesos(
       master.get(),
@@ -1299,6 +1501,9 @@ TEST_P(SchedulerTest, Request)
   }
 
   AWAIT_READY(requestResources);
+
+  EXPECT_CALL(callbacks, disconnected())
+    .Times(AtMost(1));
 
   Shutdown();
 }
