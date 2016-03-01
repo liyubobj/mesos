@@ -1049,7 +1049,7 @@ TEST_F(ReservationEndpointsTest, GoodReserveACLMultipleRoles)
   master::Flags masterFlags = CreateMasterFlags();
   masterFlags.acls = acls;
 
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   Try<PID<Master>> master = StartMaster(&allocator, masterFlags);
   ASSERT_SOME(master);
@@ -1059,7 +1059,7 @@ TEST_F(ReservationEndpointsTest, GoodReserveACLMultipleRoles)
   slaveFlags.resources = "cpus:2;mem:1024";
 
   Future<SlaveID> slaveId;
-  EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
+  EXPECT_CALL(allocator, addSlave(_, _, _, _, _, _))
     .WillOnce(DoAll(InvokeAddSlave(&allocator),
                     FutureArg<0>(&slaveId)));
 
@@ -1245,7 +1245,7 @@ TEST_F(ReservationEndpointsTest, BadReserveACLMultipleRoles)
   master::Flags masterFlags = CreateMasterFlags();
   masterFlags.acls = acls;
 
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   Try<PID<Master>> master = StartMaster(&allocator, masterFlags);
   ASSERT_SOME(master);
@@ -1255,7 +1255,7 @@ TEST_F(ReservationEndpointsTest, BadReserveACLMultipleRoles)
   slaveFlags.resources = "cpus:2;mem:1024";
 
   Future<SlaveID> slaveId;
-  EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
+  EXPECT_CALL(allocator, addSlave(_, _, _, _, _, _))
     .WillOnce(DoAll(InvokeAddSlave(&allocator),
                     FutureArg<0>(&slaveId)));
 

@@ -852,7 +852,7 @@ TEST_F(PersistentVolumeEndpointsTest, GoodCreateACLMultipleRoles)
   master::Flags masterFlags = CreateMasterFlags();
   masterFlags.acls = acls;
 
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   Try<PID<Master>> master = StartMaster(&allocator, masterFlags);
   ASSERT_SOME(master);
@@ -865,7 +865,7 @@ TEST_F(PersistentVolumeEndpointsTest, GoodCreateACLMultipleRoles)
     AUTHORIZED_ROLE_2 + "):1024";
 
   Future<SlaveID> slaveId;
-  EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
+  EXPECT_CALL(allocator, addSlave(_, _, _, _, _, _))
     .WillOnce(DoAll(InvokeAddSlave(&allocator), FutureArg<0>(&slaveId)));
 
   Try<PID<Slave>> slave = StartSlave(slaveFlags);
@@ -1042,7 +1042,7 @@ TEST_F(PersistentVolumeEndpointsTest, BadCreateACLMultipleRoles)
   master::Flags masterFlags = CreateMasterFlags();
   masterFlags.acls = acls;
 
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   Try<PID<Master>> master = StartMaster(&allocator, masterFlags);
   ASSERT_SOME(master);
@@ -1055,7 +1055,7 @@ TEST_F(PersistentVolumeEndpointsTest, BadCreateACLMultipleRoles)
     UNAUTHORIZED_ROLE + "):1024";
 
   Future<SlaveID> slaveId;
-  EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
+  EXPECT_CALL(allocator, addSlave(_, _, _, _, _, _))
     .WillOnce(DoAll(InvokeAddSlave(&allocator), FutureArg<0>(&slaveId)));
 
   Try<PID<Slave>> slave = StartSlave(slaveFlags);
@@ -1397,13 +1397,13 @@ TEST_F(PersistentVolumeEndpointsTest, SlavesEndpointFullResources)
 {
   TestAllocator<> allocator;
 
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   Try<PID<Master>> master = StartMaster(&allocator);
   ASSERT_SOME(master);
 
   Future<SlaveID> slaveId;
-  EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
+  EXPECT_CALL(allocator, addSlave(_, _, _, _, _, _))
     .WillOnce(DoAll(InvokeAddSlave(&allocator),
                     FutureArg<0>(&slaveId)));
 
