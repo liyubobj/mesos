@@ -98,40 +98,10 @@ inline Try<Nothing> chmod(const std::string& path, int mode)
 }
 
 
-inline Try<Nothing> chroot(const std::string& directory)
-{
-  UNIMPLEMENTED;
-}
-
-
 inline Try<Nothing> mknod(
     const std::string& path,
     mode_t mode,
     dev_t dev)
-{
-  UNIMPLEMENTED;
-}
-
-
-inline Result<uid_t> getuid(const Option<std::string>& user = None())
-{
-  UNIMPLEMENTED;
-}
-
-
-inline Result<gid_t> getgid(const Option<std::string>& user = None())
-{
-  UNIMPLEMENTED;
-}
-
-
-inline Try<Nothing> su(const std::string& user)
-{
-  UNIMPLEMENTED;
-}
-
-
-inline Result<std::string> user(Option<uid_t> uid = None())
 {
   UNIMPLEMENTED;
 }

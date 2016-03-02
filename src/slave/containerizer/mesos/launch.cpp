@@ -61,6 +61,7 @@ MesosContainerizerLaunch::Flags::Flags()
       "The working directory for the executor. It will be ignored if\n"
       "container root filesystem is not specified.");
 
+#ifndef __WINDOWS__
   add(&rootfs,
       "rootfs",
       "Absolute path to the container root filesystem.\n"
@@ -71,6 +72,7 @@ MesosContainerizerLaunch::Flags::Flags()
   add(&user,
       "user",
       "The user to change to.");
+#endif // __WINDOWS__
 
   add(&pipe_read,
       "pipe_read",
@@ -210,12 +212,19 @@ int MesosContainerizerLaunch::execute()
     }
   }
 
+#ifdef __WINDOWS__
+  // Not supported on Windows.
+  const Option<std::string> rootfs = None();
+#else
+  const Option<std::string> rootfs = flags.rootfs;
+#endif // __WINDOWS__
+
   // Change root to a new root, if provided.
-  if (flags.rootfs.isSome()) {
-    cout << "Changing root to " << flags.rootfs.get() << endl;
+  if (rootfs.isSome()) {
+    cout << "Changing root to " << rootfs.get() << endl;
 
     // Verify that rootfs is an absolute path.
-    Result<string> realpath = os::realpath(flags.rootfs.get());
+    Result<string> realpath = os::realpath(rootfs.get());
     if (realpath.isError()) {
       cerr << "Failed to determine if rootfs is an absolute path: "
            << realpath.error() << endl;
@@ -223,18 +232,20 @@ int MesosContainerizerLaunch::execute()
     } else if (realpath.isNone()) {
       cerr << "Rootfs path does not exist" << endl;
       return 1;
-    } else if (realpath.get() != flags.rootfs.get()) {
+    } else if (realpath.get() != rootfs.get()) {
       cerr << "Rootfs path is not an absolute path" << endl;
       return 1;
     }
 
 #ifdef __linux__
-    Try<Nothing> chroot = fs::chroot::enter(flags.rootfs.get());
+    Try<Nothing> chroot = fs::chroot::enter(rootfs.get());
+#elif defined(__WINDOWS__)
+    Try<Nothing> chroot = Error("`chroot` not supported on Windows");
 #else // For any other platform we'll just use POSIX chroot.
-    Try<Nothing> chroot = os::chroot(flags.rootfs.get());
+    Try<Nothing> chroot = os::chroot(rootfs.get());
 #endif // __linux__
     if (chroot.isError()) {
-      cerr << "Failed to enter chroot '" << flags.rootfs.get()
+      cerr << "Failed to enter chroot '" << rootfs.get()
            << "': " << chroot.error();
       return 1;
     }
@@ -245,6 +256,7 @@ int MesosContainerizerLaunch::execute()
   // same privilege as the mesos-slave.
   // NOTE: The requisite user/group information must be present if
   // a container root filesystem is used.
+#ifndef __WINDOWS__
   if (flags.user.isSome()) {
     Try<Nothing> su = os::su(flags.user.get());
     if (su.isError()) {
@@ -253,10 +265,11 @@ int MesosContainerizerLaunch::execute()
       return 1;
     }
   }
+#endif // __WINDOWS__
 
   // Determine the current working directory for the executor.
   string cwd;
-  if (flags.rootfs.isSome() && flags.working_directory.isSome()) {
+  if (rootfs.isSome() && flags.working_directory.isSome()) {
     cwd = flags.working_directory.get();
   } else {
     cwd = flags.sandbox.get();
