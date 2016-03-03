@@ -28,7 +28,7 @@ include ../3rdparty/libprocess/3rdparty/versions.am
 DISTRIBUTE = 3rdparty/distribute-$(DISTRIBUTE_VERSION)
 PIP = 3rdparty/pip-$(PIP_VERSION)
 WHEEL = 3rdparty/wheel-$(WHEEL_VERSION)
-LEVELDB = 3rdparty/leveldb
+LEVELDB = 3rdparty/leveldb-$(LEVELDB_VERSION)
 ZOOKEEPER = 3rdparty/zookeeper-$(ZOOKEEPER_VERSION)/src/c
 ZOOKEEPER_JAR = 3rdparty/zookeeper-$(ZOOKEEPER_VERSION)/zookeeper-$(ZOOKEEPER_VERSION).jar
 LIBPROCESS = 3rdparty/libprocess
@@ -52,6 +52,7 @@ testlibexecdir = $(pkglibexecdir)/tests
 
 # Directory where Mesos modules are installed.
 pkgmoduledir = $(pkglibdir)/modules
+relative_pkgmoduledir = $(PACKAGE)/modules
 
 if WITH_BUNDLED_PROTOBUF
 # Protocol buffer compiler.
@@ -2007,7 +2008,7 @@ install-data-hook:
 	    liblogrotate_container_logger; do 			\
 		for lib in `cd $(DESTDIR)/$(pkgmoduledir) && ls $${name}*`; do \
 		  rm -f $$lib; 					\
-		  $(LN_S) $(DESTDIR)/$(pkgmoduledir)/$$lib $$lib; \
+		  $(LN_S) $(relative_pkgmoduledir)/$$lib $$lib; \
 		done;						\
 	done
 
