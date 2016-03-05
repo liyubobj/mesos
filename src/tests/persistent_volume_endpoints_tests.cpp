@@ -1228,9 +1228,9 @@ TEST_F(PersistentVolumeEndpointsTest, NoAuthentication)
   slave::Flags slaveFlags = CreateSlaveFlags();
   slaveFlags.resources = "cpus:1;mem:512;disk(" + TEST_ROLE + "):1024";
 
-  Future<SlaveID> agentId;
+  Future<SlaveID> slaveId;
   EXPECT_CALL(allocator, addSlave(_, _, _, _, _, _))
-    .WillOnce(DoAll(InvokeAddSlave(&allocator), FutureArg<0>(&agentId)));
+    .WillOnce(DoAll(InvokeAddSlave(&allocator), FutureArg<0>(&slaveId)));
 
   Owned<MasterDetector> detector = master.get()->createDetector();
   Try<Owned<cluster::Slave>> slave = StartSlave(detector.get(), slaveFlags);
