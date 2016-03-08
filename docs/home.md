@@ -30,11 +30,11 @@ layout: documentation
 * [Operational Guide](operational-guide.md)
 * [Monitoring](monitoring.md)
 * [Network Monitoring and Isolation](network-monitoring.md)
-* [Slave Recovery](slave-recovery.md) for doing seamless upgrades.
+* [Slave Recovery](slave-recovery.md) for doing seamless slave upgrades and allowing executors to survive `mesos-slave` crashes.
 * [Maintenance](maintenance.md) for performing maintenance on a Mesos cluster.
 * [Tools](tools.md) for setting up and running a Mesos cluster.
 * [SSL](ssl.md) for enabling and enforcing SSL communication.
-* [Mesos Image Provisioner](mesos-provisioner.md) for provisioning container filesystems from different image formats.
+* [Container Image](container-image.md) for supporting container images in Mesos containerizer.
 
 ## Advanced Features
 
