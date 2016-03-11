@@ -207,9 +207,6 @@ protected:
   {
     Image::Appc appc;
     appc.set_name("foo.com/bar");
-    appc.set_id(
-        "sha512-e77d96aa0240eedf134b8c90baeaf76dca8e78691836301d7498c8402044604"
-        "2e797b296d6ab296e0954c2626bfb264322ebeb8f447dac4fac6511ea06bc61f0");
 
     Label version;
     version.set_key("version");
@@ -454,14 +451,48 @@ TEST_F(ProvisionerAppcTest, Recover)
 class TestAppcImageServer : public Process<TestAppcImageServer>
 {
 public:
-  TestAppcImageServer() : ProcessBase("TestAppcImageServer") {}
+  TestAppcImageServer()
+    : ProcessBase("TestAppcImageServer"),
+      imagesDirName("server") {}
 
-  void addRoute(const string& imageName)
+  void load()
   {
-    route("/" + imageName, None(), &TestAppcImageServer::serveRequest);
+    const string imagesDir = path::join(os::getcwd(), imagesDirName);
+
+    Try<list<string>> imageBundles = os::ls(imagesDir);
+    ASSERT_SOME(imageBundles);
+
+    foreach (const string& imageName, imageBundles.get()) {
+      route("/" + imageName, None(), &TestAppcImageServer::serveRequest);
+    }
   }
 
-  MOCK_METHOD1(serveRequest, Future<http::Response>(const http::Request&));
+  Future<http::Response> serveRequest(const http::Request& request)
+  {
+    const string imageBundleName = request.url.path;
+
+    const string imageBundlePath = path::join(
+        os::getcwd(),
+        imagesDirName,
+        Path(imageBundleName).basename());
+
+    http::OK response;
+
+    response.type = response.PATH;
+    response.path = imageBundlePath;
+    response.headers["Content-Type"] = "application/octet-stream";
+    response.headers["Content-Disposition"] = strings::format(
+        "attachment; filename=%s",
+        imageBundlePath).get();
+
+    return response;
+  }
+
+private:
+  // TODO(jojy): Currently hard-codes the images dierctory name.
+  // Consider parameterizing the directory name. This could be done
+  // by removing the 'const' ness of teh variable and adding mutator.
+  const string imagesDirName;
 };
 
 
@@ -479,16 +510,16 @@ protected:
         stringify(server.self().address.ip),
         server.self().address.port).get();
 
-    return JSON::parse(
+    const string manifest = strings::format(
         R"~(
         {
           "acKind": "ImageManifest",
-          "acVersion": "0.6.1",
-          "name": " + imageName + ",
-          "labels": [
+            "acVersion": "0.6.1",
+            "name": "%s",
+            "labels": [
             {
               "name": "version",
-              "value": "1.0.0"
+              "value": "latest"
             },
             {
               "name": "arch",
@@ -499,45 +530,33 @@ protected:
               "value": "linux"
             }
           ],
-          "annotations": [
+            "annotations": [
             {
               "name": "created",
               "value": "1438983392"
             }
           ]
-        })~").get();
+        })~",
+        imageName).get();
+
+    return JSON::parse(manifest).get();
   }
 
-  // TODO(jojy): Currently only supports serving one image. Consider adding
-  // support serving any image on the server. One way to do this is to add a map
-  // of image name -> server path for each image.
-  Future<http::Response> serveImage()
+  void prepareImage(
+      const string& directory,
+      const string& imageBundlePath,
+      const JSON::Value& manifest)
   {
-    http::OK response;
-
-    response.type = response.PATH;
-    response.path = imageBundlePath;
-    response.headers["Content-Type"] = "application/octet-stream";
-    response.headers["Content-Disposition"] = strings::format(
-        "attachment; filename=%s",
-        imageBundlePath).get();
-
-    return response;
-  }
-
-  // TODO(jojy): Currently just uses 'imageId' to prepare a image on
-  // the server. Consider adding more parameters(e.g, 'labels').
-  void prepareServerImage(const string& fileName, const string& imageId)
-  {
-    const Path serverDir(path::join(os::getcwd(), "server"));
-
-    Try<string> createImage = createTestImage(serverDir, getManifest());
+    // Place the image in dir '@imageTopDir/images'.
+    Try<string> createImage = createTestImage(directory, getManifest());
     ASSERT_SOME(createImage);
 
-    // Set image file path for the test.
-    imageBundlePath = path::join(serverDir, fileName);
+    // Test image is created in a directory with this name.
+    const string imageId =
+      "sha512-e77d96aa0240eedf134b8c90baeaf76dca8e78691836301d7498c8402044604"
+      "2e797b296d6ab296e0954c2626bfb264322ebeb8f447dac4fac6511ea06bc61f0";
 
-    const Path imageDir(path::join(serverDir, "images", imageId));
+    const Path imageDir(path::join(directory, "images", imageId));
 
     Future<Nothing> future = command::tar(
         Path("."),
@@ -546,16 +565,10 @@ protected:
         command::Compression::GZIP);
 
     AWAIT_READY(future);
-
-    // Now add route on the server for the image.
-    server.addRoute(fileName);
   }
 
-  virtual void SetUp()
+  void startServer()
   {
-    TemporaryDirectoryTest::SetUp();
-
-    // Now spawn the image server.
     spawn(server);
   }
 
@@ -567,32 +580,39 @@ protected:
     TemporaryDirectoryTest::TearDown();
   }
 
-  string imageBundlePath;
   TestAppcImageServer server;
 };
 
 
-// Tests simple fetch functionality of the appc::Fetcher component.
+// Tests simple http fetch functionality of the appc::Fetcher component.
 // The test fetches a test Appc image from the http server and
 // verifies its content. The image is served in 'tar + gzip' format.
-TEST_F(AppcImageFetcherTest, CURL_SimpleFetch)
+TEST_F(AppcImageFetcherTest, CURL_SimpleHttpFetch)
 {
-  // Setup the image on the image server.
-  prepareServerImage(
-      "image-latest-linux-amd64.aci",
-      "sha512-e77d96aa0240eedf134b8c90baeaf76dca8e78691836301d7498c8402044604"
-      "2e797b296d6ab296e0954c2626bfb264322ebeb8f447dac4fac6511ea06bc61f0");
+  const string imageName = "image";
 
-  // Setup server.
-  EXPECT_CALL(server, serveRequest(_))
-    .WillOnce(Return(serveImage()));
+  const string imageBundleName = imageName + "-latest-linux-amd64.aci";
+
+  // Use the default server directory of the image server.
+  const Path serverDir(path::join(os::getcwd(), "server"));
+  const string imageBundlePath = path::join(serverDir, imageBundleName);
+
+  // Setup the image.
+  prepareImage(serverDir, imageBundlePath, getManifest());
+
+  // Setup http server to serve the image prepared above.
+  server.load();
+
+  startServer();
 
   // Appc Image to be fetched.
-  const string imageName =
-    stringify(server.self().address) + "/TestAppcImageServer/image";
+  const string discoverableImageName = strings::format(
+      "%s/TestAppcImageServer/%s",
+      stringify(server.self().address) ,
+      imageName).get();
 
   Image::Appc imageInfo;
-  imageInfo.set_name(imageName);
+  imageInfo.set_name(discoverableImageName);
 
   Label archLabel;
   archLabel.set_key("arch");
@@ -613,6 +633,81 @@ TEST_F(AppcImageFetcherTest, CURL_SimpleFetch)
   ASSERT_SOME(uriFetcher);
 
   slave::Flags flags;
+
+  Try<Owned<slave::appc::Fetcher>> fetcher =
+    slave::appc::Fetcher::create(flags, uriFetcher.get().share());
+
+  ASSERT_SOME(fetcher);
+
+  // Prepare fetch directory.
+  const Path imageFetchDir(path::join(os::getcwd(), "fetched-images"));
+
+  Try<Nothing> mkdir = os::mkdir(imageFetchDir);
+  ASSERT_SOME(mkdir);
+
+  // Now fetch the image.
+  AWAIT_READY(fetcher.get()->fetch(imageInfo, imageFetchDir));
+
+  // Verify that there is an image directory.
+  Try<list<string>> imageDirs = os::ls(imageFetchDir);
+  ASSERT_SOME(imageDirs);
+
+  // Verify that there is only ONE image directory.
+  ASSERT_EQ(1u, imageDirs.get().size());
+
+  // Verify that there is a roofs.
+  const Path imageRootfs(path::join(
+      imageFetchDir,
+      imageDirs.get().front(),
+      "rootfs"));
+
+  ASSERT_TRUE(os::exists(imageRootfs));
+
+  // Verify that the image fetched is the same as on the server.
+  ASSERT_SOME_EQ("test", os::read(path::join(imageRootfs, "tmp", "test")));
+}
+
+
+// Tests simple file fetch functionality of the appc::Fetcher component.
+TEST_F(AppcImageFetcherTest, SimpleFileFetch)
+{
+  const string imageName = "image";
+
+  const string imageBundleName = imageName + "-latest-linux-amd64.aci";
+
+  // This represents the directory where images volume could be mounted.
+  const string imageDirMountPath(path::join(os::getcwd(), "mnt"));
+
+  const string imageBundlePath = path::join(imageDirMountPath, imageBundleName);
+
+  // Setup the image bundle.
+  prepareImage(imageDirMountPath, imageBundlePath, getManifest());
+
+  Image::Appc imageInfo;
+  imageInfo.set_name("image");
+
+  Label archLabel;
+  archLabel.set_key("arch");
+  archLabel.set_value("amd64");
+
+  Label osLabel;
+  osLabel.set_key("os");
+  osLabel.set_value("linux");
+
+  Labels labels;
+  labels.add_labels()->CopyFrom(archLabel);
+  labels.add_labels()->CopyFrom(osLabel);
+
+  imageInfo.mutable_labels()->CopyFrom(labels);
+
+  // Create image fetcher.
+  Try<Owned<uri::Fetcher>> uriFetcher = uri::fetcher::create();
+  ASSERT_SOME(uriFetcher);
+
+  slave::Flags flags;
+
+  // Set file path prefix for simple image discovery.
+  flags.appc_simple_discovery_uri_prefix = imageDirMountPath + "/";
 
   Try<Owned<slave::appc::Fetcher>> fetcher =
     slave::appc::Fetcher::create(flags, uriFetcher.get().share());
