@@ -621,7 +621,6 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   local/local.cpp							\
   logging/flags.cpp							\
   logging/logging.cpp							\
-  master/constants.cpp							\
   master/contender.cpp							\
   master/detector.cpp							\
   master/flags.cpp							\
@@ -642,7 +641,6 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   master/allocator/sorter/drf/sorter.cpp				\
   messages/messages.cpp							\
   module/manager.cpp							\
-  sched/constants.cpp							\
   sched/sched.cpp							\
   scheduler/scheduler.cpp						\
   slave/constants.cpp							\
@@ -814,6 +812,7 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   tests/utils.hpp							\
   tests/zookeeper.hpp							\
   tests/zookeeper_test_server.hpp					\
+  tests/containerizer/docker_archive.hpp				\
   tests/containerizer/isolator.hpp					\
   tests/containerizer/launcher.hpp					\
   tests/containerizer/memory_test_helper.hpp				\
@@ -1931,6 +1930,7 @@ if OS_LINUX
 mesos_tests_SOURCES +=						\
   tests/containerizer/cgroups_isolator_tests.cpp		\
   tests/containerizer/cgroups_tests.cpp				\
+  tests/containerizer/runtime_isolator_tests.cpp		\
   tests/containerizer/filesystem_isolator_tests.cpp		\
   tests/containerizer/fs_tests.cpp				\
   tests/containerizer/launch_tests.cpp				\
