@@ -1825,16 +1825,16 @@ Future<bool> Master::authorizeFramework(
   LOG(INFO) << "Authorizing framework principal '" << frameworkInfo.principal()
             << "' to receive offers for role '" << frameworkInfo.role() << "'";
 
-  mesos::ACL::RegisterFramework request;
-  if (frameworkInfo.has_principal()) {
-    request.mutable_principals()->add_values(frameworkInfo.principal());
-  } else {
-    // Framework doesn't have a principal set.
-    request.mutable_principals()->set_type(mesos::ACL::Entity::ANY);
-  }
-  request.mutable_roles()->add_values(frameworkInfo.role());
+  authorization::Request request;
+  request.set_action(authorization::REGISTER_FRAMEWORK_WITH_ROLE);
 
-  return authorizer.get()->authorize(request);
+  if (frameworkInfo.has_principal()) {
+    request.mutable_subject()->set_value(frameworkInfo.principal());
+  }
+
+  request.mutable_object()->set_value(frameworkInfo.role());
+
+  return authorizer.get()->authorized(request);
 }
 
 
@@ -2852,16 +2852,16 @@ Future<bool> Master::authorizeTask(
     << "Authorizing framework principal '" << framework->info.principal()
     << "' to launch task " << task.task_id() << " as user '" << user << "'";
 
-  mesos::ACL::RunTask request;
-  if (framework->info.has_principal()) {
-    request.mutable_principals()->add_values(framework->info.principal());
-  } else {
-    // Framework doesn't have a principal set.
-    request.mutable_principals()->set_type(mesos::ACL::Entity::ANY);
-  }
-  request.mutable_users()->add_values(user);
+  authorization::Request request;
+  request.set_action(authorization::RUN_TASK_WITH_USER);
 
-  return authorizer.get()->authorize(request);
+  if (framework->info.has_principal()) {
+    request.mutable_subject()->set_value(framework->info.principal());
+  }
+
+  request.mutable_object()->set_value(user);
+
+  return authorizer.get()->authorized(request);
 }
 
 
@@ -2873,22 +2873,24 @@ Future<bool> Master::authorizeReserveResources(
     return true; // Authorization is disabled.
   }
 
-  mesos::ACL::ReserveResources request;
+  authorization::Request request;
+  request.set_action(authorization::RESERVE_RESOURCES_WITH_ROLE);
 
   if (principal.isSome()) {
-    request.mutable_principals()->add_values(principal.get());
-  } else {
-    request.mutable_principals()->set_type(ACL::Entity::ANY);
+    request.mutable_subject()->set_value(principal.get());
   }
 
   // The operation will be authorized if the principal is allowed to make
   // reservations for all roles included in `reserve.resources`.
   // Add an element to `request.roles` for each unique role in the resources.
   hashset<string> roles;
+  list<Future<bool>> authorizations;
   foreach (const Resource& resource, reserve.resources()) {
     if (!roles.contains(resource.role())) {
-      request.mutable_roles()->add_values(resource.role());
       roles.insert(resource.role());
+
+      request.mutable_object()->set_value(resource.role());
+      authorizations.push_back(authorizer.get()->authorized(request));
     }
   }
 
@@ -2896,7 +2898,26 @@ Future<bool> Master::authorizeReserveResources(
             << (principal.isSome() ? principal.get() : "ANY")
             << "' to reserve resources '" << reserve.resources() << "'";
 
-  return authorizer.get()->authorize(request);
+  // NOTE: Empty authorizations are not valid and are checked by a validator.
+  // However under certain circumstances, this method can be called before
+  // the validation occur and the case must be considered non erroneous.
+  // TODO(arojas): Consider ensuring that `validate()` is called before
+  // `authorizeReserveResources` so a `CHECK(!roles.empty())` can be added.
+  if (authorizations.empty()) {
+    return authorizer.get()->authorized(request);
+  }
+
+  return await(authorizations)
+      .then([](const std::list<Future<bool>>& authorizations)
+            -> Future<bool> {
+        // Compute a disjunction.
+        for (const Future<bool>& authorization : authorizations) {
+          if (!authorization.get()) {
+            return false;
+          }
+        }
+        return true;
+      });
 }
 
 
@@ -2908,14 +2929,14 @@ Future<bool> Master::authorizeUnreserveResources(
     return true; // Authorization is disabled.
   }
 
-  mesos::ACL::UnreserveResources request;
+  authorization::Request request;
+  request.set_action(authorization::UNRESERVE_RESOURCES_WITH_PRINCIPAL);
 
   if (principal.isSome()) {
-    request.mutable_principals()->add_values(principal.get());
-  } else {
-    request.mutable_principals()->set_type(ACL::Entity::ANY);
+    request.mutable_subject()->set_value(principal.get());
   }
 
+  list<Future<bool>> authorizations;
   foreach (const Resource& resource, unreserve.resources()) {
     // NOTE: Since validation of this operation is performed after
     // authorization, we must check here that this resource is
@@ -2923,8 +2944,10 @@ Future<bool> Master::authorizeUnreserveResources(
     // during validation.
     if (Resources::isDynamicallyReserved(resource) &&
         resource.reservation().has_principal()) {
-      request.mutable_reserver_principals()->add_values(
+      request.mutable_object()->set_value(
           resource.reservation().principal());
+
+      authorizations.push_back(authorizer.get()->authorized(request));
     }
   }
 
@@ -2933,7 +2956,21 @@ Future<bool> Master::authorizeUnreserveResources(
     << (principal.isSome() ? principal.get() : "ANY")
     << "' to unreserve resources '" << unreserve.resources() << "'";
 
-  return authorizer.get()->authorize(request);
+  if (authorizations.empty()) {
+    return authorizer.get()->authorized(request);
+  }
+
+  return await(authorizations)
+      .then([](const std::list<Future<bool>>& authorizations)
+            -> Future<bool> {
+        // Compute a disjunction.
+        for (const Future<bool>& authorization : authorizations) {
+          if (!authorization.get()) {
+            return false;
+          }
+        }
+        return true;
+      });
 }
 
 
@@ -2945,22 +2982,24 @@ Future<bool> Master::authorizeCreateVolume(
     return true; // Authorization is disabled.
   }
 
-  mesos::ACL::CreateVolume request;
+  authorization::Request request;
+  request.set_action(authorization::CREATE_VOLUME_WITH_ROLE);
 
   if (principal.isSome()) {
-    request.mutable_principals()->add_values(principal.get());
-  } else {
-    request.mutable_principals()->set_type(ACL::Entity::ANY);
+    request.mutable_subject()->set_value(principal.get());
   }
 
   // The operation will be authorized if the principal is allowed to create
   // volumes for all roles included in `create.volumes`.
   // Add an element to `request.roles` for each unique role in the volumes.
   hashset<string> roles;
+  list<Future<bool>> authorizations;
   foreach (const Resource& volume, create.volumes()) {
     if (!roles.contains(volume.role())) {
-      request.mutable_roles()->add_values(volume.role());
       roles.insert(volume.role());
+
+      request.mutable_object()->set_value(volume.role());
+      authorizations.push_back(authorizer.get()->authorized(request));
     }
   }
 
@@ -2969,7 +3008,21 @@ Future<bool> Master::authorizeCreateVolume(
     << (principal.isSome() ? principal.get() : "ANY")
     << "' to create volumes";
 
-  return authorizer.get()->authorize(request);
+  if (authorizations.empty()) {
+    return authorizer.get()->authorized(request);
+  }
+
+  return await(authorizations)
+      .then([](const std::list<Future<bool>>& authorizations)
+            -> Future<bool> {
+        // Compute a disjunction.
+        for (const Future<bool>& authorization : authorizations) {
+          if (!authorization.get()) {
+            return false;
+          }
+        }
+        return true;
+      });
 }
 
 
@@ -2981,21 +3034,23 @@ Future<bool> Master::authorizeDestroyVolume(
     return true; // Authorization is disabled.
   }
 
-  mesos::ACL::DestroyVolume request;
+  authorization::Request request;
+  request.set_action(authorization::DESTROY_VOLUME_WITH_PRINCIPAL);
 
   if (principal.isSome()) {
-    request.mutable_principals()->add_values(principal.get());
-  } else {
-    request.mutable_principals()->set_type(ACL::Entity::ANY);
+    request.mutable_subject()->set_value(principal.get());
   }
 
+  list<Future<bool>> authorizations;
   foreach (const Resource& volume, destroy.volumes()) {
     // NOTE: Since validation of this operation may be performed after
     // authorization, we must check here that this resource is a persistent
     // volume. If it isn't, the error will be caught during validation.
     if (Resources::isPersistentVolume(volume)) {
-      request.mutable_creator_principals()->add_values(
+      request.mutable_object()->set_value(
           volume.disk().persistence().principal());
+
+      authorizations.push_back(authorizer.get()->authorized(request));
     }
   }
 
@@ -3005,7 +3060,21 @@ Future<bool> Master::authorizeDestroyVolume(
     << "' to destroy volumes '"
     << stringify(destroy.volumes()) << "'";
 
-  return authorizer.get()->authorize(request);
+  if (authorizations.empty()) {
+    return authorizer.get()->authorized(request);
+  }
+
+  return await(authorizations)
+      .then([](const std::list<Future<bool>>& authorizations)
+            -> Future<bool> {
+        // Compute a disjunction.
+        for (const Future<bool>& authorization : authorizations) {
+          if (!authorization.get()) {
+            return false;
+          }
+        }
+        return true;
+      });
 }
 
 

@@ -155,6 +155,7 @@ endif
 
 # First, let's define necessary protocol buffer files.
 
+ACLS_PROTO = $(top_srcdir)/include/mesos/authorizer/acls.proto
 ALLOCATOR_PROTO = $(top_srcdir)/include/mesos/master/allocator.proto
 APPC_SPEC_PROTO = $(top_srcdir)/include/mesos/appc/spec.proto
 AUTHENTICATION_PROTO = $(top_srcdir)/include/mesos/authentication/authentication.proto
@@ -185,6 +186,8 @@ CXX_PROTOS =								\
   ../include/mesos/appc/spec.pb.h					\
   ../include/mesos/authentication/authentication.pb.cc			\
   ../include/mesos/authentication/authentication.pb.h			\
+  ../include/mesos/authorizer/acls.pb.cc				\
+  ../include/mesos/authorizer/acls.pb.h					\
   ../include/mesos/authorizer/authorizer.pb.cc				\
   ../include/mesos/authorizer/authorizer.pb.h				\
   ../include/mesos/containerizer/containerizer.pb.cc			\
@@ -406,10 +409,13 @@ nodist_authentication_HEADERS =						\
 authorizerdir = $(pkgincludedir)/authorizer
 
 authorizer_HEADERS =							\
+  $(top_srcdir)/include/mesos/authorizer/acls.hpp			\
+  $(top_srcdir)/include/mesos/authorizer/acls.proto			\
   $(top_srcdir)/include/mesos/authorizer/authorizer.hpp			\
   $(top_srcdir)/include/mesos/authorizer/authorizer.proto
 
 nodist_authorizer_HEADERS =						\
+  ../include/mesos/authorizer/acls.pb.h					\
   ../include/mesos/authorizer/authorizer.pb.h
 
 containerizerdir = $(pkgincludedir)/containerizer
@@ -591,6 +597,7 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   authentication/cram_md5/authenticator.cpp				\
   authentication/cram_md5/auxprop.cpp					\
   authentication/http/basic_authenticator_factory.cpp			\
+  authorizer/acls.cpp							\
   authorizer/authorizer.cpp						\
   authorizer/local/authorizer.cpp					\
   common/attributes.cpp							\
@@ -1031,6 +1038,7 @@ lib_LTLIBRARIES += libmesos.la
 
 # Include as part of the distribution.
 libmesos_la_SOURCES =							\
+  $(ACLS_PROTO)								\
   $(ALLOCATOR_PROTO)							\
   $(APPC_SPEC_PROTO)							\
   $(AUTHENTICATION_PROTO)						\
@@ -1459,18 +1467,23 @@ PYTHON_SOURCE =								\
   python/interface/src/mesos/interface/__init__.py			\
   python/interface/src/mesos/v1/__init__.py				\
   python/interface/src/mesos/v1/interface/__init__.py			\
+  python/native_common/common.hpp					\
   python/native/src/mesos/__init__.py					\
   python/native/src/mesos/native/__init__.py				\
-  python/native/src/mesos/native/mesos_executor_driver_impl.cpp		\
-  python/native/src/mesos/native/mesos_executor_driver_impl.hpp		\
-  python/native/src/mesos/native/mesos_scheduler_driver_impl.cpp	\
-  python/native/src/mesos/native/mesos_scheduler_driver_impl.hpp	\
-  python/native/src/mesos/native/module.cpp				\
-  python/native/src/mesos/native/module.hpp				\
-  python/native/src/mesos/native/proxy_executor.cpp			\
-  python/native/src/mesos/native/proxy_executor.hpp			\
-  python/native/src/mesos/native/proxy_scheduler.cpp			\
-  python/native/src/mesos/native/proxy_scheduler.hpp			\
+  python/executor/src/mesos/__init__.py					\
+  python/executor/src/mesos/executor/__init__.py			\
+  python/executor/src/mesos/executor/mesos_executor_driver_impl.cpp	\
+  python/executor/src/mesos/executor/mesos_executor_driver_impl.hpp	\
+  python/executor/src/mesos/executor/module.cpp				\
+  python/executor/src/mesos/executor/proxy_executor.cpp			\
+  python/executor/src/mesos/executor/proxy_executor.hpp			\
+  python/scheduler/src/mesos/__init__.py				\
+  python/scheduler/src/mesos/scheduler/__init__.py			\
+  python/scheduler/src/mesos/scheduler/mesos_scheduler_driver_impl.cpp	\
+  python/scheduler/src/mesos/scheduler/mesos_scheduler_driver_impl.hpp	\
+  python/scheduler/src/mesos/scheduler/module.cpp			\
+  python/scheduler/src/mesos/scheduler/proxy_scheduler.cpp		\
+  python/scheduler/src/mesos/scheduler/proxy_scheduler.hpp		\
   python/src/mesos/__init__.py
 
 EXTRA_DIST += $(PYTHON_SOURCE)
@@ -1522,14 +1535,18 @@ $(PYTHON_SOURCE):
 MESOS_EGGS =										\
   python/dist/mesos-$(PACKAGE_VERSION)$(PYTHON_EGG_PUREPY_POSTFIX).egg			\
   python/dist/mesos.cli-$(PACKAGE_VERSION)$(PYTHON_EGG_PUREPY_POSTFIX).egg		\
+  python/dist/mesos.executor-$(PACKAGE_VERSION)$(PYTHON_EGG_POSTFIX).egg		\
   python/dist/mesos.interface-$(PACKAGE_VERSION)$(PYTHON_EGG_PUREPY_POSTFIX).egg	\
-  python/dist/mesos.native-$(PACKAGE_VERSION)$(PYTHON_EGG_POSTFIX).egg
+  python/dist/mesos.native-$(PACKAGE_VERSION)$(PYTHON_EGG_POSTFIX).egg			\
+  python/dist/mesos.scheduler-$(PACKAGE_VERSION)$(PYTHON_EGG_POSTFIX).egg
 
 MESOS_WHLS =										\
   python/dist/mesos-$(PACKAGE_VERSION)$(PYTHON_WHL_PUREPY_POSTFIX).whl			\
   python/dist/mesos.cli-$(PACKAGE_VERSION)$(PYTHON_WHL_PUREPY_POSTFIX).whl		\
+  python/dist/mesos.executor-$(PACKAGE_VERSION)$(PYTHON_WHL_POSTFIX).whl		\
   python/dist/mesos.interface-$(PACKAGE_VERSION)$(PYTHON_WHL_PUREPY_POSTFIX).whl	\
-  python/dist/mesos.native-$(PACKAGE_VERSION)$(PYTHON_WHL_POSTFIX).whl
+  python/dist/mesos.native-$(PACKAGE_VERSION)$(PYTHON_WHL_POSTFIX).whl			\
+  python/dist/mesos.scheduler-$(PACKAGE_VERSION)$(PYTHON_WHL_POSTFIX).whl
 
 # The python source is in directories of the form: python/interface. The make
 # target is of the form: python/dist/mesos.interface-0.20.0-py2.7.egg. To build

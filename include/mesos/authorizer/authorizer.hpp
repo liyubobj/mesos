@@ -17,8 +17,7 @@
 #ifndef __MESOS_AUTHORIZER_AUTHORIZER_HPP__
 #define __MESOS_AUTHORIZER_AUTHORIZER_HPP__
 
-#include <iosfwd>
-#include <string>
+#include <mesos/mesos.hpp>
 
 // ONLY USEFUL AFTER RUNNING PROTOC.
 #include <mesos/authorizer/authorizer.pb.h>
@@ -31,196 +30,73 @@
 
 namespace mesos {
 
+class ACLs;
+
 /**
- * An interface for authorization of actions with ACLs. Refer to
- * "authorizer.proto" and "docs/authorization.md" for the details
- * regarding the authorization mechanism.
+ * This interface is used to enable an identity service or any other
+ * back end to check authorization policies for a set of predefined
+ * actions.
  *
- * Each `authorize()` function returns `Future<bool>`, which has the same
- * meaning for all functions. If the action is allowed, the future is set to
- * `true`, otherwise to `false`. A third possible outcome is that the future
- * fails, which indicates that the request could not be completed at the
- * moment. This may be a temporary condition.
+ * The `authorized()` method returns `Future<bool>`. If the action is
+ * allowed, the future is set to `true`, otherwise to `false`. A third
+ * possible outcome is that the future fails, which usually indicates
+ * that the back end could not be contacted or it does not understand
+ * the requested action. This may be a temporary condition.
  *
- * NOTE: Any request allows bundling multiple values for each entity, which
- * are often principals. Though the default authorizer implementation
- * (`LocalAuthorizer`) supports this feature, Mesos code currently does not
- * authorize multiple principals in a single call.
+ * A description of the behavior of the default implementation of this
+ * interface can be found in "docs/authorization.md".
  *
  * @see authorizer.proto
- * @see docs/authorization.md
  */
 class Authorizer
 {
 public:
-  static Try<Authorizer*> create(const std::string& name);
+  /**
+   * Factory method used to create instances of authorizer which are loaded from
+   * the `ModuleManager`. The parameters necessary to instantiate the authorizer
+   * are taken from the contents of the `--modules` flag.
+   *
+   * @param name The name of the module to be loaded as registered in the
+   *     `--modules` flag.
+   *
+   * @return An instance of `Authorizer*` if the module with the given name
+   *     could be constructed. An error otherwise.
+   */
+  static Try<Authorizer*> create(const std::string &name);
+
+  /**
+   * Factory method used to create instances of the default 'local'  authorizer.
+   *
+   * @param acls The access control lists used to initialize the 'local'
+   *     authorizer.
+   *
+   * @return An instance of the default 'local'  authorizer.
+   */
+  static Try<Authorizer*> create(const ACLs& acls);
 
   virtual ~Authorizer() {}
 
   /**
-   * Sets the Access Control Lists for the current instance of the interface.
-   * The contents of the `acls` parameter are used to define the rules which
-   * apply to the authorization actions.
+   * Checks with the identity server back end whether `request` is
+   * allowed by the policies of the identity server, i.e. `request.subject`
+   * can perform `request.action` with `request.object`. For details
+   * on how the request is built and what its parts are, refer to
+   * "authorizer.proto".
    *
-   * @param acls The access control lists used to initialize the authorizer
-   *     instance. See "authorizer.proto" for a description of their format.
+   * @param request `authorization::Request` instance packing all the
+   *     parameters needed to verify whether a subject can perform
+   *     a given action with an object.
    *
-   * @return `Nothing` if the instance of the authorizer was successfully
-   *     initialized, an `Error` otherwise.
-   *
-   * TODO(arojas): This function is relevant for the default implementation
-   * of the `Authorizer` class only (see MESOS-3072) and it will not be
-   * called for any other implementation. Remove it once we have a module-only
-   * initialization which relies on module-specific parameters supplied via
-   * the modules JSON blob.
+   * @return `true` if the action is allowed, the future is set to `true`,
+   *     otherwise `false`. A failed future indicates a problem processing
+   *     the request, and it might be retried in the future.
    */
-  virtual Try<Nothing> initialize(const Option<ACLs>& acls) = 0;
-
-  /**
-   * Verifies whether a principal can register a framework with a specific role.
-   *
-   * @param request `ACL::RegisterFramework` packing all the parameters
-   *     needed to verify if the given principal can register a framework
-   *     with the specified role.
-   *
-   * @return true if the principal can register the framework with the
-   *     specified role or false otherwise. A failed future indicates a
-   *     problem processing the request; the request can be retried.
-   */
-  virtual process::Future<bool> authorize(
-      const ACL::RegisterFramework& request) = 0;
-
-  /**
-   * Verifies whether a principal can run tasks as the given UNIX user.
-   *
-   * @param request `ACL::RunTask` packing all the parameters needed to verify
-   *     if the given principal can launch a task using the specified UNIX user.
-   *
-   * @return true if the principal can run a task using the given UNIX user
-   *     name, false otherwise. A failed future indicates a problem processing
-   *     the request; the request can be retried.
-   */
-  virtual process::Future<bool> authorize(
-      const ACL::RunTask& request) = 0;
-
-  /**
-   * Verifies whether a principal can teardown a framework launched by another
-   * principal.
-   *
-   * @param request `ACL::TeardownFramework` packing all the parameters needed
-   *     to verify the given principal can teardown a framework originally
-   *     registered by a (potentially different) framework principal.
-   *
-   * @return true if the principal can teardown a framework registered by the
-   *     framework principal, false otherwise. A failed future indicates a
-   *     problem processing the request; the request can be retried.
-   */
-  virtual process::Future<bool> authorize(
-      const ACL::TeardownFramework& request) = 0;
-
-  /**
-   * Verifies whether a principal can reserve particular resources.
-   *
-   * @param request `ACL::ReserveResources` packing all the parameters needed to
-   *     verify the given principal can reserve one or more types of resources.
-   *
-   * @return true if the principal can reserve the resources, false otherwise. A
-   *     failed future indicates a problem processing the request; the request
-   *     can be retried.
-   */
-  virtual process::Future<bool> authorize(
-      const ACL::ReserveResources& request) = 0;
-
-  /**
-   * Verifies whether a principal can unreserve resources reserved by another
-   * principal.
-   *
-   * @param request `ACL::UnreserveResources` packing all the parameters needed
-   *     to verify the given principal can unreserve resources which were
-   *     reserved by the reserver principal contained in the request.
-   *
-   * @return true if the principal can unreserve resources which were reserved
-   *     by the reserver principal, false otherwise. A failed future indicates
-   *     a problem processing the request; the request can be retried.
-   */
-  virtual process::Future<bool> authorize(
-      const ACL::UnreserveResources& request) = 0;
-
-  /**
-   * Verifies whether a principal can create a persistent volume.
-   *
-   * @param request `ACL::CreateVolume` packing all the parameters needed to
-   *     verify the given principal can create the given type of volume.
-   *
-   * @return true if the principal can create a persistent volume, false
-   *     otherwise. A failed future indicates a problem processing the
-   *     request; the request can be retried.
-   */
-  virtual process::Future<bool> authorize(
-      const ACL::CreateVolume& request) = 0;
-
-  /**
-   * Verifies whether a principal can destroy a volume created by another
-   * principal.
-   *
-   * @param request `ACL::DestroyVolume` packing all the parameters needed to
-   *     verify the given principal can destroy volumes which were created by
-   *     the creator principal contained in the request.
-   *
-   * @return true if the principal can destroy volumes which were created by
-   *     the creator principal, false otherwise. A failed future indicates a
-   *     problem processing the request; the request can be retried.
-   */
-  virtual process::Future<bool> authorize(
-      const ACL::DestroyVolume& request) = 0;
-
-  /**
-   * Verifies whether a principal can set a quota for a specific role.
-   *
-   * @param request `ACL::SetQuota` packing all the parameters needed to verify
-   *     if the given principal can set a quota for the specified role.
-   *
-   * @return true if the principal can set a quota for the specified role,
-   *     false otherwise. A failed future indicates a problem processing
-   *     the request; the request can be retried.
-   */
-  virtual process::Future<bool> authorize(
-      const ACL::SetQuota& request) = 0;
-
-  /**
-   * Verifies whether a principal can remove a quota set by another principal.
-   *
-   * @param request `ACL::RemoveQuota` packing all the parameters needed to
-   *     verify the given principal can remove quotas which were set by the
-   *     principal contained in the set request.
-   *
-   * @return true if the principal can remove quotas which were set by the quota
-   *     principal, false otherwise. A failed future indicates a problem
-   *     processing the request; the request can be retried.
-   */
-  virtual process::Future<bool> authorize(
-      const ACL::RemoveQuota& request) = 0;
-
-  /**
-   * Verifies whether a principal can update the weight for the specific roles.
-   *
-   * @param request `ACL::UpdateWeights` packing all the parameters needed to
-   *     verify if the given principal is allowed to update the weight of the
-   *     specified roles.
-   *
-   * @return true if the principal is allowed to update the weight for every
-   *     specified role, false otherwise. A failed future indicates a problem
-   *     processing the request; the request can be retried.
-   */
-  virtual process::Future<bool> authorize(
-      const ACL::UpdateWeights& request) = 0;
+  virtual process::Future<bool> authorized(
+      const authorization::Request& request) = 0;
 
 protected:
   Authorizer() {}
 };
-
-
-std::ostream& operator<<(std::ostream& stream, const ACLs& acls);
 
 } // namespace mesos {
 
