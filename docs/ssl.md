@@ -98,6 +98,8 @@ SSL_ENABLED=true SSL_SUPPORT_DOWNGRADE=true SSL_KEY_FILE=<path-to-your-private-k
 // Restart each component WITHOUT downgrade support (master, slave, framework):
 SSL_ENABLED=true SSL_SUPPORT_DOWNGRADE=false SSL_KEY_FILE=<path-to-your-private-key> SSL_CERT_FILE=<path-to-your-certificate> <Any other SSL_* environment variables you may choose> <your-component (e.g. bin/master.sh)> <your-flags>
 ~~~
+Executors must be able to access the SSL environment variables and the files referred to by those variables. Environment variables can be provided to an executor by specifying `CommandInfo.environment` or by using the slave's `--executor_environment_variables` command line flag. If the slave and the executor are running in separate containers, `ContainerInfo.volumes` can be used to mount SSL files from the host into the executor's container.
+
 The end state is a cluster that is only communicating with SSL.
 
 __NOTE:__ Any tools you may use that communicate with your components must be able to speak SSL, or they will be denied. You may choose to maintain `SSL_SUPPORT_DOWNGRADE=true` for some time as you upgrade your internal tooling. The advantage of `SSL_SUPPORT_DOWNGRADE=true` is that all components that speak SSL will do so, while other components may still communicate over insecure channels.
