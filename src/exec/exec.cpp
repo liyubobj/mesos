@@ -85,11 +85,11 @@ protected:
   virtual void initialize()
   {
     VLOG(1) << "Scheduling shutdown of the executor in "
-            << slave::EXECUTOR_SHUTDOWN_GRACE_PERIOD;
+            << slave::DEFAULT_EXECUTOR_SHUTDOWN_GRACE_PERIOD;
 
     // TODO(benh): Pass the shutdown timeout with ExecutorRegistered
     // since it might have gotten configured on the command line.
-    delay(slave::EXECUTOR_SHUTDOWN_GRACE_PERIOD, self(), &Self::kill);
+    delay(slave::DEFAULT_EXECUTOR_SHUTDOWN_GRACE_PERIOD, self(), &Self::kill);
   }
 
   void kill()
@@ -120,7 +120,7 @@ public:
                   bool _local,
                   const string& _directory,
                   bool _checkpoint,
-                  Duration _recoveryTimeout,
+                  const Duration& _recoveryTimeout,
                   std::recursive_mutex* _mutex,
                   Latch* _latch)
     : ProcessBase(ID::generate("executor")),
@@ -705,15 +705,15 @@ Status MesosExecutorDriver::start()
       value = os::getenv("MESOS_RECOVERY_TIMEOUT");
 
       if (value.isSome()) {
-        Try<Duration> _recoveryTimeout = Duration::parse(value.get());
+        Try<Duration> parse = Duration::parse(value.get());
 
-        if (_recoveryTimeout.isError()) {
+        if (parse.isError()) {
           EXIT(EXIT_FAILURE)
-            << "Cannot parse MESOS_RECOVERY_TIMEOUT '" << value.get() << "': "
-            << _recoveryTimeout.error();
+            << "Failed to parse value '" << value.get() << "'"
+            << " of 'MESOS_RECOVERY_TIMEOUT': " << parse.error();
         }
 
-        recoveryTimeout = _recoveryTimeout.get();
+        recoveryTimeout = parse.get();
       }
     }
 
