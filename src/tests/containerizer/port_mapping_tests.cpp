@@ -22,6 +22,7 @@
 
 #include <process/future.hpp>
 #include <process/io.hpp>
+#include <process/owned.hpp>
 #include <process/reap.hpp>
 #include <process/subprocess.hpp>
 
@@ -1849,7 +1850,7 @@ TEST_F(PortMappingMesosTest, CGROUPS_ROOT_RecoverMixedContainers)
 {
   master::Flags masterFlags = CreateMasterFlags();
 
-  Try<PID<Master>> master = StartMaster(masterFlags);
+  Try<Owned<cluster::Master>> master = StartMaster(masterFlags);
   ASSERT_SOME(master);
 
   // Start the first slave without the network isolator.
@@ -1860,12 +1861,16 @@ TEST_F(PortMappingMesosTest, CGROUPS_ROOT_RecoverMixedContainers)
   // we create in this test. Also, this will bypass MESOS-2554.
   slaveFlags.isolation = "cgroups/cpu,cgroups/mem";
 
-  Try<MesosContainerizer*> containerizer1 =
+  Try<MesosContainerizer*> _containerizer =
     MesosContainerizer::create(slaveFlags, true, &fetcher);
 
-  ASSERT_SOME(containerizer1);
+  ASSERT_SOME(_containerizer);
+  Owned<MesosContainerizer> containerizer(_containerizer.get());
 
-  Try<PID<Slave> > slave = StartSlave(containerizer1.get(), slaveFlags);
+  Owned<MasterDetector> detector = master.get()->createDetector();
+
+  Try<Owned<cluster::Slave>> slave =
+    StartSlave(detector.get(), containerizer.get(), slaveFlags);
   ASSERT_SOME(slave);
 
   MockScheduler sched;
@@ -1875,7 +1880,7 @@ TEST_F(PortMappingMesosTest, CGROUPS_ROOT_RecoverMixedContainers)
   frameworkInfo.set_checkpoint(true);
 
   MesosSchedulerDriver driver(
-      &sched, frameworkInfo, master.get(), DEFAULT_CREDENTIAL);
+      &sched, frameworkInfo, master.get()->pid, DEFAULT_CREDENTIAL);
 
   EXPECT_CALL(sched, registered(_, _, _));
 
@@ -1912,8 +1917,7 @@ TEST_F(PortMappingMesosTest, CGROUPS_ROOT_RecoverMixedContainers)
   // Wait for the ACK to be checkpointed.
   AWAIT_READY(_statusUpdateAcknowledgement1);
 
-  Stop(slave.get());
-  delete containerizer1.get();
+  slave.get()->terminate();
 
   Future<Nothing> _recover1 = FUTURE_DISPATCH(_, &Slave::_recover);
 
@@ -1928,12 +1932,11 @@ TEST_F(PortMappingMesosTest, CGROUPS_ROOT_RecoverMixedContainers)
   // Restart the slave with the network isolator.
   slaveFlags.isolation += ",network/port_mapping";
 
-  Try<MesosContainerizer*> containerizer2 =
-    MesosContainerizer::create(slaveFlags, true, &fetcher);
+  _containerizer = MesosContainerizer::create(slaveFlags, true, &fetcher);
+  ASSERT_SOME(_containerizer);
+  containerizer.reset(_containerizer.get());
 
-  ASSERT_SOME(containerizer2);
-
-  slave = StartSlave(containerizer2.get(), slaveFlags);
+  slave = StartSlave(detector.get(), containerizer.get(), slaveFlags);
   ASSERT_SOME(slave);
 
   Clock::pause();
@@ -1968,8 +1971,7 @@ TEST_F(PortMappingMesosTest, CGROUPS_ROOT_RecoverMixedContainers)
   // Wait for the ACK to be checkpointed.
   AWAIT_READY(_statusUpdateAcknowledgement2);
 
-  Stop(slave.get());
-  delete containerizer2.get();
+  slave.get()->terminate();
 
   Future<Nothing> _recover2 = FUTURE_DISPATCH(_, &Slave::_recover);
 
@@ -1979,12 +1981,11 @@ TEST_F(PortMappingMesosTest, CGROUPS_ROOT_RecoverMixedContainers)
   // Restart the slave with the network isolator. This is to verify
   // the slave recovery case where one task is running with the
   // network isolator and another task is running without it.
-  Try<MesosContainerizer*> containerizer3 =
-    MesosContainerizer::create(slaveFlags, true, &fetcher);
+  _containerizer = MesosContainerizer::create(slaveFlags, true, &fetcher);
+  ASSERT_SOME(_containerizer);
+  containerizer.reset(_containerizer.get());
 
-  ASSERT_SOME(containerizer3);
-
-  slave = StartSlave(containerizer3.get(), slaveFlags);
+  slave = StartSlave(detector.get(), containerizer.get(), slaveFlags);
   ASSERT_SOME(slave);
 
   Clock::pause();
@@ -2000,14 +2001,14 @@ TEST_F(PortMappingMesosTest, CGROUPS_ROOT_RecoverMixedContainers)
 
   // Ensure that both containers (with and without network isolation)
   // were recovered.
-  Future<hashset<ContainerID>> containers = containerizer3.get()->containers();
+  Future<hashset<ContainerID>> containers = containerizer.get()->containers();
   AWAIT_READY(containers);
   EXPECT_EQ(2u, containers.get().size());
 
   foreach (const ContainerID& containerId, containers.get()) {
     // Do some basic checks to make sure the network isolator can
     // handle mixed types of containers correctly.
-    Future<ResourceStatistics> usage = containerizer3.get()->usage(containerId);
+    Future<ResourceStatistics> usage = containerizer.get()->usage(containerId);
     AWAIT_READY(usage);
 
     // TODO(chzhcn): Write a more thorough test for update.
@@ -2015,9 +2016,6 @@ TEST_F(PortMappingMesosTest, CGROUPS_ROOT_RecoverMixedContainers)
 
   driver.stop();
   driver.join();
-
-  Shutdown();
-  delete containerizer3.get();
 }
 
 
@@ -2025,7 +2023,7 @@ TEST_F(PortMappingMesosTest, CGROUPS_ROOT_RecoverMixedContainers)
 // orphaned container using the network isolator.
 TEST_F(PortMappingMesosTest, CGROUPS_ROOT_CleanUpOrphan)
 {
-  Try<PID<Master> > master = StartMaster();
+  Try<Owned<cluster::Master>> master = StartMaster();
   ASSERT_SOME(master);
 
   slave::Flags flags = CreateSlaveFlags();
@@ -2033,7 +2031,8 @@ TEST_F(PortMappingMesosTest, CGROUPS_ROOT_CleanUpOrphan)
   // NOTE: We add 'cgroups/cpu,cgroups/mem' to bypass MESOS-2554.
   flags.isolation = "cgroups/cpu,cgroups/mem,network/port_mapping";
 
-  Try<PID<Slave> > slave = StartSlave(flags);
+  Owned<MasterDetector> detector = master.get()->createDetector();
+  Try<Owned<cluster::Slave>> slave = StartSlave(detector.get(), flags);
   ASSERT_SOME(slave);
 
   MockScheduler sched;
@@ -2043,7 +2042,7 @@ TEST_F(PortMappingMesosTest, CGROUPS_ROOT_CleanUpOrphan)
   frameworkInfo.set_checkpoint(true);
 
   MesosSchedulerDriver driver(
-      &sched, frameworkInfo, master.get(), DEFAULT_CREDENTIAL);
+      &sched, frameworkInfo, master.get()->pid, DEFAULT_CREDENTIAL);
 
   Future<FrameworkID> frameworkId;
   EXPECT_CALL(sched, registered(_, _, _))
@@ -2072,7 +2071,7 @@ TEST_F(PortMappingMesosTest, CGROUPS_ROOT_CleanUpOrphan)
   // Wait for the ACK to be checkpointed.
   AWAIT_READY(_statusUpdateAcknowledgement);
 
-  Stop(slave.get());
+  slave.get()->terminate();
 
   // Wipe the slave meta directory so that the slave will treat the
   // above running task as an orphan.
@@ -2085,7 +2084,7 @@ TEST_F(PortMappingMesosTest, CGROUPS_ROOT_CleanUpOrphan)
     FUTURE_DISPATCH(_, &MesosContainerizerProcess::___recover);
 
   // Restart the slave.
-  slave = StartSlave(flags);
+  slave = StartSlave(detector.get(), flags);
   ASSERT_SOME(slave);
 
   AWAIT_READY(slaveRegisteredMessage);
@@ -2123,8 +2122,6 @@ TEST_F(PortMappingMesosTest, CGROUPS_ROOT_CleanUpOrphan)
 
   driver.stop();
   driver.join();
-
-  Shutdown();
 }
 
 
@@ -2132,24 +2129,28 @@ TEST_F(PortMappingMesosTest, CGROUPS_ROOT_CleanUpOrphan)
 // namespace handle symlink. The symlink was introduced in 0.23.0.
 TEST_F(PortMappingMesosTest, ROOT_NetworkNamespaceHandleSymlink)
 {
-  Try<PID<Master> > master = StartMaster();
+  Try<Owned<cluster::Master>> master = StartMaster();
   ASSERT_SOME(master);
 
   slave::Flags flags = CreateSlaveFlags();
   flags.isolation = "network/port_mapping";
 
-  Try<MesosContainerizer*> containerizer =
+  Try<MesosContainerizer*> _containerizer =
     MesosContainerizer::create(flags, true, &fetcher);
 
-  ASSERT_SOME(containerizer);
+  ASSERT_SOME(_containerizer);
+  Owned<MesosContainerizer> containerizer(_containerizer.get());
 
-  Try<PID<Slave>> slave = StartSlave(containerizer.get(), flags);
+  Owned<MasterDetector> detector = master.get()->createDetector();
+
+  Try<Owned<cluster::Slave>> slave =
+    StartSlave(detector.get(), containerizer.get(), flags);
   ASSERT_SOME(slave);
 
   MockScheduler sched;
 
   MesosSchedulerDriver driver(
-      &sched, DEFAULT_FRAMEWORK_INFO, master.get(), DEFAULT_CREDENTIAL);
+      &sched, DEFAULT_FRAMEWORK_INFO, master.get()->pid, DEFAULT_CREDENTIAL);
 
   EXPECT_CALL(sched, registered(_, _, _));
 
@@ -2179,7 +2180,7 @@ TEST_F(PortMappingMesosTest, ROOT_NetworkNamespaceHandleSymlink)
   EXPECT_EQ(task.task_id(), status1.get().task_id());
   EXPECT_EQ(TASK_RUNNING, status1.get().state());
 
-  Future<hashset<ContainerID>> containers = containerizer.get()->containers();
+  Future<hashset<ContainerID>> containers = containerizer->containers();
   AWAIT_READY(containers);
   ASSERT_EQ(1u, containers.get().size());
 
@@ -2193,7 +2194,7 @@ TEST_F(PortMappingMesosTest, ROOT_NetworkNamespaceHandleSymlink)
   EXPECT_TRUE(os::stat::islink(symlink));
 
   Future<containerizer::Termination> termination =
-    containerizer.get()->wait(containerId);
+    containerizer->wait(containerId);
 
   driver.killTask(task.task_id());
 
@@ -2206,10 +2207,6 @@ TEST_F(PortMappingMesosTest, ROOT_NetworkNamespaceHandleSymlink)
 
   driver.stop();
   driver.join();
-
-  Shutdown();
-
-  delete containerizer.get();
 }
 
 
@@ -2218,18 +2215,22 @@ TEST_F(PortMappingMesosTest, ROOT_NetworkNamespaceHandleSymlink)
 // described in MESOS-2914.
 TEST_F(PortMappingMesosTest, CGROUPS_ROOT_RecoverMixedKnownAndUnKnownOrphans)
 {
-  Try<PID<Master>> master = StartMaster();
+  Try<Owned<cluster::Master>> master = StartMaster();
   ASSERT_SOME(master);
 
   slave::Flags flags = CreateSlaveFlags();
   flags.isolation = "network/port_mapping";
 
-  Try<MesosContainerizer*> containerizer =
+  Try<MesosContainerizer*> _containerizer =
     MesosContainerizer::create(flags, true, &fetcher);
 
-  ASSERT_SOME(containerizer);
+  ASSERT_SOME(_containerizer);
+  Owned<MesosContainerizer> containerizer(_containerizer.get());
 
-  Try<PID<Slave> > slave = StartSlave(containerizer.get(), flags);
+  Owned<MasterDetector> detector = master.get()->createDetector();
+
+  Try<Owned<cluster::Slave>> slave =
+    StartSlave(detector.get(), containerizer.get(), flags);
   ASSERT_SOME(slave);
 
   MockScheduler sched;
@@ -2238,7 +2239,7 @@ TEST_F(PortMappingMesosTest, CGROUPS_ROOT_RecoverMixedKnownAndUnKnownOrphans)
   frameworkInfo.set_checkpoint(true);
 
   MesosSchedulerDriver driver(
-      &sched, frameworkInfo, master.get(), DEFAULT_CREDENTIAL);
+      &sched, frameworkInfo, master.get()->pid, DEFAULT_CREDENTIAL);
 
   EXPECT_CALL(sched, registered(_, _, _));
 
@@ -2280,12 +2281,11 @@ TEST_F(PortMappingMesosTest, CGROUPS_ROOT_RecoverMixedKnownAndUnKnownOrphans)
   ASSERT_EQ(TASK_RUNNING, status2.get().state());
 
   // Obtain the container IDs.
-  Future<hashset<ContainerID>> containers = containerizer.get()->containers();
+  Future<hashset<ContainerID>> containers = containerizer->containers();
   AWAIT_READY(containers);
   ASSERT_EQ(2u, containers.get().size());
 
-  Stop(slave.get());
-  delete containerizer.get();
+  slave.get()->terminate();
 
   // Wipe the slave meta directory so that the slave will treat the
   // above running tasks as orphans.
@@ -2309,7 +2309,7 @@ TEST_F(PortMappingMesosTest, CGROUPS_ROOT_RecoverMixedKnownAndUnKnownOrphans)
     FUTURE_DISPATCH(_, &MesosContainerizerProcess::___recover);
 
   // Restart the slave.
-  slave = StartSlave(flags);
+  slave = StartSlave(detector.get(), flags);
   ASSERT_SOME(slave);
 
   AWAIT_READY(slaveRegisteredMessage);

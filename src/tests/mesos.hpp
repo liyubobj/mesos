@@ -109,8 +109,6 @@ class MesosTest : public SSLTemporaryDirectoryTest
 protected:
   MesosTest(const Option<zookeeper::URL>& url = None());
 
-  virtual void TearDown();
-
   // Returns the flags used to create masters.
   virtual master::Flags CreateMasterFlags();
 
@@ -118,23 +116,23 @@ protected:
   virtual slave::Flags CreateSlaveFlags();
 
   // Starts a master with the specified flags.
-  virtual Try<process::PID<master::Master> > StartMaster(
+  virtual Try<process::Owned<cluster::Master>> StartMaster(
       const Option<master::Flags>& flags = None());
 
   // Starts a master with the specified allocator process and flags.
-  virtual Try<process::PID<master::Master> > StartMaster(
+  virtual Try<process::Owned<cluster::Master>> StartMaster(
       mesos::master::allocator::Allocator* allocator,
       const Option<master::Flags>& flags = None());
 
   // Starts a master with the specified authorizer and flags.
-  // Waits for the master to detect a leader (could be itself) before
-  // returning if 'wait' is set to true.
-  virtual Try<process::PID<master::Master> > StartMaster(
+  virtual Try<process::Owned<cluster::Master>> StartMaster(
       Authorizer* authorizer,
       const Option<master::Flags>& flags = None());
 
   // Starts a master with a slave removal rate limiter and flags.
-  virtual Try<process::PID<master::Master> > StartMaster(
+  // NOTE: The `slaveRemovalLimiter` is a `shared_ptr` because the
+  // underlying `Master` process requires the pointer in this form.
+  virtual Try<process::Owned<cluster::Master>> StartMaster(
       const std::shared_ptr<MockRateLimiter>& slaveRemovalLimiter,
       const Option<master::Flags>& flags = None());
 
@@ -157,102 +155,59 @@ protected:
   // injections.gc = gc;
   // Try<PID<Slave> > slave = StartSlave(injections);
 
-  // Starts a slave with the specified flags.
-  virtual Try<process::PID<slave::Slave> > StartSlave(
+  // Starts a slave with the specified detector and flags.
+  virtual Try<process::Owned<cluster::Slave>> StartSlave(
+      MasterDetector* detector,
       const Option<slave::Flags>& flags = None());
 
-  // Starts a slave with the specified mock executor and flags.
-  virtual Try<process::PID<slave::Slave> > StartSlave(
-      MockExecutor* executor,
-      const Option<slave::Flags>& flags = None());
-
-  // Starts a slave with the specified containerizer and flags.
-  virtual Try<process::PID<slave::Slave> > StartSlave(
+  // Starts a slave with the specified detector, containerizer, and flags.
+  virtual Try<process::Owned<cluster::Slave>> StartSlave(
+      MasterDetector* detector,
       slave::Containerizer* containerizer,
       const Option<slave::Flags>& flags = None());
 
-  virtual Try<process::PID<slave::Slave> > StartSlave(
+  // Starts a slave with the specified detector, containerizer, id, and flags.
+  virtual Try<process::Owned<cluster::Slave>> StartSlave(
+      MasterDetector* detector,
       slave::Containerizer* containerizer,
       const std::string& id,
       const Option<slave::Flags>& flags = None());
 
-  // Starts a slave with the specified containerizer, detector and flags.
-  virtual Try<process::PID<slave::Slave> > StartSlave(
-      slave::Containerizer* containerizer,
-      MasterDetector* detector,
-      const Option<slave::Flags>& flags = None());
-
-  // Starts a slave with the specified MasterDetector and flags.
-  virtual Try<process::PID<slave::Slave> > StartSlave(
-      MasterDetector* detector,
-      const Option<slave::Flags>& flags = None());
-
-  // Starts a slave with the specified MasterDetector, GC, and flags.
-  virtual Try<process::PID<slave::Slave> > StartSlave(
+  // Starts a slave with the specified detector, GC, and flags.
+  virtual Try<process::Owned<cluster::Slave>> StartSlave(
       MasterDetector* detector,
       slave::GarbageCollector* gc,
       const Option<slave::Flags>& flags = None());
 
-  // Starts a slave with the specified mock executor, MasterDetector
-  // and flags.
-  virtual Try<process::PID<slave::Slave> > StartSlave(
-      MockExecutor* executor,
+  // Starts a slave with the specified detector, resource estimator, and flags.
+  virtual Try<process::Owned<cluster::Slave>> StartSlave(
       MasterDetector* detector,
-      const Option<slave::Flags>& flags = None());
-
-  // Starts a slave with the specified resource estimator and flags.
-  virtual Try<process::PID<slave::Slave>> StartSlave(
       mesos::slave::ResourceEstimator* resourceEstimator,
       const Option<slave::Flags>& flags = None());
 
-  // Starts a slave with the specified mock executor, resource
-  // estimator and flags.
-  virtual Try<process::PID<slave::Slave>> StartSlave(
-      MockExecutor* executor,
-      mesos::slave::ResourceEstimator* resourceEstimator,
-      const Option<slave::Flags>& flags = None());
-
-  // Starts a slave with the specified resource estimator,
-  // containerizer and flags.
-  virtual Try<process::PID<slave::Slave>> StartSlave(
+  // Starts a slave with the specified detector, containerizer,
+  // resource estimator, and flags.
+  virtual Try<process::Owned<cluster::Slave>> StartSlave(
+      MasterDetector* detector,
       slave::Containerizer* containerizer,
       mesos::slave::ResourceEstimator* resourceEstimator,
       const Option<slave::Flags>& flags = None());
 
-  // Starts a slave with the specified QoS Controller and flags.
-  virtual Try<process::PID<slave::Slave>> StartSlave(
+  // Starts a slave with the specified detector, QoS Controller, and flags.
+  virtual Try<process::Owned<cluster::Slave>> StartSlave(
+      MasterDetector* detector,
       mesos::slave::QoSController* qosController,
       const Option<slave::Flags>& flags = None());
 
-  // Starts a slave with the specified QoS Controller,
-  // containerizer and flags.
-  virtual Try<process::PID<slave::Slave>> StartSlave(
+  // Starts a slave with the specified detector, containerizer,
+  // QoS Controller, and flags.
+  virtual Try<process::Owned<cluster::Slave>> StartSlave(
+      MasterDetector* detector,
       slave::Containerizer* containerizer,
       mesos::slave::QoSController* qosController,
       const Option<slave::Flags>& flags = None());
 
-  // Stop the specified master.
-  virtual void Stop(
-      const process::PID<master::Master>& pid);
-
-  // Stop the specified slave.
-  virtual void Stop(
-      const process::PID<slave::Slave>& pid,
-      bool shutdown = false);
-
-  // Stop all masters and slaves.
-  virtual void Shutdown();
-
-  // Stop all masters.
-  virtual void ShutdownMasters();
-
-  // Stop all slaves.
-  virtual void ShutdownSlaves();
-
-  Cluster cluster;
-
-  // Containerizer(s) created during test that we need to cleanup.
-  std::map<process::PID<slave::Slave>, slave::Containerizer*> containerizers;
+  Option<zookeeper::URL> zookeeperUrl;
 
   const std::string defaultAgentResourcesString{
     "cpus:2;mem:1024;disk:1024;ports:[31000-32000]"};
@@ -927,7 +882,7 @@ public:
 
   void event(Mesos* mesos, const Event& event)
   {
-    switch(event.type()) {
+    switch (event.type()) {
       case Event::SUBSCRIBED:
         subscribed(mesos, event.subscribed());
         break;
@@ -969,20 +924,20 @@ public:
       const std::shared_ptr<MockHTTPScheduler<Mesos, Event>>& _scheduler,
       const Option<std::shared_ptr<MasterDetector>>& detector = None())
     : Mesos(
-        master,
-        contentType,
-        // We don't pass the `_scheduler` shared pointer as the library
-        // interface expects a `std::function` object.
-        lambda::bind(&MockHTTPScheduler<Mesos, Event>::connected,
-                     _scheduler.get(),
-                     this),
-        lambda::bind(&MockHTTPScheduler<Mesos, Event>::disconnected,
-                     _scheduler.get(),
-                     this),
-        lambda::bind(&TestMesos<Mesos, Event>::events,
-                     this,
-                     lambda::_1),
-        detector),
+          master,
+          contentType,
+          // We don't pass the `_scheduler` shared pointer as the library
+          // interface expects a `std::function` object.
+          lambda::bind(&MockHTTPScheduler<Mesos, Event>::connected,
+                       _scheduler.get(),
+                       this),
+          lambda::bind(&MockHTTPScheduler<Mesos, Event>::disconnected,
+                       _scheduler.get(),
+                       this),
+          lambda::bind(&TestMesos<Mesos, Event>::events,
+                       this,
+                       lambda::_1),
+          detector),
       scheduler(_scheduler) {}
 
   virtual ~TestMesos()
@@ -1010,7 +965,7 @@ public:
 protected:
   void events(std::queue<Event> events)
   {
-    while(!events.empty()) {
+    while (!events.empty()) {
       Event event = std::move(events.front());
       events.pop();
       scheduler->event(this, event);
@@ -1053,7 +1008,7 @@ public:
 
   void event(Mesos* mesos, const Event& event)
   {
-    switch(event.type()) {
+    switch (event.type()) {
       case Event::SUBSCRIBED:
         subscribed(mesos, event.subscribed());
         break;
@@ -1090,22 +1045,22 @@ public:
       ContentType contentType,
       const std::shared_ptr<MockHTTPExecutor<Mesos, Event>>& _executor)
     : Mesos(
-        contentType,
-        lambda::bind(&MockHTTPExecutor<Mesos, Event>::connected,
-                     _executor,
-                     this),
-        lambda::bind(&MockHTTPExecutor<Mesos, Event>::disconnected,
-                     _executor,
-                     this),
-        lambda::bind(&TestMesos<Mesos, Event>::events,
-                     this,
-                     lambda::_1)),
+          contentType,
+          lambda::bind(&MockHTTPExecutor<Mesos, Event>::connected,
+                       _executor,
+                       this),
+          lambda::bind(&MockHTTPExecutor<Mesos, Event>::disconnected,
+                       _executor,
+                       this),
+          lambda::bind(&TestMesos<Mesos, Event>::events,
+                       this,
+                       lambda::_1)),
       executor(_executor) {}
 
 protected:
   void events(std::queue<Event> events)
   {
-    while(!events.empty()) {
+    while (!events.empty()) {
       Event event = std::move(events.front());
       events.pop();
       executor->event(this, event);
@@ -1640,14 +1595,15 @@ public:
 
 
 class OfferEqMatcher
-  : public ::testing::MatcherInterface<const std::vector<Offer>& >
+  : public ::testing::MatcherInterface<const std::vector<Offer>&>
 {
 public:
   OfferEqMatcher(int _cpus, int _mem)
     : cpus(_cpus), mem(_mem) {}
 
-  virtual bool MatchAndExplain(const std::vector<Offer>& offers,
-                               ::testing::MatchResultListener* listener) const
+  virtual bool MatchAndExplain(
+      const std::vector<Offer>& offers,
+      ::testing::MatchResultListener* listener) const
   {
     double totalCpus = 0;
     double totalMem = 0;
@@ -1687,8 +1643,8 @@ private:
 };
 
 
-inline
-const ::testing::Matcher<const std::vector<Offer>& > OfferEq(int cpus, int mem)
+inline const ::testing::Matcher<const std::vector<Offer>&> OfferEq(
+    int cpus, int mem)
 {
   return MakeMatcher(new OfferEqMatcher(cpus, mem));
 }
