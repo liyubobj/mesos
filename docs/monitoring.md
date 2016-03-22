@@ -857,6 +857,39 @@ slave registrar.
 </table>
 
 
+#### Allocator
+
+The following metrics provide information about performance
+and resource allocations in the allocator.
+
+<table class="table table-stripped">
+<thead>
+<tr><th>Metric</th><th>Description</th><th>Type</th>
+</thead>
+<tr>
+  <td>
+  <code>allocator/mesos/event_queue_dispatches</code>
+  </td>
+  <td>Number of dispatch events in the event queue</td>
+  <td>Gauge</td>
+</tr>
+<tr>
+  <td>
+  <code>allocator/mesos/quota/roles/&lt;role&gt;/resources/&lt;resource&gt;/offered_or_allocated</code>
+  </td>
+  <td>Amount of resources considered offered or allocated towards
+      a role's quota guarantee</td>
+  <td>Gauge</td>
+</tr>
+<tr>
+  <td>
+  <code>allocator/mesos/quota/roles/&lt;role&gt;/resources/&lt;resource&gt;/guarantee</code>
+  </td>
+  <td>Amount of resources guaranteed for a role via quota</td>
+  <td>Gauge</td>
+</tr>
+</table>
+
 ### Basic Alerts
 
 This section lists some examples of basic alerts that you can use to detect

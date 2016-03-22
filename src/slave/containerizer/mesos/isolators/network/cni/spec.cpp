@@ -12,49 +12,39 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
-// limitations under the License
+// limitations under the License.
 
-#ifndef __STATE_IN_MEMORY_HPP__
-#define __STATE_IN_MEMORY_HPP__
+#include <stout/json.hpp>
+#include <stout/protobuf.hpp>
 
-#include <set>
-#include <string>
+#include "slave/containerizer/mesos/isolators/network/cni/spec.hpp"
 
-#include <process/future.hpp>
-
-#include <stout/option.hpp>
-#include <stout/uuid.hpp>
-
-#include "messages/state.hpp"
-
-#include "state/storage.hpp"
+using std::string;
 
 namespace mesos {
 namespace internal {
-namespace state {
+namespace slave {
+namespace cni {
+namespace spec {
 
-// Forward declaration.
-class InMemoryStorageProcess;
-
-
-class InMemoryStorage : public Storage
+Try<NetworkConfig> parse(const string& s)
 {
-public:
-  InMemoryStorage();
-  virtual ~InMemoryStorage();
+  Try<JSON::Object> json = JSON::parse<JSON::Object>(s);
+  if (json.isError()) {
+    return Error("JSON parse failed: " + json.error());
+  }
 
-  // Storage implementation.
-  virtual process::Future<Option<Entry>> get(const std::string& name);
-  virtual process::Future<bool> set(const Entry& entry, const UUID& uuid);
-  virtual process::Future<bool> expunge(const Entry& entry);
-  virtual process::Future<std::set<std::string>> names();
+  Try<NetworkConfig> parse = ::protobuf::parse<NetworkConfig>(json.get());
 
-private:
-  InMemoryStorageProcess* process;
-};
+  if (parse.isError()) {
+    return Error("Protobuf parse failed: " + parse.error());
+  }
 
-} // namespace state {
+  return parse.get();
+}
+
+} // namespace spec {
+} // namespace cni {
+} // namespace slave {
 } // namespace internal {
 } // namespace mesos {
-
-#endif // __STATE_IN_MEMORY_HPP__

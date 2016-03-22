@@ -12,49 +12,28 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
-// limitations under the License
+// limitations under the License.
 
-#ifndef __STATE_IN_MEMORY_HPP__
-#define __STATE_IN_MEMORY_HPP__
+#ifndef __ISOLATOR_CNI_SPEC_HPP__
+#define __ISOLATOR_CNI_SPEC_HPP__
 
-#include <set>
-#include <string>
+#include <stout/try.hpp>
 
-#include <process/future.hpp>
-
-#include <stout/option.hpp>
-#include <stout/uuid.hpp>
-
-#include "messages/state.hpp"
-
-#include "state/storage.hpp"
+// ONLY USEFUL AFTER RUNNING PROTOC.
+#include "slave/containerizer/mesos/isolators/network/cni/spec.pb.h"
 
 namespace mesos {
 namespace internal {
-namespace state {
+namespace slave {
+namespace cni {
+namespace spec {
 
-// Forward declaration.
-class InMemoryStorageProcess;
+Try<NetworkConfig> parse(const std::string& s);
 
-
-class InMemoryStorage : public Storage
-{
-public:
-  InMemoryStorage();
-  virtual ~InMemoryStorage();
-
-  // Storage implementation.
-  virtual process::Future<Option<Entry>> get(const std::string& name);
-  virtual process::Future<bool> set(const Entry& entry, const UUID& uuid);
-  virtual process::Future<bool> expunge(const Entry& entry);
-  virtual process::Future<std::set<std::string>> names();
-
-private:
-  InMemoryStorageProcess* process;
-};
-
-} // namespace state {
+} // namespace spec {
+} // namespace cni {
+} // namespace slave {
 } // namespace internal {
 } // namespace mesos {
 
-#endif // __STATE_IN_MEMORY_HPP__
+#endif // __ISOLATOR_CNI_SPEC_HPP__
