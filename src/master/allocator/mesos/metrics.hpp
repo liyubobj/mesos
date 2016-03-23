@@ -18,7 +18,9 @@
 #define __MASTER_ALLOCATOR_MESOS_METRICS_HPP__
 
 #include <string>
+#include <vector>
 
+#include <process/metrics/counter.hpp>
 #include <process/metrics/gauge.hpp>
 
 #include <process/pid.hpp>
@@ -53,6 +55,15 @@ struct Metrics
   // TODO(bbannier) This metric is identical to `event_queue_dispatches`, but
   // uses a name deprecated in 0.29. This metric should be removed with 0.30.
   process::metrics::Gauge event_queue_dispatches_;
+
+  // Number of times the allocation algorithm has run.
+  process::metrics::Counter allocation_runs;
+
+  // Gauges for the total amount of each resource in the cluster.
+  std::vector<process::metrics::Gauge> resources_total;
+
+  // Gauges for the allocated amount of each resource in the cluster.
+  std::vector<process::metrics::Gauge> resources_offered_or_allocated;
 
   // Gauges for the per-role quota allocation for each resource.
   hashmap<std::string, hashmap<std::string, process::metrics::Gauge>>

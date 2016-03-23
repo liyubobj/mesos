@@ -2520,6 +2520,113 @@ TEST_F(HierarchicalAllocatorTest, DeactivateAndReactivateFramework)
 }
 
 
+// This test checks that total and allocator resources
+// are correctly reflected in the metrics endpoint.
+TEST_F(HierarchicalAllocatorTest, ResourceMetrics)
+{
+  // Pausing the clock is not necessary, but ensures that the test
+  // doesn't rely on the batch allocation in the allocator, which
+  // would slow down the test.
+  Clock::pause();
+
+  initialize();
+
+  SlaveInfo agent = createSlaveInfo("cpus:2;mem:1024;disk:0");
+  allocator->addSlave(agent.id(), agent, None(), agent.resources(), {});
+  Clock::settle();
+
+  JSON::Object expected;
+
+  // No frameworks are registered yet, so nothing is allocated.
+  expected.values = {
+      {"allocator/mesos/resources/cpus/total",   2},
+      {"allocator/mesos/resources/mem/total", 1024},
+      {"allocator/mesos/resources/disk/total",   0},
+      {"allocator/mesos/resources/cpus/offered_or_allocated", 0},
+      {"allocator/mesos/resources/mem/offered_or_allocated",  0},
+      {"allocator/mesos/resources/disk/offered_or_allocated", 0},
+  };
+
+  JSON::Value metrics = Metrics();
+
+  EXPECT_TRUE(metrics.contains(expected));
+
+  FrameworkInfo framework = createFrameworkInfo("role1");
+  allocator->addFramework(framework.id(), framework, {});
+  Clock::settle();
+
+  // All of the resources should be offered.
+  expected.values = {
+      {"allocator/mesos/resources/cpus/total",   2},
+      {"allocator/mesos/resources/mem/total", 1024},
+      {"allocator/mesos/resources/disk/total",   0},
+      {"allocator/mesos/resources/cpus/offered_or_allocated",   2},
+      {"allocator/mesos/resources/mem/offered_or_allocated", 1024},
+      {"allocator/mesos/resources/disk/offered_or_allocated",   0},
+  };
+
+  metrics = Metrics();
+
+  EXPECT_TRUE(metrics.contains(expected));
+
+  allocator->removeSlave(agent.id());
+  Clock::settle();
+
+  // No frameworks are registered yet, so nothing is allocated.
+  expected.values = {
+      {"allocator/mesos/resources/cpus/total", 0},
+      {"allocator/mesos/resources/mem/total",  0},
+      {"allocator/mesos/resources/disk/total", 0},
+      {"allocator/mesos/resources/cpus/offered_or_allocated", 0},
+      {"allocator/mesos/resources/mem/offered_or_allocated",  0},
+      {"allocator/mesos/resources/disk/offered_or_allocated", 0},
+  };
+
+  metrics = Metrics();
+
+  EXPECT_TRUE(metrics.contains(expected));
+}
+
+
+// This test checks that the number of times the allocation
+// algorithm has run is correctly reflected in the metric.
+TEST_F(HierarchicalAllocatorTest, AllocationRunsMetric)
+{
+  // Pausing the clock is not necessary, but ensures that the test
+  // doesn't rely on the batch allocation in the allocator, which
+  // would slow down the test.
+  Clock::pause();
+
+  initialize();
+
+  size_t allocations = 0;
+
+  JSON::Object expected;
+
+  expected.values = { {"allocator/mesos/allocation_runs", allocations} };
+
+  JSON::Value metrics = Metrics();
+
+  EXPECT_TRUE(metrics.contains(expected));
+
+  SlaveInfo agent = createSlaveInfo("cpus:2;mem:1024;disk:0");
+  allocator->addSlave(agent.id(), agent, None(), agent.resources(), {});
+  ++allocations; // Adding an agent triggers allocations.
+
+  FrameworkInfo framework = createFrameworkInfo("role");
+  allocator->addFramework(framework.id(), framework, {});
+  ++allocations; // Adding a framework triggers allocations.
+
+  Clock::settle();
+
+  expected.values = { {"allocator/mesos/allocation_runs", allocations} };
+
+  metrics = Metrics();
+
+  EXPECT_TRUE(metrics.contains(expected));
+}
+
+
 // This test ensures that resource allocation is done according to each role's
 // weight. This is done by having six agents and three frameworks and making
 // sure each framework gets the appropriate number of resources.

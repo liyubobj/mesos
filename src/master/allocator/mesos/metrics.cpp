@@ -24,6 +24,7 @@
 #include "master/allocator/mesos/metrics.hpp"
 
 using std::string;
+using std::vector;
 
 using process::metrics::Gauge;
 
@@ -42,10 +43,41 @@ Metrics::Metrics(const HierarchicalAllocatorProcess& _allocator)
     event_queue_dispatches_(
         "allocator/event_queue_dispatches",
         process::defer(
-            allocator, &HierarchicalAllocatorProcess::_event_queue_dispatches))
+            allocator, &HierarchicalAllocatorProcess::_event_queue_dispatches)),
+    allocation_runs("allocator/mesos/allocation_runs")
 {
   process::metrics::add(event_queue_dispatches);
   process::metrics::add(event_queue_dispatches_);
+  process::metrics::add(allocation_runs);
+
+  // Create and install gauges for the total and allocated
+  // amount of standard scalar resources.
+  //
+  // TODO(bbannier) Add support for more than just scalar resources.
+  // TODO(bbannier) Simplify this once MESOS-3214 is fixed.
+  // TODO(dhamon): Set these up dynamically when adding a slave based on the
+  // resources the slave exposes.
+  string resources[] = {"cpus", "mem", "disk"};
+
+  foreach (const string& resource, resources) {
+    Gauge total(
+        "allocator/mesos/resources/" + resource + "/total",
+        defer(allocator,
+              &HierarchicalAllocatorProcess::_resources_total,
+              resource));
+
+    Gauge offered_or_allocated(
+        "allocator/mesos/resources/" + resource + "/offered_or_allocated",
+        defer(allocator,
+              &HierarchicalAllocatorProcess::_resources_offered_or_allocated,
+              resource));
+
+    resources_total.push_back(total);
+    resources_offered_or_allocated.push_back(offered_or_allocated);
+
+    process::metrics::add(total);
+    process::metrics::add(offered_or_allocated);
+  }
 }
 
 
@@ -53,6 +85,15 @@ Metrics::~Metrics()
 {
   process::metrics::remove(event_queue_dispatches);
   process::metrics::remove(event_queue_dispatches_);
+  process::metrics::remove(allocation_runs);
+
+  foreach (const Gauge& gauge, resources_total) {
+    process::metrics::remove(gauge);
+  }
+
+  foreach (const Gauge& gauge, resources_offered_or_allocated) {
+    process::metrics::remove(gauge);
+  }
 
   foreachkey(const string& role, quota_allocated) {
     foreachvalue(const Gauge& gauge, quota_allocated[role]) {
@@ -68,7 +109,7 @@ Metrics::~Metrics()
 }
 
 
-void Metrics::setQuota(const std::string& role, const Quota& quota)
+void Metrics::setQuota(const string& role, const Quota& quota)
 {
   CHECK(!quota_allocated.contains(role));
 
@@ -76,39 +117,31 @@ void Metrics::setQuota(const std::string& role, const Quota& quota)
   hashmap<string, Gauge> guarantees;
 
   foreach (const Resource& resource, quota.info.guarantee()) {
-    // And gauges for the currently offered or allocated
-    // resources under quota.
-    {
-      Gauge gauge = Gauge(
-          "allocator/mesos/quota"
-            "/roles/" + role +
-            "/resources/" + resource.name() +
-            "/offered_or_allocated",
-          process::defer(
-              allocator,
+    CHECK_EQ(Value::SCALAR, resource.type());
+    double value = resource.scalar().value();
+
+    Gauge guarantee = Gauge(
+        "allocator/mesos/quota"
+        "/roles/" + role +
+        "/resources/" + resource.name() +
+        "/guarantee",
+        process::defer([value]() { return value; }));
+
+    Gauge offered_or_allocated(
+        "allocator/mesos/quota"
+        "/roles/" + role +
+        "/resources/" + resource.name() +
+        "/offered_or_allocated",
+        defer(allocator,
               &HierarchicalAllocatorProcess::_quota_allocated,
               role,
               resource.name()));
 
-      allocated.put(resource.name(), gauge);
-      process::metrics::add(gauge);
-    }
+    guarantees.put(resource.name(), guarantee);
+    allocated.put(resource.name(), offered_or_allocated);
 
-    // Add gauges for the quota resource guarantees.
-    {
-      CHECK_EQ(Value::SCALAR, resource.type());
-      double value = resource.scalar().value();
-
-      Gauge gauge = Gauge(
-          "allocator/mesos/quota"
-          "/roles/" + role +
-          "/resources/" + resource.name() +
-          "/guarantee",
-          process::defer([value]() { return value; }));
-
-      guarantees.put(resource.name(), gauge);
-      process::metrics::add(gauge);
-    }
+    process::metrics::add(guarantee);
+    process::metrics::add(offered_or_allocated);
   }
 
   quota_allocated[role] = allocated;
@@ -116,7 +149,7 @@ void Metrics::setQuota(const std::string& role, const Quota& quota)
 }
 
 
-void Metrics::removeQuota(const std::string& role)
+void Metrics::removeQuota(const string& role)
 {
   CHECK(quota_allocated.contains(role));
 

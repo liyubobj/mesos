@@ -1179,6 +1179,8 @@ void HierarchicalAllocatorProcess::allocate(
 void HierarchicalAllocatorProcess::allocate(
     const hashset<SlaveID>& slaveIds_)
 {
+  ++metrics.allocation_runs;
+
   // Compute the offerable resources, per framework:
   //   (1) For reserved resources on the slave, allocate these to a
   //       framework having the corresponding role.
@@ -1704,6 +1706,35 @@ bool HierarchicalAllocatorProcess::allocatable(
 
   return (cpus.isSome() && cpus.get() >= MIN_CPUS) ||
          (mem.isSome() && mem.get() >= MIN_MEM);
+}
+
+
+double HierarchicalAllocatorProcess::_resources_offered_or_allocated(
+    const string& resource)
+{
+  double offered_or_allocated = 0;
+
+  foreachvalue (const Slave& slave, slaves) {
+    Option<Value::Scalar> value =
+      slave.allocated.get<Value::Scalar>(resource);
+
+    if (value.isSome()) {
+      offered_or_allocated += value->value();
+    }
+  }
+
+  return offered_or_allocated;
+}
+
+
+double HierarchicalAllocatorProcess::_resources_total(
+    const string& resource)
+{
+  Option<Value::Scalar> total =
+    roleSorter->totalScalarQuantities()
+      .get<Value::Scalar>(resource);
+
+  return total.isSome() ? total->value() : 0;
 }
 
 
