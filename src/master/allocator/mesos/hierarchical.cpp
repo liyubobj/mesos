@@ -1148,7 +1148,11 @@ void HierarchicalAllocatorProcess::allocate()
   Stopwatch stopwatch;
   stopwatch.start();
 
+  metrics.allocation_run.start();
+
   allocate(slaves.keys());
+
+  metrics.allocation_run.stop();
 
   VLOG(1) << "Performed allocation for " << slaves.size() << " slaves in "
             << stopwatch.elapsed();
@@ -1166,9 +1170,12 @@ void HierarchicalAllocatorProcess::allocate(
 
   Stopwatch stopwatch;
   stopwatch.start();
+  metrics.allocation_run.start();
 
   hashset<SlaveID> slaves({slaveId});
   allocate(slaves);
+
+  metrics.allocation_run.stop();
 
   VLOG(1) << "Performed allocation for slave " << slaveId << " in "
           << stopwatch.elapsed();

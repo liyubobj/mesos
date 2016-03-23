@@ -717,28 +717,28 @@ messages may indicate that there is a problem with the network.
   <td>
   <code>master/task_lost/source_master/reason_invalid_offers</code>
   </td>
-  <td>Number of tasks lost due to invalid offers</code>
+  <td>Number of tasks lost due to invalid offers</td>
   <td>Counter</td>
 </tr>
 <tr>
   <td>
   <code>master/task_lost/source_master/reason_slave_removed</code>
   </td>
-  <td>Number of tasks lost due to slave removal</code>
+  <td>Number of tasks lost due to slave removal</td>
   <td>Counter</td>
 </tr>
 <tr>
   <td>
   <code>master/task_lost/source_slave/reason_executor_terminated</code>
   </td>
-  <td>Number of tasks lost due to executor termination</code>
+  <td>Number of tasks lost due to executor termination</td>
   <td>Counter</td>
 </tr>
 <tr>
   <td>
   <code>master/valid_executor_to_framework_messages</code>
   </td>
-  <td>Number of valid executor to framework messages</code>
+  <td>Number of valid executor to framework messages</td>
   <td>Counter</td>
 </tr>
 </table>
@@ -868,12 +868,81 @@ and resource allocations in the allocator.
 </thead>
 <tr>
   <td>
+  <code>allocator/mesos/allocation_run_ms</code>
+  </td>
+  <td>Allocation algorithm latency in ms</td>
+  <td>Gauge</td>
+</tr>
+<tr>
+  <td>
+  <code>allocator/mesos/allocation_run_ms/count</code>
+  </td>
+  <td>Number of allocation algorithm latency measurements in the window</td>
+  <td>Gauge</td>
+</tr>
+<tr>
+  <td>
+  <code>allocator/mesos/allocation_run_ms/max</code>
+  </td>
+  <td>Maximum allocation algorithm latency in ms</td>
+  <td>Gauge</td>
+</tr>
+<tr>
+  <td>
+  <code>allocator/mesos/allocation_run_ms/min</code>
+  </td>
+  <td>Minimum allocation algorithm latency in ms</td>
+  <td>Gauge</td>
+</tr>
+<tr>
+  <td>
+  <code>allocator/mesos/allocation_run_ms/p50</code>
+  </td>
+  <td>Median allocation algorithm latency in ms</td>
+  <td>Gauge</td>
+</tr>
+<tr>
+  <td>
+  <code>allocator/mesos/allocation_run_ms/p90</code>
+  </td>
+  <td>90th percentile allocation algorithm latency in ms</td>
+  <td>Gauge</td>
+</tr>
+<tr>
+  <td>
+  <code>allocator/mesos/allocation_run_ms/p95</code>
+  </td>
+  <td>95th percentile allocation algorithm latency in ms</td>
+  <td>Gauge</td>
+</tr>
+<tr>
+  <td>
+  <code>allocator/mesos/allocation_run_ms/p99</code>
+  </td>
+  <td>99th percentile allocation algorithm latency in ms</td>
+  <td>Gauge</td>
+</tr>
+<tr>
+  <td>
+  <code>allocator/mesos/allocation_run_ms/p999</code>
+  </td>
+  <td>99.9th percentile allocation algorithm latency in ms</td>
+  <td>Gauge</td>
+</tr>
+<tr>
+  <td>
+  <code>allocator/mesos/allocation_run_ms/p9999</code>
+  </td>
+  <td>99.99th percentile allocation algorithm latency in ms</td>
+  <td>Gauge</td>
+</tr>
+<tr>
+  <td>
   <code>allocator/mesos/allocation_runs</code>
   </td>
   <td>Number of times the allocation algorithm has run</td>
   <td>Counter</td>
 </tr>
-<tr>
 <tr>
   <td>
   <code>allocator/mesos/event_queue_dispatches</code>
