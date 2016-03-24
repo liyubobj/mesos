@@ -91,6 +91,7 @@ nobase_include_HEADERS =			\
   stout/os/sendfile.hpp				\
   stout/os/shell.hpp				\
   stout/os/signals.hpp				\
+  stout/os/socket.hpp				\
   stout/os/stat.hpp				\
   stout/os/strerror.hpp				\
   stout/os/su.hpp				\
@@ -109,12 +110,15 @@ nobase_include_HEADERS =			\
   stout/os/posix/killtree.hpp			\
   stout/os/posix/mkdtemp.hpp			\
   stout/os/posix/pstree.hpp			\
+  stout/os/posix/read.hpp			\
   stout/os/posix/rmdir.hpp			\
   stout/os/posix/sendfile.hpp			\
   stout/os/posix/shell.hpp			\
   stout/os/posix/signals.hpp			\
+  stout/os/posix/socket.hpp			\
   stout/os/posix/stat.hpp			\
   stout/os/posix/su.hpp				\
+  stout/os/posix/write.hpp			\
   stout/os/raw/environment.hpp			\
   stout/os/windows/bootid.hpp			\
   stout/os/windows/chroot.hpp			\
@@ -126,12 +130,15 @@ nobase_include_HEADERS =			\
   stout/os/windows/killtree.hpp			\
   stout/os/windows/mkdtemp.hpp			\
   stout/os/windows/pstree.hpp			\
+  stout/os/windows/read.hpp			\
   stout/os/windows/rmdir.hpp			\
   stout/os/windows/sendfile.hpp			\
   stout/os/windows/shell.hpp			\
   stout/os/windows/signals.hpp			\
+  stout/os/windows/socket.hpp			\
   stout/os/windows/stat.hpp			\
   stout/os/windows/su.hpp			\
+  stout/os/windows/write.hpp			\
   stout/path.hpp				\
   stout/preprocessor.hpp			\
   stout/proc.hpp				\

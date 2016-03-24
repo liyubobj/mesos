@@ -251,8 +251,12 @@ mesos::internal::slave::Flags::Flags()
 
   add(&Flags::executor_shutdown_grace_period,
       "executor_shutdown_grace_period",
-      "Amount of time to wait for an executor\n"
-      "to shut down (e.g., 60secs, 3mins, etc)",
+      "Default amount of time to wait for an executor to shut down\n"
+      "(e.g. 60secs, 3mins, etc). ExecutorInfo.shutdown_grace_period\n"
+      "overrides this default. Note that the executor must not assume\n"
+      "that it will always be allotted the full grace period, as the\n"
+      "agent may decide to allot a shorter period, and failures / forcible\n"
+      "terminations may occur.",
       DEFAULT_EXECUTOR_SHUTDOWN_GRACE_PERIOD);
 
   add(&Flags::gc_delay,
@@ -428,10 +432,10 @@ mesos::internal::slave::Flags::Flags()
   add(&Flags::credential,
       "credential",
       "Either a path to a text with a single line\n"
-      "containing `principal` and `secret` separated by "
-      "whitespace.\n"
+      "containing `principal` and `secret` separated by whitespace.\n"
       "Or a path containing the JSON-formatted "
       "information used for one credential.\n"
+      "This credential is used to identify the slave to the master.\n"
       "Path could be of the form `file:///path/to/file` or `/path/to/file`."
       "\n"
       "Example:\n"
@@ -675,6 +679,38 @@ mesos::internal::slave::Flags::Flags()
       "master. Use the default `" + string(DEFAULT_AUTHENTICATEE) + "`, or\n"
       "load an alternate authenticatee module using `--modules`.",
       DEFAULT_AUTHENTICATEE);
+
+  add(&Flags::http_authenticators,
+      "http_authenticators",
+      "HTTP authenticator implementation to use when handling requests to\n"
+      "authenticated endpoints. Use the default\n"
+      "`" + string(DEFAULT_HTTP_AUTHENTICATOR) + "`, or load an alternate\n"
+      "HTTP authenticator module using `--modules`.\n"
+      "\n"
+      "Currently there is no support for multiple HTTP authenticators.",
+      DEFAULT_HTTP_AUTHENTICATOR);
+
+  add(&Flags::authenticate_http,
+      "authenticate_http",
+      "If `true`, only authenticated requests for HTTP endpoints supporting\n"
+      "authentication are allowed. If `false`, unauthenticated requests to\n"
+      "HTTP endpoints are also allowed.",
+      false);
+
+  add(&Flags::http_credentials,
+      "http_credentials",
+      "Path to a JSON-formatted file containing credentials used to\n"
+      "authenticate HTTP endpoints on the slave.\n"
+      "Path can be of the form `file:///path/to/file` or `/path/to/file`.\n"
+      "Example:\n"
+      "{\n"
+      "  \"credentials\": [\n"
+      "    {\n"
+      "      \"principal\": \"yoda\",\n"
+      "      \"secret\": \"usetheforce\"\n"
+      "    }\n"
+      "  ]\n"
+      "}");
 
   add(&Flags::hooks,
       "hooks",

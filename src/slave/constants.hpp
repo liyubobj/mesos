@@ -36,8 +36,6 @@ constexpr Duration EXECUTOR_REREGISTER_TIMEOUT = Seconds(2);
 // shut down before destroying the container.
 constexpr Duration DEFAULT_EXECUTOR_SHUTDOWN_GRACE_PERIOD = Seconds(5);
 
-constexpr Duration EXECUTOR_SIGNAL_ESCALATION_TIMEOUT = Seconds(3);
-
 constexpr Duration RECOVERY_TIMEOUT = Minutes(15);
 
 constexpr Duration STATUS_UPDATE_RETRY_INTERVAL_MIN = Seconds(10);
@@ -110,6 +108,12 @@ constexpr Duration DOCKER_VERSION_WAIT_TIMEOUT = Seconds(5);
 
 // Name of the default, CRAM-MD5 authenticatee.
 constexpr char DEFAULT_AUTHENTICATEE[] = "crammd5";
+
+// Name of the default HTTP authenticator.
+constexpr char DEFAULT_HTTP_AUTHENTICATOR[] = "basic";
+
+// Name of the default agent HTTP authentication realm.
+constexpr char DEFAULT_HTTP_AUTHENTICATION_REALM[] = "mesos-agent";
 
 // Default maximum storage space to be used by the fetcher cache.
 constexpr Bytes DEFAULT_FETCHER_CACHE_SIZE = Gigabytes(2);
