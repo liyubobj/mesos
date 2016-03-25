@@ -22,12 +22,21 @@ This release contains the following new features:
     flexibility around how to clean up tasks and executors.
 
 Deprecations:
+  * [MESOS-2281] - Deprecated the plain text format for credentials in favor of
+    the JSON format.
+
   * [MESOS-5001] - The 'allocator/event_queue_dispatches' metric is now
     deprecated in favor 'of allocator/mesos/event_queue_dispatches'.
 
 Additional API Changes:
   * [MESOS-4735] - Add 'filename' field to CommandInfo.URI in Scheduler API
     and v1 Scheduler HTTP API.
+
+  * [MESOS-5014] - Changes Call and Event Type enums in scheduler.proto
+    from required to optional for the purpose of backwards compatibility.
+
+  * [MESOS-5015] - Changes Call and Event Type enums in executor.proto
+    from required to optional for the purpose of backwards compatibility.
 
 
 Release Notes - Mesos - Version 0.28.0

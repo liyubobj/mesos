@@ -930,6 +930,8 @@ public:
       case Event::HEARTBEAT:
         heartbeat(mesos);
         break;
+      default:
+        UNREACHABLE();
     }
   }
 };
@@ -1053,6 +1055,8 @@ public:
       case Event::ERROR:
         error(mesos, event.error());
         break;
+      default:
+        UNREACHABLE();
     }
   }
 };
