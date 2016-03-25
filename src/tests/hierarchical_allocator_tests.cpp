@@ -2533,7 +2533,8 @@ TEST_F(HierarchicalAllocatorTest, ResourceMetrics)
   initialize();
 
   SlaveInfo agent = createSlaveInfo("cpus:2;mem:1024;disk:0");
-  allocator->addSlave(agent.id(), agent, None(), agent.resources(), {});
+  allocator->addSlave(
+      agent.id(), agent, None(), agent.resources(), {}, EMPTYRUNNINGS);
   Clock::settle();
 
   JSON::Object expected;
@@ -2611,7 +2612,8 @@ TEST_F(HierarchicalAllocatorTest, AllocationRunsMetric)
   EXPECT_TRUE(metrics.contains(expected));
 
   SlaveInfo agent = createSlaveInfo("cpus:2;mem:1024;disk:0");
-  allocator->addSlave(agent.id(), agent, None(), agent.resources(), {});
+  allocator->addSlave(
+      agent.id(), agent, None(), agent.resources(), {}, EMPTYRUNNINGS);
   ++allocations; // Adding an agent triggers allocations.
 
   FrameworkInfo framework = createFrameworkInfo("role");
@@ -2666,7 +2668,8 @@ TEST_F(HierarchicalAllocatorTest, AllocationRunTimerMetrics)
   // Trigger at least two calls to allocate occur
   // to generate the window statistics.
   SlaveInfo agent = createSlaveInfo("cpus:2;mem:1024;disk:0");
-  allocator->addSlave(agent.id(), agent, None(), agent.resources(), {});
+  allocator->addSlave(
+      agent.id(), agent, None(), agent.resources(), {}, EMPTYRUNNINGS);
 
   FrameworkInfo framework = createFrameworkInfo("role1");
   allocator->addFramework(framework.id(), framework, {});
