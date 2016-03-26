@@ -299,13 +299,18 @@ protected:
     return static_cast<double>(eventCount<process::DispatchEvent>());
   }
 
-  double _resources_total(const std::string& resource);
+  double _resources_total(
+      const std::string& resource);
 
-  double _resources_offered_or_allocated(const std::string& resource);
+  double _resources_offered_or_allocated(
+      const std::string& resource);
 
   double _quota_allocated(
       const std::string& role,
       const std::string& resource);
+
+  double _offer_filters_active(
+      const std::string& role);
 
   hashmap<FrameworkID, Framework> frameworks;
 
