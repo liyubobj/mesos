@@ -2726,7 +2726,8 @@ TEST_F(HierarchicalAllocatorTest, ActiveOfferFiltersMetrics)
   initialize();
 
   SlaveInfo agent = createSlaveInfo("cpus:2;mem:1024;disk:0");
-  allocator->addSlave(agent.id(), agent, None(), agent.resources(), {});
+  allocator->addSlave(
+      agent.id(), agent, None(), agent.resources(), {}, EMPTYRUNNINGS);
 
   // Register three frameworks, two of which are in the same role.
   // For every offer the frameworks install practically indefinite
