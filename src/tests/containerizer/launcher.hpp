@@ -67,8 +67,8 @@ public:
           const process::Subprocess::IO& err,
           const Option<flags::FlagsBase>& flags,
           const Option<std::map<std::string, std::string> >& env,
-          const Option<lambda::function<int()> >& setup,
-          const Option<int>& namespaces));
+          const Option<int>& namespaces,
+          std::vector<process::Subprocess::Hook> parentHooks));
 
   MOCK_METHOD1(
       destroy,

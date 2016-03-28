@@ -222,28 +222,6 @@ Future<hashset<ContainerID>> LinuxLauncher::recover(
 }
 
 
-static int childSetup(const Option<lambda::function<int()>>& setup)
-{
-  // Move to a different session (and new process group) so we're
-  // independent from the slave's session (otherwise children will
-  // receive SIGHUP if the slave exits).
-  // TODO(idownes): perror is not listed as async-signal-safe and
-  // should be reimplemented safely.
-  // TODO(jieyu): Move this logic to the subprocess (i.e.,
-  // mesos-containerizer launch).
-  if (::setsid() == -1) {
-    perror("Failed to put child in a new session");
-    return 1;
-  }
-
-  if (setup.isSome()) {
-    return setup.get()();
-  }
-
-  return 0;
-}
-
-
 // A hook that is executed in the parent process. It attempts to move a process
 // into the freezer cgroup.
 //
@@ -294,18 +272,14 @@ Try<pid_t> LinuxLauncher::fork(
     const process::Subprocess::IO& err,
     const Option<flags::FlagsBase>& flags,
     const Option<map<string, string>>& environment,
-    const Option<lambda::function<int()>>& setup,
-    const Option<int>& namespaces)
+    const Option<int>& namespaces,
+    vector<Subprocess::Hook> parentHooks)
 {
   int cloneFlags = namespaces.isSome() ? namespaces.get() : 0;
   cloneFlags |= SIGCHLD; // Specify SIGCHLD as child termination signal.
 
   LOG(INFO) << "Cloning child process with flags = "
             << ns::stringify(cloneFlags);
-
-  // NOTE: The child process will be blocked until all hooks have been
-  // executed.
-  vector<Subprocess::Hook> parentHooks;
 
   // NOTE: Currently we don't care about the order of the hooks, as
   // both hooks are independent.
@@ -329,9 +303,9 @@ Try<pid_t> LinuxLauncher::fork(
       in,
       out,
       err,
+      SETSID,
       flags,
       environment,
-      lambda::bind(&childSetup, setup),
       lambda::bind(&os::clone, lambda::_1, cloneFlags),
       parentHooks);
 
