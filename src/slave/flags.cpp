@@ -90,6 +90,8 @@ mesos::internal::slave::Flags::Flags()
       "Isolation mechanisms to use, e.g., `posix/cpu,posix/mem`, or\n"
       "`cgroups/cpu,cgroups/mem`, or network/port_mapping\n"
       "(configure with flag: `--with-network-isolator` to enable),\n"
+      "or `cgroups/devices/gpus/nvidia` for nvidia specific gpu isolation\n"
+      "(configure with flag: `--enable-nvidia-gpu-support` to enable),\n"
       "or `external`, or load an alternate isolator module using\n"
       "the `--modules` flag. Note that this flag is only relevant\n"
       "for the Mesos Containerizer.",
@@ -527,6 +529,18 @@ mesos::internal::slave::Flags::Flags()
       "The time as a duration for docker to wait after stopping an instance\n"
       "before it kills that instance.",
       Seconds(0));
+
+#ifdef ENABLE_NVIDIA_GPU_SUPPORT
+  add(&Flags::nvidia_gpu_devices,
+      "nvidia_gpu_devices",
+      "A comma-separated list of Nvidia GPU devices. When `gpus` is\n"
+      "specified in the `--resources` flag, this flag determines which GPU\n"
+      "devices will be made available. The devices should be listed as\n"
+      "numbers that correspond to Nvidia's NVML device enumeration (as\n"
+      "seen by running the command `nvidia-smi` on an Nvidia GPU\n"
+      "equipped system).  The GPUs listed will only be isolated if the\n"
+      "`--isolation` flag contains the string `cgroups/devices/gpus/nvidia`.");
+#endif // ENABLE_NVIDIA_GPU_SUPPORT
 
 #ifdef WITH_NETWORK_ISOLATOR
   add(&Flags::ephemeral_ports_per_container,

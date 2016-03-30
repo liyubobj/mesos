@@ -62,6 +62,12 @@
 #include "slave/containerizer/mesos/isolators/cgroups/perf_event.hpp"
 #endif
 
+#ifdef ENABLE_NVIDIA_GPU_SUPPORT
+#ifdef __linux__
+#include "slave/containerizer/mesos/isolators/cgroups/devices/gpus/nvidia.hpp"
+#endif
+#endif
+
 #ifdef __linux__
 #include "slave/containerizer/mesos/isolators/docker/runtime.hpp"
 #endif
@@ -214,6 +220,9 @@ Try<MesosContainerizer*> MesosContainerizer::create(
     {"cgroups/mem", &CgroupsMemIsolatorProcess::create},
     {"cgroups/net_cls", &CgroupsNetClsIsolatorProcess::create},
     {"cgroups/perf_event", &CgroupsPerfEventIsolatorProcess::create},
+#ifdef ENABLE_NVIDIA_GPU_SUPPORT
+    {"cgroups/devices/gpus/nvidia", &CgroupsNvidiaGpuIsolatorProcess::create},
+#endif
     {"docker/runtime", &DockerRuntimeIsolatorProcess::create},
     {"namespaces/pid", &NamespacesPidIsolatorProcess::create},
 #endif
@@ -745,11 +754,14 @@ Future<bool> MesosContainerizerProcess::_launch(
   CHECK(executorInfo.has_container());
   CHECK_EQ(executorInfo.container().type(), ContainerInfo::MESOS);
 
-  // This is because even if a 'destroy' happens after 'launch' and
-  // before '_launch', the 'destroy' will wait for the 'provision' in
-  // 'launch' to finish. Since we register the '_launch' callback
-  // first, it is guaranteed to be called before '__destroy'.
-  CHECK(containers_.contains(containerId));
+  // This is because if a 'destroy' happens after 'launch' and before
+  // '_launch', even if the '___destroy' will wait for the 'provision'
+  // in 'launch' to finish, there is still a chance that '___destroy'
+  // and its dependencies finish before '_launch' starts since onAny
+  // is not guaranteed to be executed in order.
+  if (!containers_.contains(containerId)) {
+    return Failure("Container has been destroyed");
+  }
 
   // Make sure containerizer is not in DESTROYING state, to avoid
   // a possible race that containerizer is destroying the container

@@ -1291,6 +1291,8 @@ e.g., <code>bind</code>, <code>copy</code>. (default: copy)
 Isolation mechanisms to use, e.g., <code>posix/cpu,posix/mem</code>, or
 <code>cgroups/cpu,cgroups/mem</code>, or network/port_mapping
 (configure with flag: <code>--with-network-isolator</code> to enable),
+or `cgroups/devices/gpus/nvidia` for nvidia specific gpu isolation
+(configure with flag: `--enable-nvidia-gpu-support` to enable),
 or <code>external</code>, or load an alternate isolator module using
 the <code>--modules</code> flag. Note that this flag is only relevant
 for the Mesos Containerizer. (default: posix/cpu,posix/mem)
@@ -1316,6 +1318,21 @@ launcher if it's running as root on Linux.
 Directory path of Mesos binaries. Mesos looks for the health-check,
 fetcher, containerizer, and executor binary files under this
 directory. (default: /usr/local/libexec/mesos)
+  </td>
+</tr>
+<tr>
+  <td>
+    --nvidia_gpu_devices=VALUE
+  </td>
+  <td>
+A comma-separated list of Nvidia GPU devices. When `gpus` is specified
+in the `--resources` flag, this flag determines which GPU devices will
+be made available. The devices should be listed as numbers that
+correspond to Nvidia's NVML device enumeration (as seen by running the
+command `nvidia-smi` on an Nvidia GPU equipped system). The GPUs
+listed will only be isolated if the `--isolation` flag contains the
+string `cgroups/devices/gpus/nvidia`. This flag will only work if
+mesos has been configured with `--enable-nvidia-gpu-support`.
   </td>
 </tr>
 <tr>
