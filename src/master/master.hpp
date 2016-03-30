@@ -1049,6 +1049,10 @@ private:
     process::Future<process::http::Response> _update(
         const std::vector<WeightInfo>& updateWeightInfos) const;
 
+    // Rescind all outstanding offers if any of the 'weightInfos' roles has
+    // an active framework.
+    void rescindOffers(const std::vector<WeightInfo>& weightInfos) const;
+
     Master* master;
   };
 

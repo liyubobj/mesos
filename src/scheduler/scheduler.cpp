@@ -267,6 +267,23 @@ public:
                          lambda::_1));
   }
 
+  void reconnect()
+  {
+    // Ignore the reconnection request if we are currently disconnected
+    // from the master.
+    if (state == DISCONNECTED) {
+      VLOG(1) << "Ignoring reconnect request from scheduler since we are"
+              << " disconnected";
+
+      return;
+    }
+
+    CHECK_SOME(connectionId);
+
+    disconnected(connectionId.get(),
+                 "Received reconnect request from scheduler");
+  }
+
 protected:
   virtual void initialize()
   {
@@ -428,8 +445,19 @@ protected:
       const UPID& upid = future.get().get().pid();
       latest = future.get();
 
+      string scheme = "http";
+
+#ifdef USE_SSL_SOCKET
+      Option<string> value;
+
+      value = os::getenv("SSL_ENABLED");
+      if (value.isSome() && (value.get() == "1" || value.get() == "true")) {
+        scheme = "https";
+      }
+#endif
+
       master = ::URL(
-        "http",
+        scheme,
         upid.address.ip,
         upid.address.port,
         upid.id +
@@ -740,6 +768,12 @@ Mesos::~Mesos()
 void Mesos::send(const Call& call)
 {
   dispatch(process, &MesosProcess::send, call);
+}
+
+
+void Mesos::reconnect()
+{
+  dispatch(process, &MesosProcess::reconnect);
 }
 
 
