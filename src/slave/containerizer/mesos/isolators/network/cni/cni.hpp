@@ -82,7 +82,7 @@ private:
     cni::spec::NetworkConfig config;
   };
 
-  struct NetworkInfo
+  struct ContainerNetwork
   {
     // CNI network name.
     std::string networkName;
@@ -90,17 +90,21 @@ private:
     // Interface name.
     std::string ifName;
 
+    // NetworkInfo copied from the ExecutorInfo.containerInfo.network_infos
+    // in 'prepare()' and '_recover()'.
+    mesos::NetworkInfo networkInfo;
+
     // Protobuf of CNI network information returned by CNI plugin.
-    Option<cni::spec::NetworkInfo> network;
+    Option<cni::spec::NetworkInfo> cniNetworkInfo;
   };
 
   struct Info
   {
-    Info (const hashmap<std::string, NetworkInfo>& _networkInfos)
-      : networkInfos (_networkInfos) {}
+    Info (const hashmap<std::string, ContainerNetwork>& _containerNetworks)
+      : containerNetworks (_containerNetworks) {}
 
     // CNI network information keyed by network name.
-    hashmap<std::string, NetworkInfo> networkInfos;
+    hashmap<std::string, ContainerNetwork> containerNetworks;
   };
 
   NetworkCniIsolatorProcess(
@@ -140,7 +144,9 @@ private:
       const ContainerID& containerId,
       const std::list<process::Future<Nothing>>& detaches);
 
-  Try<Nothing> _recover(const ContainerID& containerId);
+  Try<Nothing> _recover(
+      const ContainerID& containerId,
+      const Option<ExecutorInfo>& executorInfo = None());
 
   // CNI network configurations keyed by network name.
   hashmap<std::string, NetworkConfigInfo> networkConfigs;
