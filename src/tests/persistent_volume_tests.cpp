@@ -122,6 +122,7 @@ protected:
       }
     }
 #endif // __linux__
+    MesosTest::TearDown();
   }
 
   master::Flags MasterFlags(const vector<FrameworkInfo>& frameworks)
@@ -170,7 +171,7 @@ protected:
             "role1",
             None(),
             None(),
-            createDiskSourcePath(diskPath + "disk" + stringify(id)));
+            createDiskSourcePath(path::join(diskPath, "disk" + stringify(id))));
 
         break;
       }
@@ -181,7 +182,7 @@ protected:
             None(),
             None(),
             createDiskSourceMount(
-                path::join(diskPath, + "disk" + stringify(id))));
+                path::join(diskPath, "disk" + stringify(id))));
 
         break;
       }
