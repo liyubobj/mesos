@@ -883,6 +883,13 @@ private:
     const scheduler::Call::Accept& accept,
     const process::Future<std::list<process::Future<bool>>>& authorizations);
 
+  void __accept(
+    const FrameworkID& frameworkId,
+    const SlaveID& slaveId,
+    const TaskID& taskId,
+    const RunTaskMessage& message,
+    const process::Future<Nothing>& future);
+
   void decline(
       Framework* framework,
       const scheduler::Call::Decline& decline);

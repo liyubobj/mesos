@@ -3814,44 +3814,16 @@ void Master::_accept(
             Future<Nothing> resolution = allocator->resolveConflicts(
                 framework->id(), task_);
 
-            // Add task back to pending tasks.
+            // Add task back to pending tasks again.
             framework->pendingTasks[task_.task_id()] = task;
 
-            resolution
-              .onReady([=]() {
-                framework->pendingTasks.erase(task_.task_id());
-
-                send(slave->pid, message); })
-              .onFailed([=](const string& failure) {
-                // TODO(qiujian): We set reason to REASON_TASK_INVALID
-                // if fail to resolve conflict. A new reason may need
-                // to be added.
-                const StatusUpdate& update = protobuf::createStatusUpdate(
-                    framework->id(),
-                    task_.slave_id(),
-                    task_.task_id(),
-                    TASK_ERROR,
-                    TaskStatus::SOURCE_MASTER,
-                    None(),
-                    failure,
-                    TaskStatus::REASON_TASK_INVALID);
-
-                metrics->tasks_error++;
-
-                metrics->incrementTasksStates(
-                    TASK_ERROR,
-                    TaskStatus::SOURCE_MASTER,
-                    TaskStatus::REASON_TASK_INVALID);
-
-                forward(update, UPID(), framework);
-
-                // Remove this task when failed to request resource
-                Task* task = framework->getTask(task_.task_id());
-                if (task != NULL) {
-                  removeTask(task);
-                }
-                framework->pendingTasks.erase(task_.task_id());
-              });
+            resolution.onAny(defer(self(),
+                                   &Self::__accept,
+                                   frameworkId,
+                                   slaveId,
+                                   task_.task_id(),
+                                   message,
+                                   lambda::_1));
           }
         }
         break;
@@ -3872,6 +3844,107 @@ void Master::_accept(
       _offeredResources,
       None(),
       accept.filters());
+}
+
+
+void Master::__accept(
+    const FrameworkID& frameworkId,
+    const SlaveID& slaveId,
+    const TaskID& taskId,
+    const RunTaskMessage& message,
+    const process::Future<Nothing>& future)
+{
+  Framework* framework = getFramework(frameworkId);
+
+  if (framework == NULL) {
+    // Task shall be killed in removing framework.
+    LOG(WARNING)
+      << "Discard task " << taskId << " of framework " << frameworkId
+      << " because the framework cannot be found.";
+
+    return;
+  }
+
+  Slave* slave = slaves.registered.get(slaveId);
+
+  if (slave == NULL || !slave->connected) {
+    const TaskStatus::Reason reason =
+        slave == NULL ? TaskStatus::REASON_SLAVE_REMOVED
+                      : TaskStatus::REASON_SLAVE_DISCONNECTED;
+    const StatusUpdate& update = protobuf::createStatusUpdate(
+        frameworkId,
+        slaveId,
+        taskId,
+        TASK_LOST,
+        TaskStatus::SOURCE_MASTER,
+        None(),
+        slave == NULL ? "Slave removed" : "Slave disconnected",
+        reason);
+
+    metrics->tasks_lost++;
+
+    metrics->incrementTasksStates(
+        TASK_LOST,
+        TaskStatus::SOURCE_MASTER,
+        reason);
+
+    forward(update, UPID(), framework);
+
+    if (framework->pendingTasks.contains(taskId)) {
+      framework->pendingTasks.erase(taskId);
+    }
+
+    Task* task = framework->getTask(taskId);
+    if (task != NULL) {
+      removeTask(task);
+    }
+
+    return;
+  }
+
+  if (future.isReady()) {
+    if (!framework->pendingTasks.contains(taskId)) {
+      LOG(WARNING) << "Task " << taskId << " of framework " << frameworkId
+                   << " was killed before get resource resolution.";
+
+      return;
+    }
+    framework->pendingTasks.erase(taskId);
+
+    send(slave->pid, message);
+  } else {
+    // TODO(qiujian): We set reason to REASON_TASK_INVALID
+    // if fail to resolve conflict. A new reason may need
+    // to be added.
+    const StatusUpdate& update = protobuf::createStatusUpdate(
+        frameworkId,
+        slaveId,
+        taskId,
+        TASK_ERROR,
+        TaskStatus::SOURCE_MASTER,
+        None(),
+        future.failure(),
+        TaskStatus::REASON_TASK_INVALID);
+
+    metrics->tasks_error++;
+
+    metrics->incrementTasksStates(
+        TASK_ERROR,
+        TaskStatus::SOURCE_MASTER,
+        TaskStatus::REASON_TASK_INVALID);
+
+    forward(update, UPID(), framework);
+
+    if (framework->pendingTasks.contains(taskId)) {
+      framework->pendingTasks.erase(taskId);
+    }
+
+    // Remove this task when failed to request resource
+    Task* task = framework->getTask(taskId);
+    if (task != NULL) {
+      removeTask(task);
+    }
+  }
 }
 
 
