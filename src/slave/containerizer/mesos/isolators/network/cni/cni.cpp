@@ -316,10 +316,20 @@ Future<Nothing> NetworkCniIsolatorProcess::recover(
     const list<ContainerState>& states,
     const hashset<ContainerID>& orphans)
 {
+  // If the `network/cni` isolator is providing network isolation to a
+  // container its `rootDir`should always be set.  This property of
+  // the isolator will not be set only if the operator does not
+  // specify the '--network_cni_plugins_dir' and
+  // '--network_cni_config_dir' flags at Agent startup. In this
+  // particular case the `network/cni` isolator should be a no-op.
+  if (rootDir.isNone()) {
+    return Nothing();
+  }
+
   foreach (const ContainerState& state, states) {
     const ContainerID& containerId = state.container_id();
 
-    Try<Nothing> recover = _recover(containerId, state.executor_info());
+    Try<Nothing> recover = _recover(containerId, state);
     if (recover.isError()) {
       return Failure(
           "Failed to recover CNI network information for container " +
@@ -367,7 +377,7 @@ Future<Nothing> NetworkCniIsolatorProcess::recover(
 
 Try<Nothing> NetworkCniIsolatorProcess::_recover(
     const ContainerID& containerId,
-    const Option<ExecutorInfo>& executorInfo)
+    const Option<ContainerState>& state)
 {
   // NOTE: This method will add an 'Info' to 'infos' only if the container was
   // launched by the CNI isolator and joined CNI network(s), and cleanup _might_
@@ -376,7 +386,7 @@ Try<Nothing> NetworkCniIsolatorProcess::_recover(
   // an 'Info' to 'infos' and the corresponding 'cleanup' will be skipped.
 
   const string containerDir =
-      paths::getContainerDir(rootDir.get(), containerId.value());
+    paths::getContainerDir(rootDir.get(), containerId.value());
 
   if (!os::exists(containerDir)) {
     // This may occur in the following cases:
@@ -391,7 +401,7 @@ Try<Nothing> NetworkCniIsolatorProcess::_recover(
   }
 
   Try<list<string>> networkNames =
-      paths::getNetworkNames(rootDir.get(), containerId.value());
+    paths::getNetworkNames(rootDir.get(), containerId.value());
 
   if (networkNames.isError()) {
     return Error("Failed to list CNI network names: " + networkNames.error());
@@ -434,11 +444,11 @@ Try<Nothing> NetworkCniIsolatorProcess::_recover(
     containerNetwork.networkName = networkName;
     containerNetwork.ifName = interfaces->front();
 
-    if (executorInfo.isSome()) {
-      foreach (const mesos::NetworkInfo& _networkInfo,
-               executorInfo->container().network_infos()) {
-        if (_networkInfo.name() == networkName) {
-          containerNetwork.networkInfo = _networkInfo;
+    if (state.isSome()) {
+      foreach (const mesos::NetworkInfo& networkInfo,
+               state->executor_info().container().network_infos()) {
+        if (networkInfo.name() == networkName) {
+          containerNetwork.networkInfo = networkInfo;
         }
       }
     }
@@ -518,13 +528,13 @@ Future<Option<ContainerLaunchInfo>> NetworkCniIsolatorProcess::prepare(
   int ifIndex = 0;
   hashset<string> networkNames;
   hashmap<string, ContainerNetwork> containerNetworks;
-  foreach (const mesos::NetworkInfo& _networkInfo,
+  foreach (const mesos::NetworkInfo& networkInfo,
            executorInfo.container().network_infos()) {
-    if (!_networkInfo.has_name()) {
+    if (!networkInfo.has_name()) {
       continue;
     }
 
-    const string& name = _networkInfo.name();
+    const string& name = networkInfo.name();
     if (!networkConfigs.contains(name)) {
       return Failure("Unknown CNI network '" + name + "'");
     }
@@ -539,7 +549,7 @@ Future<Option<ContainerLaunchInfo>> NetworkCniIsolatorProcess::prepare(
     ContainerNetwork containerNetwork;
     containerNetwork.networkName = name;
     containerNetwork.ifName = "eth" + stringify(ifIndex++);
-    containerNetwork.networkInfo = _networkInfo;
+    containerNetwork.networkInfo = networkInfo;
 
     containerNetworks.put(name, containerNetwork);
   }
@@ -568,9 +578,17 @@ Future<Nothing> NetworkCniIsolatorProcess::isolate(
     return Nothing();
   }
 
+  // If the `network/cni` isolator is providing network isolation to a
+  // container its `rootDir` and `pluginDir` should always be set.
+  // These properties of the isolator will not be set only if the
+  // operator does not specify the '--network_cni_plugins_dir' and
+  // '--network_cni_config_dir' flags at Agent startup.
+  CHECK_SOME(rootDir);
+  CHECK_SOME(pluginDir);
+
   // Create the container directory.
   const string containerDir =
-      paths::getContainerDir(rootDir.get(), containerId.value());
+    paths::getContainerDir(rootDir.get(), containerId.value());
 
   Try<Nothing> mkdir = os::mkdir(containerDir);
   if (mkdir.isError()) {
@@ -584,7 +602,7 @@ Future<Nothing> NetworkCniIsolatorProcess::isolate(
   // reference to the network namespace which will be released in '_cleanup'.
   const string source = path::join("/proc", stringify(pid), "ns", "net");
   const string target =
-      paths::getNamespacePath(rootDir.get(), containerId.value());
+    paths::getNamespacePath(rootDir.get(), containerId.value());
 
   Try<Nothing> touch = os::touch(target);
   if (touch.isError()) {
@@ -639,7 +657,7 @@ Future<Nothing> NetworkCniIsolatorProcess::attach(
   CHECK(infos[containerId]->containerNetworks.contains(networkName));
 
   const ContainerNetwork& containerNetwork =
-      infos[containerId]->containerNetworks[networkName];
+    infos[containerId]->containerNetworks[networkName];
 
   const string ifDir = paths::getInterfaceDir(
       rootDir.get(),
@@ -675,7 +693,7 @@ Future<Nothing> NetworkCniIsolatorProcess::attach(
   }
 
   const NetworkConfigInfo& networkConfig =
-      networkConfigs[containerNetwork.networkName];
+    networkConfigs[containerNetwork.networkName];
 
   // Invoke the CNI plugin.
   const string& plugin = networkConfig.config.type();
@@ -769,7 +787,7 @@ Future<Nothing> NetworkCniIsolatorProcess::_attach(
   // 'attach()' and '_attach()' because the containerizer will wait
   // for 'isolate()' to finish before destroying the container.
   ContainerNetwork& containerNetwork =
-      infos[containerId]->containerNetworks[networkName];
+    infos[containerId]->containerNetworks[networkName];
 
   const string networkInfoPath = paths::getNetworkInfoPath(
       rootDir.get(),
@@ -814,30 +832,38 @@ Future<ResourceStatistics> NetworkCniIsolatorProcess::usage(
 Future<ContainerStatus> NetworkCniIsolatorProcess::status(
     const ContainerID& containerId)
 {
+  // TODO(jieyu): We don't create 'Info' struct for containers that
+  // want to join the host network. Currently, we rely on the
+  // slave/containerizer to set the IP addresses in ContainerStatus.
+  // Consider returning the IP address of the slave here.
   if (!infos.contains(containerId)) {
     return ContainerStatus();
   }
 
   ContainerStatus status;
-  foreachvalue (const ContainerNetwork& _containerNetwork,
+  foreachvalue (const ContainerNetwork& containerNetwork,
                 infos[containerId]->containerNetworks) {
+    CHECK_SOME(containerNetwork.networkInfo);
+
+    // NOTE: 'cniNetworkInfo' is None() before 'isolate()' finishes.
+    if (containerNetwork.cniNetworkInfo.isNone()) {
+      continue;
+    }
+
     mesos::NetworkInfo* networkInfo = status.add_network_infos();
-    networkInfo->CopyFrom(_containerNetwork.networkInfo);
+    networkInfo->CopyFrom(containerNetwork.networkInfo.get());
+    networkInfo->clear_ip_addresses();
 
-    if (_containerNetwork.cniNetworkInfo.isSome()) {
-      networkInfo->clear_ip_addresses();
+    if (containerNetwork.cniNetworkInfo->has_ip4()) {
+      mesos::NetworkInfo::IPAddress* ip = networkInfo->add_ip_addresses();
+      ip->set_protocol(mesos::NetworkInfo::IPv4);
+      ip->set_ip_address(containerNetwork.cniNetworkInfo->ip4().ip());
+    }
 
-      if (_containerNetwork.cniNetworkInfo->has_ip4()) {
-        mesos::NetworkInfo::IPAddress* ip = networkInfo->add_ip_addresses();
-        ip->set_protocol(mesos::NetworkInfo::IPv4);
-        ip->set_ip_address(_containerNetwork.cniNetworkInfo->ip4().ip());
-      }
-
-      if (_containerNetwork.cniNetworkInfo->has_ip6()) {
-        mesos::NetworkInfo::IPAddress* ip = networkInfo->add_ip_addresses();
-        ip->set_protocol(mesos::NetworkInfo::IPv6);
-        ip->set_ip_address(_containerNetwork.cniNetworkInfo->ip6().ip());
-      }
+    if (containerNetwork.cniNetworkInfo->has_ip6()) {
+      mesos::NetworkInfo::IPAddress* ip = networkInfo->add_ip_addresses();
+      ip->set_protocol(mesos::NetworkInfo::IPv6);
+      ip->set_ip_address(containerNetwork.cniNetworkInfo->ip6().ip());
     }
   }
 
@@ -891,10 +917,10 @@ Future<Nothing> NetworkCniIsolatorProcess::_cleanup(
   }
 
   const string containerDir =
-      paths::getContainerDir(rootDir.get(), containerId.value());
+    paths::getContainerDir(rootDir.get(), containerId.value());
 
   const string target =
-      paths::getNamespacePath(rootDir.get(), containerId.value());
+    paths::getNamespacePath(rootDir.get(), containerId.value());
 
   if (os::exists(target)) {
     Try<Nothing> unmount = fs::unmount(target);
@@ -931,7 +957,7 @@ Future<Nothing> NetworkCniIsolatorProcess::detach(
   CHECK(infos[containerId]->containerNetworks.contains(networkName));
 
   const ContainerNetwork& containerNetwork =
-      infos[containerId]->containerNetworks[networkName];
+    infos[containerId]->containerNetworks[networkName];
 
   // Prepare environment variables for CNI plugin.
   map<string, string> environment;

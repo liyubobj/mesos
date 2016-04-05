@@ -50,6 +50,7 @@
 #include <stout/utils.hpp>
 
 #include <stout/os/exists.hpp>
+#include <stout/os/realpath.hpp>
 #include <stout/os/stat.hpp>
 
 #include "common/status_utils.hpp"
@@ -364,11 +365,9 @@ static string getSymlinkPath(const ContainerID& containerId)
 }
 
 
-static string getNamespaceHandlePath(pid_t pid)
+static string getNamespaceHandlePath(const string& bindMountRoot, pid_t pid)
 {
-  return path::join(
-      PORT_MAPPING_BIND_MOUNT_ROOT(),
-      stringify(pid));
+  return path::join(bindMountRoot, stringify(pid));
 }
 
 
@@ -1879,60 +1878,106 @@ Try<Isolator*> PortMappingIsolatorProcess::create(const Flags& flags)
   // network namespace handles on the host, those handles will be
   // unmounted in the containers as well, but NOT vice versa.
 
+  // We need to get the realpath for the bind mount root since on some
+  // Linux distribution, The bind mount root (i.e., /var/run/netns)
+  // might contain symlink.
+  Result<string> bindMountRoot = os::realpath(PORT_MAPPING_BIND_MOUNT_ROOT());
+  if (!bindMountRoot.isSome()) {
+    return Error(
+        "Failed to get realpath for bind mount root '" +
+        PORT_MAPPING_BIND_MOUNT_ROOT() + "': " +
+        (bindMountRoot.isError() ? bindMountRoot.error() : "Not found"));
+  }
+
   // We first create the bind mount directory if it does not exist.
-  Try<Nothing> mkdir = os::mkdir(PORT_MAPPING_BIND_MOUNT_ROOT());
+  Try<Nothing> mkdir = os::mkdir(bindMountRoot.get());
   if (mkdir.isError()) {
     return Error(
         "Failed to create the bind mount root directory at " +
-        PORT_MAPPING_BIND_MOUNT_ROOT() + ": " + mkdir.error());
+        bindMountRoot.get() + ": " + mkdir.error());
   }
 
-  // Now, check '/proc/mounts' to see if
-  // PORT_MAPPING_BIND_MOUNT_ROOT() has already been self mounted.
-  Try<fs::MountTable> mountTable = fs::MountTable::read("/proc/mounts");
+  // Now, check '/proc/self/mounts' to see if the bind mount root has
+  // already been self mounted.
+  Try<fs::MountInfoTable> mountTable = fs::MountInfoTable::read();
   if (mountTable.isError()) {
-    return Error(
-        "Failed to the read the mount table at '/proc/mounts': " +
-        mountTable.error());
+    return Error("Failed to read the mount table: " + mountTable.error());
   }
 
-  Option<fs::MountTable::Entry> bindMountRoot;
-  foreach (const fs::MountTable::Entry& entry, mountTable.get().entries) {
-    if (entry.dir == PORT_MAPPING_BIND_MOUNT_ROOT()) {
-      bindMountRoot = entry;
+  Option<fs::MountInfoTable::Entry> bindMountEntry;
+  foreach (const fs::MountInfoTable::Entry& entry, mountTable->entries) {
+    if (entry.target == bindMountRoot.get()) {
+      bindMountEntry = entry;
     }
   }
 
-  // Self bind mount PORT_MAPPING_BIND_MOUNT_ROOT().
-  if (bindMountRoot.isNone()) {
+  // Do a self bind mount if needed. If the mount already exists, make
+  // sure it is a shared mount of its own peer group.
+  if (bindMountEntry.isNone()) {
     // NOTE: Instead of using fs::mount to perform the bind mount, we
     // use the shell command here because the syscall 'mount' does not
-    // update the mount table (i.e., /etc/mtab), which could cause
-    // issues for the shell command 'mount --make-rslave' inside the
-    // container. It's OK to use the blocking os::shell here because
+    // update the mount table (i.e., /etc/mtab). In other words, the
+    // mount will not be visible if the operator types command
+    // 'mount'. Since this mount will still be presented after all
+    // containers and the slave are stopped, it's better to make it
+    // visible. It's OK to use the blocking os::shell here because
     // 'create' will only be invoked during initialization.
     Try<string> mount = os::shell(
-        "mount --bind %s %s",
-        PORT_MAPPING_BIND_MOUNT_ROOT().c_str(),
-        PORT_MAPPING_BIND_MOUNT_ROOT().c_str());
+        "mount --bind %s %s && "
+        "mount --make-slave %s && "
+        "mount --make-shared %s",
+        bindMountRoot->c_str(),
+        bindMountRoot->c_str(),
+        bindMountRoot->c_str(),
+        bindMountRoot->c_str());
 
     if (mount.isError()) {
       return Error(
-          "Failed to self bind mount '" + PORT_MAPPING_BIND_MOUNT_ROOT() +
-          "': " + mount.error());
+          "Failed to self bind mount '" + bindMountRoot.get() +
+          "' and make it a shared mount: " + mount.error());
     }
-  }
+  } else {
+    if (bindMountEntry->shared().isNone()) {
+      // This is the case where the work directory mount is not a
+      // shared mount yet (possibly due to slave crash while preparing
+      // the work directory mount). It's safe to re-do the following.
+      Try<string> mount = os::shell(
+          "mount --make-slave %s && "
+          "mount --make-shared %s",
+          bindMountRoot->c_str(),
+          bindMountRoot->c_str());
 
-  // Mark the mount point PORT_MAPPING_BIND_MOUNT_ROOT() as
-  // recursively shared.
-  Try<string> mountShared = os::shell(
-      "mount --make-rshared %s",
-      PORT_MAPPING_BIND_MOUNT_ROOT().c_str());
+      if (mount.isError()) {
+        return Error(
+            "Failed to self bind mount '" + bindMountRoot.get() +
+            "' and make it a shared mount: " + mount.error());
+      }
+    } else {
+      // We need to make sure that the shared mount is in its own peer
+      // group. To check that, we need to get the parent mount.
+      foreach (const fs::MountInfoTable::Entry& entry, mountTable->entries) {
+        if (entry.id == bindMountEntry->parent) {
+          // If the bind mount root and its parent mount are in the
+          // same peer group, we need to re-do the following commands
+          // so that they are in different peer groups.
+          if (entry.shared() == bindMountEntry->shared()) {
+            Try<string> mount = os::shell(
+                "mount --make-slave %s && "
+                "mount --make-shared %s",
+                bindMountRoot->c_str(),
+                bindMountRoot->c_str());
 
-  if (mountShared.isError()) {
-    return Error(
-        "Failed to mark '" + PORT_MAPPING_BIND_MOUNT_ROOT() +
-        "' as recursively shared: " + mountShared.error());
+            if (mount.isError()) {
+              return Error(
+                  "Failed to self bind mount '" + bindMountRoot.get() +
+                  "' and make it a shared mount: " + mount.error());
+            }
+          }
+
+          break;
+        }
+      }
+    }
   }
 
   // Create the network namespace handle symlink directory if it does
@@ -1950,6 +1995,7 @@ Try<Isolator*> PortMappingIsolatorProcess::create(const Flags& flags)
   return new MesosIsolator(Owned<MesosIsolatorProcess>(
       new PortMappingIsolatorProcess(
           flags,
+          bindMountRoot.get(),
           eth0.get(),
           lo.get(),
           hostMAC.get(),
@@ -1992,16 +2038,15 @@ Future<Nothing> PortMappingIsolatorProcess::recover(
 
   // Scan the bind mount root to cleanup all stale network namespace
   // handles that do not have an active veth associated with.
-  Try<list<string>> entries = os::ls(PORT_MAPPING_BIND_MOUNT_ROOT());
+  Try<list<string>> entries = os::ls(bindMountRoot);
   if (entries.isError()) {
     return Failure(
-        "Failed to list bind mount root '" +
-        PORT_MAPPING_BIND_MOUNT_ROOT() +
+        "Failed to list bind mount root '" + bindMountRoot +
         "': " + entries.error());
   }
 
   foreach (const string& entry, entries.get()) {
-    const string path = path::join(PORT_MAPPING_BIND_MOUNT_ROOT(), entry);
+    const string path = path::join(bindMountRoot, entry);
 
     // NOTE: We expect all regular files whose names are numbers under
     // the bind mount root are network namespace handles.
@@ -2512,7 +2557,7 @@ Future<Nothing> PortMappingIsolatorProcess::isolate(
   // the process 'pid' is gone, which allows us to explicitly control
   // the network namespace life cycle.
   const string source = path::join("/proc", stringify(pid), "ns", "net");
-  const string target = getNamespaceHandlePath(pid);
+  const string target = getNamespaceHandlePath(bindMountRoot, pid);
 
   Try<Nothing> touch = os::touch(target);
   if (touch.isError()) {
@@ -3512,7 +3557,7 @@ Try<Nothing> PortMappingIsolatorProcess::_cleanup(
   }
 
   // Release the bind mount for this container.
-  const string target = getNamespaceHandlePath(pid);
+  const string target = getNamespaceHandlePath(bindMountRoot, pid);
   Try<Nothing> unmount = fs::unmount(target, MNT_DETACH);
   if (unmount.isError()) {
     errors.push_back(
@@ -3876,7 +3921,7 @@ string PortMappingIsolatorProcess::scripts(Info* info)
   // Mark the mount point PORT_MAPPING_BIND_MOUNT_ROOT() as slave
   // mount so that changes in the container will not be propagated to
   // the host.
-  script << "mount --make-rslave " << PORT_MAPPING_BIND_MOUNT_ROOT() << "\n";
+  script << "mount --make-rslave " << bindMountRoot << "\n";
 
   // Disable IPv6 as IPv6 packets won't be forwarded anyway.
   script << "echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6\n";
