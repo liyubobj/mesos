@@ -1510,7 +1510,7 @@ TYPED_TEST(MasterAllocatorTest, RebalancedForUpdatedWeights)
 {
   TestAllocator<TypeParam> allocator;
 
-  EXPECT_CALL(allocator, initialize(_, _, _, _));
+  EXPECT_CALL(allocator, initialize(_, _, _, _, _));
 
   // Start Mesos master.
   Try<Owned<cluster::Master>> master = this->StartMaster(&allocator);
@@ -1523,7 +1523,7 @@ TYPED_TEST(MasterAllocatorTest, RebalancedForUpdatedWeights)
   string agentResources = "cpus:2;mem:1024;disk:4096;ports:[31000-32000]";
   for (int i = 0; i < 3; i++) {
     Future<Nothing> addSlave;
-    EXPECT_CALL(allocator, addSlave(_, _, _, _, _))
+    EXPECT_CALL(allocator, addSlave(_, _, _, _, _, _))
       .WillOnce(DoAll(InvokeAddSlave(&allocator),
                       FutureSatisfy(&addSlave)));
 
