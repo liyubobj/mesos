@@ -39,6 +39,8 @@
 #include "master/flags.hpp"
 #include "master/master.hpp"
 
+#include "master/detector/standalone.hpp"
+
 #include "slave/slave.hpp"
 
 #include "tests/containerizer.hpp"
@@ -47,6 +49,9 @@
 using mesos::internal::master::Master;
 
 using mesos::internal::slave::Slave;
+
+using mesos::master::detector::MasterDetector;
+using mesos::master::detector::StandaloneMasterDetector;
 
 using process::Clock;
 using process::Future;

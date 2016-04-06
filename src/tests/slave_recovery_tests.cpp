@@ -44,10 +44,11 @@
 
 #include "common/protobuf_utils.hpp"
 
-#include "master/detector.hpp"
 #include "master/master.hpp"
 
 #include "master/allocator/mesos/hierarchical.hpp"
+
+#include "master/detector/standalone.hpp"
 
 #include "slave/gc.hpp"
 #include "slave/paths.hpp"
@@ -72,6 +73,9 @@ using namespace process;
 using google::protobuf::RepeatedPtrField;
 
 using mesos::internal::master::Master;
+
+using mesos::master::detector::MasterDetector;
+using mesos::master::detector::StandaloneMasterDetector;
 
 using mesos::v1::executor::Call;
 

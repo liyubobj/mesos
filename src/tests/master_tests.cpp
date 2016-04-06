@@ -54,6 +54,10 @@
 
 #include "master/allocator/mesos/allocator.hpp"
 
+#include "master/contender/zookeeper.hpp"
+
+#include "master/detector/standalone.hpp"
+
 #include "slave/constants.hpp"
 #include "slave/gc.hpp"
 #include "slave/flags.hpp"
@@ -76,6 +80,11 @@ using mesos::internal::slave::GarbageCollectorProcess;
 using mesos::internal::slave::Slave;
 using mesos::internal::slave::Containerizer;
 using mesos::internal::slave::MesosContainerizerProcess;
+
+using mesos::master::contender::MASTER_CONTENDER_ZK_SESSION_TIMEOUT;
+
+using mesos::master::detector::MasterDetector;
+using mesos::master::detector::StandaloneMasterDetector;
 
 using process::Clock;
 using process::Future;

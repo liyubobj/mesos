@@ -43,6 +43,8 @@
 #include "master/flags.hpp"
 #include "master/master.hpp"
 
+#include "master/detector/standalone.hpp"
+
 #include "slave/flags.hpp"
 #include "slave/paths.hpp"
 #include "slave/slave.hpp"
@@ -58,6 +60,9 @@ using google::protobuf::RepeatedPtrField;
 using mesos::internal::master::Master;
 
 using mesos::internal::slave::Slave;
+
+using mesos::master::detector::MasterDetector;
+using mesos::master::detector::StandaloneMasterDetector;
 
 using std::list;
 using std::string;

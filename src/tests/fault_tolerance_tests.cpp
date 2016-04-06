@@ -47,6 +47,12 @@
 
 #include "master/allocator/mesos/allocator.hpp"
 
+#include "master/contender/standalone.hpp"
+#include "master/contender/zookeeper.hpp"
+
+#include "master/detector/standalone.hpp"
+#include "master/detector/zookeeper.hpp"
+
 #include "sched/constants.hpp"
 
 #include "slave/constants.hpp"
@@ -60,6 +66,9 @@ using namespace mesos::internal::protobuf;
 using mesos::internal::master::Master;
 
 using mesos::internal::slave::Slave;
+
+using mesos::master::detector::MasterDetector;
+using mesos::master::detector::StandaloneMasterDetector;
 
 using process::Clock;
 using process::Future;

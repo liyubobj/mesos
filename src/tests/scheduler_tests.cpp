@@ -43,6 +43,8 @@
 
 #include "master/allocator/mesos/allocator.hpp"
 
+#include "master/detector/standalone.hpp"
+
 #include "master/master.hpp"
 
 #include "tests/containerizer.hpp"
@@ -54,6 +56,9 @@ using mesos::internal::master::Master;
 
 using mesos::internal::slave::Containerizer;
 using mesos::internal::slave::Slave;
+
+using mesos::master::detector::MasterDetector;
+using mesos::master::detector::StandaloneMasterDetector;
 
 using mesos::v1::scheduler::Call;
 using mesos::v1::scheduler::Event;

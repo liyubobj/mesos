@@ -31,7 +31,6 @@
 #include <stout/path.hpp>
 
 #include "master/master.hpp"
-#include "master/detector.hpp"
 
 #include "slave/flags.hpp"
 #include "slave/slave.hpp"
@@ -47,6 +46,8 @@ using namespace process;
 using mesos::internal::master::Master;
 using mesos::internal::slave::Containerizer;
 using mesos::internal::slave::Slave;
+
+using mesos::master::detector::MasterDetector;
 
 using std::string;
 using std::vector;

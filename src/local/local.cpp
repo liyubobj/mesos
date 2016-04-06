@@ -27,6 +27,8 @@
 
 #include <mesos/module/anonymous.hpp>
 #include <mesos/module/authorizer.hpp>
+#include <mesos/module/contender.hpp>
+#include <mesos/module/detector.hpp>
 
 #include <mesos/slave/resource_estimator.hpp>
 
@@ -49,14 +51,16 @@
 #include "logging/flags.hpp"
 #include "logging/logging.hpp"
 
-#include "master/contender.hpp"
-#include "master/detector.hpp"
 #include "master/master.hpp"
 #include "master/registrar.hpp"
 #include "master/repairer.hpp"
 
 #include "master/allocator/mesos/hierarchical.hpp"
 #include "master/allocator/sorter/drf/sorter.hpp"
+
+#include "master/contender/standalone.hpp"
+
+#include "master/detector/standalone.hpp"
 
 #include "module/manager.hpp"
 
@@ -76,6 +80,12 @@ using namespace mesos::internal;
 using namespace mesos::internal::log;
 
 using mesos::master::allocator::Allocator;
+
+using mesos::master::contender::MasterContender;
+using mesos::master::contender::StandaloneMasterContender;
+
+using mesos::master::detector::MasterDetector;
+using mesos::master::detector::StandaloneMasterDetector;
 
 using mesos::internal::master::allocator::HierarchicalDRFAllocator;
 

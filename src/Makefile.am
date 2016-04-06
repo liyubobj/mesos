@@ -475,7 +475,9 @@ masterdir = $(pkgincludedir)/master
 
 master_HEADERS =							\
   $(top_srcdir)/include/mesos/master/allocator.hpp			\
-  $(top_srcdir)/include/mesos/master/allocator.proto
+  $(top_srcdir)/include/mesos/master/allocator.proto			\
+  $(top_srcdir)/include/mesos/master/contender.hpp			\
+  $(top_srcdir)/include/mesos/master/detector.hpp
 
 nodist_master_HEADERS =							\
   ../include/mesos/master/allocator.pb.h
@@ -495,7 +497,9 @@ module_HEADERS =							\
   $(top_srcdir)/include/mesos/module/module.hpp				\
   $(top_srcdir)/include/mesos/module/module.proto			\
   $(top_srcdir)/include/mesos/module/qos_controller.hpp			\
-  $(top_srcdir)/include/mesos/module/resource_estimator.hpp
+  $(top_srcdir)/include/mesos/module/resource_estimator.hpp		\
+  $(top_srcdir)/include/mesos/module/contender.hpp			\
+  $(top_srcdir)/include/mesos/module/detector.hpp
 
 nodist_module_HEADERS =							\
   ../include/mesos/module/module.pb.h
@@ -624,8 +628,6 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   local/local.cpp							\
   logging/flags.cpp							\
   logging/logging.cpp							\
-  master/contender.cpp							\
-  master/detector.cpp							\
   master/flags.cpp							\
   master/http.cpp							\
   master/maintenance.cpp						\
@@ -642,6 +644,12 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   master/allocator/mesos/hierarchical.cpp				\
   master/allocator/mesos/metrics.cpp					\
   master/allocator/sorter/drf/sorter.cpp				\
+  master/contender/contender.cpp					\
+  master/contender/standalone.cpp					\
+  master/contender/zookeeper.cpp					\
+  master/detector/detector.cpp						\
+  master/detector/standalone.cpp					\
+  master/detector/zookeeper.cpp						\
   messages/messages.cpp							\
   module/manager.cpp							\
   sched/sched.cpp							\
@@ -652,7 +660,6 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   slave/gc.cpp								\
   slave/http.cpp							\
   slave/metrics.cpp							\
-  slave/monitor.cpp							\
   slave/paths.cpp							\
   slave/qos_controller.cpp						\
   slave/qos_controllers/noop.cpp					\
@@ -740,8 +747,6 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   logging/flags.hpp							\
   logging/logging.hpp							\
   master/constants.hpp							\
-  master/contender.hpp							\
-  master/detector.hpp							\
   master/flags.hpp							\
   master/machine.hpp							\
   master/maintenance.hpp						\
@@ -758,6 +763,10 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   master/allocator/mesos/metrics.hpp					\
   master/allocator/sorter/sorter.hpp					\
   master/allocator/sorter/drf/sorter.hpp				\
+  master/contender/standalone.hpp					\
+  master/contender/zookeeper.hpp					\
+  master/detector/standalone.hpp					\
+  master/detector/zookeeper.hpp						\
   messages/flags.hpp							\
   messages/messages.hpp							\
   module/manager.hpp							\
@@ -767,7 +776,6 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   slave/flags.hpp							\
   slave/gc.hpp								\
   slave/metrics.hpp							\
-  slave/monitor.hpp							\
   slave/paths.hpp							\
   slave/slave.hpp							\
   slave/state.hpp							\
@@ -1814,6 +1822,18 @@ libtestcontainer_logger_la_SOURCES =		\
 libtestcontainer_logger_la_CPPFLAGS = $(MESOS_CPPFLAGS)
 libtestcontainer_logger_la_LDFLAGS = $(MESOS_TEST_MODULE_LDFLAGS)
 
+# Library containing the test contender module.
+noinst_LTLIBRARIES += libtestmastercontender.la
+libtestmastercontender_la_SOURCES = examples/test_master_contender_module.cpp
+libtestmastercontender_la_CPPFLAGS = $(MESOS_CPPFLAGS)
+libtestmastercontender_la_LDFLAGS = $(MESOS_TEST_MODULE_LDFLAGS)
+
+# Library containing the test detector module.
+noinst_LTLIBRARIES += libtestmasterdetector.la
+libtestmasterdetector_la_SOURCES = examples/test_master_detector_module.cpp
+libtestmasterdetector_la_CPPFLAGS = $(MESOS_CPPFLAGS)
+libtestmasterdetector_la_LDFLAGS = $(MESOS_TEST_MODULE_LDFLAGS)
+
 # Library containing test Hook module.
 libtesthook_la_SOURCES = examples/test_hook_module.cpp
 libtesthook_la_CPPFLAGS = $(MESOS_CPPFLAGS)
@@ -1887,7 +1907,6 @@ mesos_tests_SOURCES =						\
   tests/metrics_tests.cpp					\
   tests/module.cpp						\
   tests/module_tests.cpp					\
-  tests/monitor_tests.cpp					\
   tests/oversubscription_tests.cpp				\
   tests/partition_tests.cpp					\
   tests/paths_tests.cpp						\

@@ -57,14 +57,18 @@
 #include "log/log.hpp"
 
 #include "master/constants.hpp"
-#include "master/contender.hpp"
-#include "master/detector.hpp"
 #include "master/flags.hpp"
 #include "master/master.hpp"
 #include "master/registrar.hpp"
 #include "master/repairer.hpp"
 
 #include "master/allocator/mesos/hierarchical.hpp"
+
+#include "master/contender/standalone.hpp"
+#include "master/contender/zookeeper.hpp"
+
+#include "master/detector/standalone.hpp"
+#include "master/detector/zookeeper.hpp"
 
 #include "slave/flags.hpp"
 #include "slave/gc.hpp"
@@ -83,6 +87,12 @@
 
 #include "tests/cluster.hpp"
 
+using mesos::master::contender::StandaloneMasterContender;
+using mesos::master::contender::ZooKeeperMasterContender;
+
+using mesos::master::detector::MasterDetector;
+using mesos::master::detector::StandaloneMasterDetector;
+using mesos::master::detector::ZooKeeperMasterDetector;
 
 namespace mesos {
 namespace internal {

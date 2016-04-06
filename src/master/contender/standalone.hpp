@@ -14,39 +14,52 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef __SLAVE_MONITOR_HPP__
-#define __SLAVE_MONITOR_HPP__
+#ifndef __MASTER_CONTENDER_STANDALONE_HPP__
+#define __MASTER_CONTENDER_STANDALONE_HPP__
 
 #include <mesos/mesos.hpp>
 
+#include <mesos/master/contender.hpp>
+
+#include <process/defer.hpp>
 #include <process/future.hpp>
 #include <process/owned.hpp>
+#include <process/pid.hpp>
 
 #include <stout/lambda.hpp>
+#include <stout/nothing.hpp>
 
 namespace mesos {
-namespace internal {
-namespace slave {
+namespace master {
+namespace contender {
 
-// Forward declarations.
-class ResourceMonitorProcess;
-
-
-// Exposes resources usage information via a JSON endpoint.
-class ResourceMonitor
+// A basic implementation which assumes only one master is
+// contending.
+class StandaloneMasterContender : public MasterContender
 {
 public:
-  explicit ResourceMonitor(
-      const lambda::function<process::Future<ResourceUsage>()>& usage);
+  StandaloneMasterContender()
+    : initialized(false),
+      promise(NULL) {}
 
-  ~ResourceMonitor();
+  virtual ~StandaloneMasterContender();
+
+  // MasterContender implementation.
+  virtual void initialize(const MasterInfo& masterInfo);
+
+  // In this basic implementation the outer Future directly returns
+  // and inner Future stays pending because there is only one
+  // contender in the contest.
+  virtual process::Future<process::Future<Nothing>> contend();
 
 private:
-  process::Owned<ResourceMonitorProcess> process;
+  bool initialized;
+  process::Promise<Nothing>* promise;
 };
 
-} // namespace slave {
-} // namespace internal {
+} // namespace contender {
+} // namespace master {
 } // namespace mesos {
 
-#endif // __SLAVE_MONITOR_HPP__
+
+#endif // __MASTER_CONTENDER_STANDALONE_HPP__

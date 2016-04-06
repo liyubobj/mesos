@@ -43,7 +43,6 @@
 #include "local/local.hpp"
 
 #include "master/master.hpp"
-#include "master/detector.hpp"
 
 #include "slave/constants.hpp"
 #include "slave/flags.hpp"
@@ -60,6 +59,8 @@ using mesos::internal::master::Master;
 using mesos::internal::slave::GarbageCollector;
 using mesos::internal::slave::GarbageCollectorProcess;
 using mesos::internal::slave::Slave;
+
+using mesos::master::detector::MasterDetector;
 
 using process::Clock;
 using process::Future;

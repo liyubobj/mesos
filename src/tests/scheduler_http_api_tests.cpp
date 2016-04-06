@@ -38,6 +38,8 @@
 #include "master/constants.hpp"
 #include "master/master.hpp"
 
+#include "master/detector/standalone.hpp"
+
 #include "tests/mesos.hpp"
 #include "tests/utils.hpp"
 
@@ -45,6 +47,8 @@ using mesos::internal::master::DEFAULT_HEARTBEAT_INTERVAL;
 using mesos::internal::master::Master;
 
 using mesos::internal::recordio::Reader;
+
+using mesos::master::detector::StandaloneMasterDetector;
 
 using mesos::v1::scheduler::Call;
 using mesos::v1::scheduler::Event;

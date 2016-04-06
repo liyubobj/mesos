@@ -94,6 +94,8 @@
 
 using mesos::executor::Call;
 
+using mesos::master::detector::MasterDetector;
+
 using mesos::slave::QoSController;
 using mesos::slave::QoSCorrection;
 using mesos::slave::ResourceEstimator;
@@ -141,7 +143,6 @@ Slave::Slave(const std::string& id,
     files(_files),
     metrics(*this),
     gc(_gc),
-    monitor(defer(self(), &Self::usage)),
     statusUpdateManager(_statusUpdateManager),
     masterPingTimeout(DEFAULT_MASTER_PING_TIMEOUT()),
     metaDir(paths::getMetaRootDir(flags.work_dir)),
@@ -739,6 +740,16 @@ void Slave::initialize()
         Http::HEALTH_HELP(),
         [http](const process::http::Request& request) {
           return http.health(request);
+        });
+  route("/monitor/statistics",
+        Http::STATISTICS_HELP(),
+        [http](const process::http::Request& request) {
+          return http.statistics(request);
+        });
+  route("/monitor/statistics.json",
+        Http::STATISTICS_HELP(),
+        [http](const process::http::Request& request) {
+          return http.statistics(request);
         });
 
   // Expose the log file for the webui. Fall back to 'log_dir' if

@@ -46,7 +46,6 @@
 #endif // __linux__
 
 #include "master/master.hpp"
-#include "master/detector.hpp"
 
 #include "slave/flags.hpp"
 #include "slave/gc.hpp"
@@ -98,6 +97,8 @@ using mesos::internal::slave::PosixLauncher;
 using mesos::internal::slave::PosixCpuIsolatorProcess;
 using mesos::internal::slave::PosixMemIsolatorProcess;
 using mesos::internal::slave::Slave;
+
+using mesos::master::detector::MasterDetector;
 
 using mesos::slave::ContainerConfig;
 using mesos::slave::ContainerLaunchInfo;

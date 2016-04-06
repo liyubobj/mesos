@@ -38,9 +38,13 @@
 
 #include "common/protobuf_utils.hpp"
 
-#include "master/contender.hpp"
-#include "master/detector.hpp"
 #include "master/master.hpp"
+
+#include "master/contender/standalone.hpp"
+#include "master/contender/zookeeper.hpp"
+
+#include "master/detector/standalone.hpp"
+#include "master/detector/zookeeper.hpp"
 
 #include "messages/messages.hpp"
 
@@ -56,6 +60,16 @@ using namespace zookeeper;
 using mesos::internal::master::Master;
 
 using mesos::internal::slave::Slave;
+
+using mesos::master::contender::MASTER_CONTENDER_ZK_SESSION_TIMEOUT;
+using mesos::master::contender::MasterContender;
+using mesos::master::contender::StandaloneMasterContender;
+using mesos::master::contender::ZooKeeperMasterContender;
+
+using mesos::master::detector::MASTER_DETECTOR_ZK_SESSION_TIMEOUT;
+using mesos::master::detector::MasterDetector;
+using mesos::master::detector::StandaloneMasterDetector;
+using mesos::master::detector::ZooKeeperMasterDetector;
 
 using process::Clock;
 using process::Future;

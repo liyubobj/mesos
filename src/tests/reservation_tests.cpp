@@ -37,11 +37,12 @@
 #include <stout/strings.hpp>
 
 #include "master/constants.hpp"
-#include "master/detector.hpp"
 #include "master/flags.hpp"
 #include "master/master.hpp"
 
 #include "master/allocator/mesos/hierarchical.hpp"
+
+#include "master/detector/standalone.hpp"
 
 #include "tests/allocator.hpp"
 #include "tests/containerizer.hpp"
@@ -52,6 +53,9 @@ using mesos::internal::master::allocator::HierarchicalDRFAllocator;
 using mesos::internal::master::Master;
 
 using mesos::internal::slave::Slave;
+
+using mesos::master::detector::MasterDetector;
+using mesos::master::detector::StandaloneMasterDetector;
 
 using process::Clock;
 using process::Future;

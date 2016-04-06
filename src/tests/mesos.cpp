@@ -21,6 +21,8 @@
 
 #include <mesos/slave/container_logger.hpp>
 
+#include <mesos/master/detector.hpp>
+
 #include <stout/check.hpp>
 #include <stout/foreach.hpp>
 #include <stout/json.hpp>
@@ -55,6 +57,8 @@ using testing::_;
 using testing::Invoke;
 
 using mesos::fetcher::FetcherInfo;
+
+using mesos::master::detector::MasterDetector;
 
 using mesos::slave::ContainerLogger;
 
@@ -478,6 +482,8 @@ MockSlave::MockSlave(
     .WillRepeatedly(Invoke(this, &MockSlave::unmocked___recover));
   EXPECT_CALL(*this, qosCorrections())
     .WillRepeatedly(Invoke(this, &MockSlave::unmocked_qosCorrections));
+  EXPECT_CALL(*this, usage())
+    .WillRepeatedly(Invoke(this, &MockSlave::unmocked_usage));
 }
 
 
@@ -531,6 +537,12 @@ void MockSlave::unmocked___recover(const Future<Nothing>& future)
 void MockSlave::unmocked_qosCorrections()
 {
   slave::Slave::qosCorrections();
+}
+
+
+process::Future<ResourceUsage> MockSlave::unmocked_usage()
+{
+  return slave::Slave::usage();
 }
 
 

@@ -17,6 +17,8 @@
 #ifndef __MASTER_CONTENDER_HPP__
 #define __MASTER_CONTENDER_HPP__
 
+#include <mesos/master/contender.hpp>
+
 #include <process/defer.hpp>
 #include <process/future.hpp>
 #include <process/owned.hpp>
@@ -36,53 +38,7 @@ namespace internal {
 
 extern const Duration MASTER_CONTENDER_ZK_SESSION_TIMEOUT;
 
-
-// Forward declarations.
-namespace master {
-class Master;
-}
-
-
 class ZooKeeperMasterContenderProcess;
-
-
-// An abstraction for contending to be a leading master.
-//
-// TODO(benh): Support contending with a v1::MasterInfo.
-class MasterContender
-{
-public:
-  // Attempts to create a master contender using the specified
-  // mechanism.
-  // The mechanism address should be one of:
-  //   - zk://host1:port1,host2:port2,.../path
-  //   - zk://username:password@host1:port1,host2:port2,.../path
-  // Note that the returned contender still needs to be 'initialize()'d.
-  static Try<MasterContender*> create(const Option<std::string>& _mechanism);
-
-  // Note that the contender's membership, if obtained, is scheduled
-  // to be cancelled during destruction.
-  virtual ~MasterContender() = 0;
-
-  // Initializes the contender with the MasterInfo of the master it
-  // contends on behalf of.
-  virtual void initialize(const MasterInfo& masterInfo) = 0;
-
-  // Returns a Future<Nothing> once the contender has entered the
-  // contest (by obtaining a membership) and an error otherwise.
-  // A failed future is returned if this method is called before
-  // initialize().
-  // The inner Future returns Nothing when the contender is out of
-  // the contest (i.e. its membership is lost).
-  //
-  // This method can be used to contend again after candidacy is
-  // obtained (the outer future satisfied), otherwise the future for
-  // the pending election is returned.
-  // Recontending after candidacy is obtained causes the previous
-  // candidacy to be withdrawn.
-  virtual process::Future<process::Future<Nothing> > contend() = 0;
-};
-
 
 // A basic implementation which assumes only one master is
 // contending.
@@ -92,6 +48,7 @@ public:
   StandaloneMasterContender()
     : initialized(false),
       promise(NULL) {}
+
   virtual ~StandaloneMasterContender();
 
   // MasterContender implementation.
