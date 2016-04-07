@@ -3711,9 +3711,6 @@ void Master::_accept(
           // in case the task has duplicated ID.
           bool pending = framework->pendingTasks.contains(task.task_id());
 
-          // Remove from pending tasks.
-          framework->pendingTasks.erase(task.task_id());
-
           CHECK(!authorization.isDiscarded());
 
           if (authorization.isFailed() || !authorization.get()) {
@@ -3745,6 +3742,9 @@ void Master::_accept(
                 TaskStatus::REASON_TASK_UNAUTHORIZED);
 
             forward(update, UPID(), framework);
+
+            // Remove from pending tasks.
+            framework->pendingTasks.erase(task.task_id());
 
             continue;
           }
@@ -3787,6 +3787,12 @@ void Master::_accept(
 
             forward(update, UPID(), framework);
 
+            // Remove from pending tasks if it's not a duplicated task ID case.
+            // We need to make sure the first task launched successfully.
+            if (!framework->tasks.contains(task.task_id())) {
+              framework->pendingTasks.erase(task.task_id());
+            }
+
             continue;
           }
 
@@ -3823,9 +3829,6 @@ void Master::_accept(
             // for task executor in EGO. Need further enhancement later.
             Future<Nothing> resolution = allocator->resolveConflicts(
                 framework->id(), task_);
-
-            // Add task back to pending tasks again.
-            framework->pendingTasks[task_.task_id()] = task;
 
             resolution.onAny(defer(self(),
                                    &Self::__accept,
