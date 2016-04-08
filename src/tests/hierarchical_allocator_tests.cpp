@@ -2807,6 +2807,103 @@ TEST_F(HierarchicalAllocatorTest, ActiveOfferFiltersMetrics)
 }
 
 
+// Verifies that per-role dominant share metrics are correctly reported.
+TEST_F(HierarchicalAllocatorTest, DominantShareMetrics)
+{
+  // Pausing the clock is not necessary, but ensures that the test
+  // doesn't rely on the batch allocation in the allocator, which
+  // would slow down the test.
+  Clock::pause();
+
+  initialize();
+
+  // Register one agent and one framework. The framework will
+  // immediately receive receive an offer and make it have the
+  // maximum possible dominant share.
+  SlaveInfo agent1 = createSlaveInfo("cpus:1;mem:1024");
+  allocator->addSlave(agent1.id(), agent1, None(), agent1.resources(), {});
+
+  FrameworkInfo framework1 = createFrameworkInfo("roleA");
+  allocator->addFramework(framework1.id(), framework1, {});
+  Clock::settle();
+
+  JSON::Object expected;
+
+  expected.values = {
+      {"allocator/mesos/roles/roleA/shares/dominant", 1},
+  };
+
+  JSON::Value metrics = Metrics();
+  EXPECT_TRUE(metrics.contains(expected));
+
+  // Decline the offered resources and expect a zero share.
+  Future<Allocation> allocation = allocations.get();
+  AWAIT_READY(allocation);
+  allocator->recoverResources(
+      allocation->frameworkId,
+      agent1.id(),
+      allocation->resources.get(agent1.id()).get(),
+      None());
+  Clock::settle();
+
+  expected.values = {
+      {"allocator/mesos/roles/roleA/shares/dominant", 0},
+  };
+
+  metrics = Metrics();
+  EXPECT_TRUE(metrics.contains(expected));
+
+  // Register a second framework. This framework will receive
+  // offers as `framework1` has just declined an offer and the
+  // implicit filter has not yet timed out. The new framework
+  // will have the full share.
+  FrameworkInfo framework2 = createFrameworkInfo("roleB");
+  allocator->addFramework(framework2.id(), framework2, {});
+  Clock::settle();
+
+  expected.values = {
+      {"allocator/mesos/roles/roleA/shares/dominant", 0},
+      {"allocator/mesos/roles/roleB/shares/dominant", 1},
+  };
+
+  metrics = Metrics();
+  EXPECT_TRUE(metrics.contains(expected));
+
+  // Add a second, identical agent. Now `framework1` will
+  // receive an offer since it has the lowest dominant
+  // share. After the offer the dominant shares of
+  // `framework1` and `framework2` are equal.
+  SlaveInfo agent2 = createSlaveInfo("cpus:1;mem:1024");
+  allocator->addSlave(agent2.id(), agent2, None(), agent2.resources(), {});
+  Clock::settle();
+
+  expected.values = {
+      {"allocator/mesos/roles/roleA/shares/dominant", 0.5},
+      {"allocator/mesos/roles/roleB/shares/dominant", 0.5},
+  };
+
+  metrics = Metrics();
+  EXPECT_TRUE(metrics.contains(expected));
+
+  // Removing `framework2` frees up its allocated resources. The
+  // corresponding metric is removed when the last framework in
+  // the role is removed.
+  allocator->removeFramework(framework2.id());
+  Clock::settle();
+
+  expected.values = {
+      {"allocator/mesos/roles/roleA/shares/dominant", 0.5},
+  };
+
+  metrics = Metrics();
+  EXPECT_TRUE(metrics.contains(expected));
+
+  ASSERT_TRUE(metrics.is<JSON::Object>());
+  map<string, JSON::Value> values = metrics.as<JSON::Object>().values;
+  EXPECT_EQ(0u, values.count("allocator/mesos/roles/roleB/shares/dominant"));
+}
+
+
 // This test ensures that resource allocation is done according to each role's
 // weight. This is done by having six agents and three frameworks and making
 // sure each framework gets the appropriate number of resources.
@@ -3400,6 +3497,51 @@ TEST_F(HierarchicalAllocator_BENCHMARK_Test, ResourceLabels)
   }
 
   Clock::resume();
+}
+
+
+// Measures the processing time required for the allocator metrics.
+//
+// TODO(bmahler): Add allocations to this benchmark.
+TEST_P(HierarchicalAllocator_BENCHMARK_Test, Metrics)
+{
+  size_t slaveCount = std::tr1::get<0>(GetParam());
+  size_t frameworkCount = std::tr1::get<1>(GetParam());
+
+  // Pause the clock because we want to manually drive the allocations.
+  Clock::pause();
+
+  initialize();
+
+  for (size_t i = 0; i < frameworkCount; i++) {
+    string role = stringify(i);
+    allocator->setQuota(role, createQuota(role, "cpus:1;mem:512;disk:256"));
+  }
+
+  for (size_t i = 0; i < frameworkCount; i++) {
+    FrameworkInfo framework = createFrameworkInfo(stringify(i));
+    allocator->addFramework(framework.id(), framework, {});
+  }
+
+  for (size_t i = 0; i < slaveCount; i++) {
+    SlaveInfo slave = createSlaveInfo("cpus:16;mem:2048;disk:1024");
+    allocator->addSlave(slave.id(), slave, None(), slave.resources(), {});
+  }
+
+  // Wait for all the `addSlave` operations to complete.
+  Clock::settle();
+
+  Stopwatch watch;
+
+  // TODO(bmahler): Avoid timing the JSON parsing here.
+  // Ideally we also avoid timing the HTTP layer.
+  watch.start();
+  JSON::Object metrics = Metrics();
+  watch.stop();
+
+  cout << "/metrics/snapshot took " << watch.elapsed()
+       << " for " << slaveCount << " slaves"
+       << " and " << frameworkCount << " frameworks" << endl;
 }
 
 } // namespace tests {
