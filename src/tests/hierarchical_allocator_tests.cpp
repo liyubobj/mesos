@@ -2821,7 +2821,8 @@ TEST_F(HierarchicalAllocatorTest, DominantShareMetrics)
   // immediately receive receive an offer and make it have the
   // maximum possible dominant share.
   SlaveInfo agent1 = createSlaveInfo("cpus:1;mem:1024");
-  allocator->addSlave(agent1.id(), agent1, None(), agent1.resources(), {});
+  allocator->addSlave(
+      agent1.id(), agent1, None(), agent1.resources(), {}, EMPTYRUNNINGS);
 
   FrameworkInfo framework1 = createFrameworkInfo("roleA");
   allocator->addFramework(framework1.id(), framework1, {});
@@ -2874,7 +2875,8 @@ TEST_F(HierarchicalAllocatorTest, DominantShareMetrics)
   // share. After the offer the dominant shares of
   // `framework1` and `framework2` are equal.
   SlaveInfo agent2 = createSlaveInfo("cpus:1;mem:1024");
-  allocator->addSlave(agent2.id(), agent2, None(), agent2.resources(), {});
+  allocator->addSlave(
+      agent2.id(), agent2, None(), agent2.resources(), {}, EMPTYRUNNINGS);
   Clock::settle();
 
   expected.values = {
@@ -3525,7 +3527,8 @@ TEST_P(HierarchicalAllocator_BENCHMARK_Test, Metrics)
 
   for (size_t i = 0; i < slaveCount; i++) {
     SlaveInfo slave = createSlaveInfo("cpus:16;mem:2048;disk:1024");
-    allocator->addSlave(slave.id(), slave, None(), slave.resources(), {});
+    allocator->addSlave(
+        slave.id(), slave, None(), slave.resources(), {}, EMPTYRUNNINGS);
   }
 
   // Wait for all the `addSlave` operations to complete.
