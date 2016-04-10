@@ -27,6 +27,8 @@
 #include <stout/os/ls.hpp>
 #include <stout/os/mkdir.hpp>
 #include <stout/os/read.hpp>
+#include <stout/os/rename.hpp>
+#include <stout/os/rm.hpp>
 #include <stout/os/touch.hpp>
 #include <stout/os/write.hpp>
 
@@ -56,13 +58,13 @@ class FsTest : public TemporaryDirectoryTest {};
 TEST_F(FsTest, Find)
 {
   const string testdir = path::join(os::getcwd(), UUID::random().toString());
-  const string subdir = testdir + "/test1";
+  const string subdir = path::join(testdir, "test1");
   ASSERT_SOME(os::mkdir(subdir)); // Create the directories.
 
   // Now write some files.
-  const string file1 = testdir + "/file1.txt";
-  const string file2 = subdir + "/file2.txt";
-  const string file3 = subdir + "/file3.jpg";
+  const string file1 = path::join(testdir, "file1.txt");
+  const string file2 = path::join(subdir, "file2.txt");
+  const string file3 = path::join(subdir, "file3.jpg");
 
   ASSERT_SOME(os::touch(file1));
   ASSERT_SOME(os::touch(file2));
@@ -104,9 +106,9 @@ TEST_F(FsTest, Mkdir)
   hashset<string> expectedListing = EMPTY;
   EXPECT_EQ(expectedListing, listfiles(tmpdir));
 
-  os::mkdir(tmpdir + "/a/b/c");
-  os::mkdir(tmpdir + "/a/b/d");
-  os::mkdir(tmpdir + "/e/f");
+  ASSERT_SOME(os::mkdir(path::join(tmpdir, "a", "b", "c")));
+  ASSERT_SOME(os::mkdir(path::join(tmpdir, "a", "b", "d")));
+  ASSERT_SOME(os::mkdir(path::join(tmpdir, "e", "f")));
 
   expectedListing = EMPTY;
   expectedListing.insert("a");
@@ -115,22 +117,54 @@ TEST_F(FsTest, Mkdir)
 
   expectedListing = EMPTY;
   expectedListing.insert("b");
-  EXPECT_EQ(expectedListing, listfiles(tmpdir + "/a"));
+  EXPECT_EQ(expectedListing, listfiles(path::join(tmpdir, "a")));
 
   expectedListing = EMPTY;
   expectedListing.insert("c");
   expectedListing.insert("d");
-  EXPECT_EQ(expectedListing, listfiles(tmpdir + "/a/b"));
+  EXPECT_EQ(expectedListing, listfiles(path::join(tmpdir, "a", "b")));
 
   expectedListing = EMPTY;
-  EXPECT_EQ(expectedListing, listfiles(tmpdir + "/a/b/c"));
-  EXPECT_EQ(expectedListing, listfiles(tmpdir + "/a/b/d"));
+  EXPECT_EQ(expectedListing, listfiles(path::join(tmpdir, "a", "b", "c")));
+  EXPECT_EQ(expectedListing, listfiles(path::join(tmpdir, "a", "b", "d")));
 
   expectedListing.insert("f");
-  EXPECT_EQ(expectedListing, listfiles(tmpdir + "/e"));
+  EXPECT_EQ(expectedListing, listfiles(path::join(tmpdir, "e")));
 
   expectedListing = EMPTY;
-  EXPECT_EQ(expectedListing, listfiles(tmpdir + "/e/f"));
+  EXPECT_EQ(expectedListing, listfiles(path::join(tmpdir, "e", "f")));
+}
+
+
+TEST_F(FsTest, Exists)
+{
+  const hashset<string> EMPTY;
+  const string tmpdir = os::getcwd();
+
+  hashset<string> expectedListing = EMPTY;
+  ASSERT_EQ(expectedListing, listfiles(tmpdir));
+
+  // Create simple directory structure.
+  ASSERT_SOME(os::mkdir(path::join(tmpdir, "a", "b", "c")));
+
+  // Expect all the directories exist.
+  EXPECT_TRUE(os::exists(tmpdir));
+  EXPECT_TRUE(os::exists(path::join(tmpdir, "a")));
+  EXPECT_TRUE(os::exists(path::join(tmpdir, "a", "b")));
+  EXPECT_TRUE(os::exists(path::join(tmpdir, "a", "b", "c")));
+
+  // Return false if a component of the path does not exist.
+  EXPECT_FALSE(os::exists(path::join(tmpdir, "a", "fakeDir")));
+  EXPECT_FALSE(os::exists(path::join(tmpdir, "a", "fakeDir", "c")));
+
+  // Add file to directory tree.
+  ASSERT_SOME(os::touch(path::join(tmpdir, "a", "b", "c", "yourFile")));
+
+  // Assert it exists.
+  EXPECT_TRUE(os::exists(path::join(tmpdir, "a", "b", "c", "yourFile")));
+
+  // Return false if file is wrong.
+  EXPECT_FALSE(os::exists(path::join(tmpdir, "a", "b", "c", "yourFakeFile")));
 }
 
 
@@ -145,7 +179,7 @@ TEST_F(FsTest, Touch)
 TEST_F(FsTest, Symlink)
 {
   const string temp_path = os::getcwd();
-  const string link = path::join(temp_path, "/sym.link");
+  const string link = path::join(temp_path, "sym.link");
   const string file = path::join(temp_path, UUID::random().toString());
 
   // Create file
@@ -154,10 +188,70 @@ TEST_F(FsTest, Symlink)
   ASSERT_TRUE(os::exists(file));
 
   // Create symlink
-  fs::symlink(file, link);
+  ASSERT_SOME(fs::symlink(file, link));
 
   // Test symlink
   EXPECT_TRUE(os::stat::islink(link));
+}
+
+
+TEST_F(FsTest, Rm)
+{
+  const string tmpdir = os::getcwd();
+
+  hashset<string> expectedListing;
+  EXPECT_EQ(expectedListing, listfiles(tmpdir));
+
+  const string file1 = path::join(tmpdir, "file1.txt");
+  const string directory1 = path::join(tmpdir, "directory1");
+
+  const string fileSymlink1 = path::join(tmpdir, "fileSymlink1");
+  const string fileToSymlink = path::join(tmpdir, "fileToSymlink.txt");
+  const string directorySymlink1 = path::join(tmpdir, "directorySymlink1");
+  const string directoryToSymlink = path::join(tmpdir, "directoryToSymlink");
+
+  // Create a file, a directory, and a symlink to a file and a directory.
+  ASSERT_SOME(os::touch(file1));
+  expectedListing.insert("file1.txt");
+
+  ASSERT_SOME(os::mkdir(directory1));
+  expectedListing.insert("directory1");
+
+  ASSERT_SOME(os::touch(fileToSymlink));
+  ASSERT_SOME(fs::symlink(fileToSymlink, fileSymlink1));
+  expectedListing.insert("fileToSymlink.txt");
+  expectedListing.insert("fileSymlink1");
+
+  ASSERT_SOME(os::mkdir(directoryToSymlink));
+  ASSERT_SOME(fs::symlink(directoryToSymlink, directorySymlink1));
+  expectedListing.insert("directoryToSymlink");
+  expectedListing.insert("directorySymlink1");
+
+  EXPECT_EQ(expectedListing, listfiles(tmpdir));
+
+  // Verify `rm` of non-empty directory fails.
+  EXPECT_ERROR(os::rm(tmpdir));
+  EXPECT_EQ(expectedListing, listfiles(tmpdir));
+
+  // Remove all, and verify.
+  EXPECT_SOME(os::rm(file1));
+  expectedListing.erase("file1.txt");
+
+  EXPECT_SOME(os::rm(directory1));
+  expectedListing.erase("directory1");
+
+  EXPECT_SOME(os::rm(fileSymlink1));
+  expectedListing.erase("fileSymlink1");
+
+  EXPECT_SOME(os::rm(directorySymlink1));
+  expectedListing.erase("directorySymlink1");
+
+  // `os::rm` doesn't act on the target, therefore we must verify they each
+  // still exist.
+  EXPECT_EQ(expectedListing, listfiles(tmpdir));
+
+  // Verify that we error out for paths that don't exist.
+  EXPECT_ERROR(os::rm("fakeFile"));
 }
 
 
@@ -167,9 +261,9 @@ TEST_F(FsTest, List)
   ASSERT_SOME(os::mkdir(testdir)); // Create the directories.
 
   // Now write some files.
-  const string file1 = testdir + "/file1.txt";
-  const string file2 = testdir + "/file2.txt";
-  const string file3 = testdir + "/file3.jpg";
+  const string file1 = path::join(testdir, "file1.txt");
+  const string file2 = path::join(testdir, "file2.txt");
+  const string file3 = path::join(testdir, "file3.jpg");
 
   ASSERT_SOME(os::touch(file1));
   ASSERT_SOME(os::touch(file2));
@@ -177,13 +271,80 @@ TEST_F(FsTest, List)
 
   // Search all files in folder
   Try<list<string>> allFiles = fs::list(path::join(testdir, "*"));
+  ASSERT_SOME(allFiles);
   EXPECT_EQ(3u, allFiles.get().size());
 
   // Search .jpg files in folder
   Try<list<string>> jpgFiles = fs::list(path::join(testdir, "*.jpg"));
+  ASSERT_SOME(jpgFiles);
   EXPECT_EQ(1u, jpgFiles.get().size());
 
-  // Search .txt files in folder
-  Try<list<string>> txtFiles = fs::list(path::join(testdir, "*.txt"));
-  EXPECT_EQ(2u, txtFiles.get().size());
+  // Search test*.txt files in folder
+  Try<list<string>> testTxtFiles = fs::list(path::join(testdir, "*.txt"));
+  ASSERT_SOME(testTxtFiles);
+  EXPECT_EQ(2u, testTxtFiles.get().size());
+
+  // Verify that we return empty list when we provide an invalid path.
+  Try<list<string>> noFiles = fs::list("this_path_does_not_exist");
+  ASSERT_SOME(noFiles);
+  EXPECT_EQ(0u, noFiles.get().size());
+}
+
+
+TEST_F(FsTest, Rename)
+{
+  const string testdir = path::join(os::getcwd(), UUID::random().toString());
+  ASSERT_SOME(os::mkdir(testdir)); // Create the directories.
+
+  // Now write some files.
+  const string file1 = path::join(testdir, "file1.txt");
+  const string file2 = path::join(testdir, "file2.txt");
+  const string file3 = path::join(testdir, "file3.jpg");
+
+  ASSERT_SOME(os::touch(file1));
+  ASSERT_SOME(os::touch(file2));
+
+  // Write something to `file1`.
+  const string message = "hello world!";
+  ASSERT_SOME(os::write(file1, message));
+
+  // Search all files in folder
+  Try<list<string>> allFiles = fs::list(path::join(testdir, "*"));
+  ASSERT_SOME(allFiles);
+  EXPECT_EQ(2u, allFiles.get().size());
+
+  // Rename a `file1` to `file3`, which does not exist yet. Verify `file3`
+  // contains the text that was in `file1`, and make sure the count of files in
+  // the directory has stayed the same.
+  EXPECT_SOME(os::rename(file1, file3));
+
+  Try<string> file3Contents = os::read(file3);
+  ASSERT_SOME(file3Contents);
+  EXPECT_EQ(message, file3Contents.get());
+
+  allFiles = fs::list(path::join(testdir, "*"));
+  ASSERT_SOME(allFiles);
+  EXPECT_EQ(2u, allFiles.get().size());
+
+  // Rename `file3` -> `file2`. `file2` exists, so this will replace it. Verify
+  // text in the file, and that the count of files in the directory have gone
+  // down.
+  EXPECT_SOME(os::rename(file3, file2));
+  Try<string> file2Contents = os::read(file2);
+  ASSERT_SOME(file2Contents);
+  EXPECT_EQ(message, file2Contents.get());
+
+  allFiles = fs::list(path::join(testdir, "*"));
+  ASSERT_SOME(allFiles);
+  EXPECT_EQ(1u, allFiles.get().size());
+
+  // Rename a fake file, verify failure.
+  const string fakeFile = testdir + "does_not_exist";
+  EXPECT_ERROR(os::rename(fakeFile, file1));
+
+  EXPECT_FALSE(os::exists(file1));
+
+  allFiles = fs::list(path::join(testdir, "*"));
+  ASSERT_SOME(allFiles);
+  EXPECT_EQ(1u, allFiles.get().size());
 }

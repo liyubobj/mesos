@@ -102,6 +102,7 @@ nobase_include_HEADERS =			\
   stout/os/posix/bootid.hpp			\
   stout/os/posix/chown.hpp			\
   stout/os/posix/chroot.hpp			\
+  stout/os/posix/close.hpp			\
   stout/os/posix/direntsize.hpp			\
   stout/os/posix/exists.hpp			\
   stout/os/posix/fcntl.hpp			\
@@ -111,6 +112,8 @@ nobase_include_HEADERS =			\
   stout/os/posix/mkdtemp.hpp			\
   stout/os/posix/pstree.hpp			\
   stout/os/posix/read.hpp			\
+  stout/os/posix/rename.hpp			\
+  stout/os/posix/rm.hpp				\
   stout/os/posix/rmdir.hpp			\
   stout/os/posix/sendfile.hpp			\
   stout/os/posix/shell.hpp			\
@@ -122,6 +125,7 @@ nobase_include_HEADERS =			\
   stout/os/raw/environment.hpp			\
   stout/os/windows/bootid.hpp			\
   stout/os/windows/chroot.hpp			\
+  stout/os/windows/close.hpp			\
   stout/os/windows/direntsize.hpp		\
   stout/os/windows/exists.hpp			\
   stout/os/windows/fcntl.hpp			\
@@ -131,6 +135,8 @@ nobase_include_HEADERS =			\
   stout/os/windows/mkdtemp.hpp			\
   stout/os/windows/pstree.hpp			\
   stout/os/windows/read.hpp			\
+  stout/os/windows/rename.hpp			\
+  stout/os/windows/rm.hpp			\
   stout/os/windows/rmdir.hpp			\
   stout/os/windows/sendfile.hpp			\
   stout/os/windows/shell.hpp			\

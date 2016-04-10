@@ -13,26 +13,14 @@
 #ifndef __STOUT_OS_RM_HPP__
 #define __STOUT_OS_RM_HPP__
 
-#include <string>
 
-#include <stdio.h>
+// For readability, we minimize the number of #ifdef blocks in the code by
+// splitting platform specifc system calls into separate directories.
+#ifdef __WINDOWS__
+#include <stout/os/windows/rm.hpp>
+#else
+#include <stout/os/posix/rm.hpp>
+#endif // __WINDOWS__
 
-#include <stout/error.hpp>
-#include <stout/nothing.hpp>
-#include <stout/try.hpp>
-
-
-namespace os {
-
-inline Try<Nothing> rm(const std::string& path)
-{
-  if (::remove(path.c_str()) != 0) {
-    return ErrnoError();
-  }
-
-  return Nothing();
-}
-
-} // namespace os {
 
 #endif // __STOUT_OS_RM_HPP__

@@ -9,14 +9,29 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#ifndef __STOUT_OS_POSIX_RM_HPP__
+#define __STOUT_OS_POSIX_RM_HPP__
 
-#ifndef __STOUT_OS_RENAME_HPP__
-#define __STOUT_OS_RENAME_HPP__
+#include <stdio.h>
 
-#ifdef __WINDOWS__
-#include <stout/os/windows/rename.hpp>
-#else
-#include <stout/os/posix/rename.hpp>
-#endif // __WINDOWS__
+#include <string>
 
-#endif // __STOUT_OS_RENAME_HPP__
+#include <stout/error.hpp>
+#include <stout/nothing.hpp>
+#include <stout/try.hpp>
+
+
+namespace os {
+
+inline Try<Nothing> rm(const std::string& path)
+{
+  if (::remove(path.c_str()) != 0) {
+    return ErrnoError();
+  }
+
+  return Nothing();
+}
+
+} // namespace os {
+
+#endif // __STOUT_OS_POSIX_RM_HPP__
