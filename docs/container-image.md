@@ -285,7 +285,7 @@ agent flag `--sandbox_directory` properly).
 
 ### Overlay
 
-The reson overlay backend was introduced is because the copy backend
+The reason overlay backend was introduced is because the copy backend
 will waste IO and space while the bind backend can only deal with one
 layer. The overlay backend allows containizer to utilize the
 filesystem to merge multiple filesystems into one efficiently.
@@ -297,16 +297,6 @@ for more detail.
 
 For more information of overlayfs, please refer to
 [here](https://www.kernel.org/doc/Documentation/filesystems/overlayfs.txt).
-
-The overlay backend currently has these two limitations:
-
-1. The overlay backend only supports more than one single layer. One
-single layer images will fail to provision and the container will fail
-to launch! This limitation will be solved soon.
-
-2. Similar to the bind backend, the filesystem will be read-only.
-Please refer to the second limitation of the bind backend for more
-details. We will resolve this limitation soon.
 
 
 ## Executor Dependencies in a Container Image
