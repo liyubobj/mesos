@@ -31,6 +31,7 @@
 #include <process/protobuf.hpp>
 
 #include <stout/check.hpp>
+#include <stout/duration.hpp>
 #include <stout/flags.hpp>
 #include <stout/foreach.hpp>
 #include <stout/hashmap.hpp>
@@ -55,6 +56,7 @@ using std::vector;
 
 using mesos::internal::devolve;
 
+using mesos::v1::AgentID;
 using mesos::v1::CommandInfo;
 using mesos::v1::ContainerInfo;
 using mesos::v1::Environment;
@@ -65,7 +67,9 @@ using mesos::v1::Label;
 using mesos::v1::Labels;
 using mesos::v1::Offer;
 using mesos::v1::Resources;
+using mesos::v1::TaskID;
 using mesos::v1::TaskInfo;
+using mesos::v1::TaskState;
 using mesos::v1::TaskStatus;
 
 using mesos::v1::scheduler::Call;
@@ -84,11 +88,11 @@ public:
   {
     add(&master,
         "master",
-        "Mesos master (e.g., IP1:PORT1)");
+        "Mesos master (e.g., IP:PORT).");
 
     add(&name,
         "name",
-        "Name for the command");
+        "Name for the command.");
 
     add(&shell,
         "shell",
@@ -96,68 +100,74 @@ public:
         "treated as executable value and arguments (TODO).",
         true);
 
+    // TODO(alexr): Once MESOS-4882 lands, elaborate on what `command` can
+    // mean: an executable, a shell command, an entrypoint for a container.
     add(&command,
         "command",
-        "Shell command to launch");
+        "Command to launch.");
 
     add(&environment,
         "env",
         "Shell command environment variables.\n"
-        "The value could be a JSON formatted string of environment variables"
-        "(ie: {\"name1\": \"value1\"} )\n"
-        "or a file path containing the JSON formatted environment variables.\n"
-        "Path could be of the form 'file:///path/to/file' "
-        "or '/path/to/file'.\n");
+        "The value could be a JSON formatted string of environment variables\n"
+        "(i.e., {\"name1\": \"value1\"}) or a file path containing the JSON\n"
+        "formatted environment variables. Path should be of the form\n"
+        "'file:///path/to/file'.");
 
     add(&resources,
         "resources",
-        "Resources for the command",
+        "Resources for the command.",
         "cpus:1;mem:128");
 
     add(&hadoop,
         "hadoop",
-        "Path to `hadoop' script (used for copying packages)",
+        "Path to 'hadoop' script (used for copying packages).",
         "hadoop");
 
     add(&hdfs,
         "hdfs",
-        "The ip:port of the NameNode service",
+        "The ip:port of the NameNode service.",
         "localhost:9000");
 
     add(&package,
         "package",
         "Package to upload into HDFS and copy into command's\n"
-        "working directory (requires `hadoop', see --hadoop)");
+        "working directory (requires 'hadoop', see --hadoop).");
 
     add(&overwrite,
         "overwrite",
-        "Overwrite the package in HDFS if it already exists",
+        "Overwrite the package in HDFS if it already exists.",
         false);
 
     add(&checkpoint,
         "checkpoint",
-        "Enable checkpointing for the framework",
+        "Enable checkpointing for the framework.",
         false);
 
     add(&appc_image,
         "appc_image",
-        "Appc image name that follows the Appc spec"
-        "(e.g, ubuntu, example.com/reduce-worker)");
+        "Appc image name that follows the Appc spec\n"
+        "(e.g., ubuntu, example.com/reduce-worker).");
 
     add(&docker_image,
         "docker_image",
-        "Docker image that follows the Docker CLI naming <image>:<tag>"
-        "(ie: ubuntu, busybox:latest).");
+        "Docker image that follows the Docker CLI naming <image>:<tag>\n"
+        "(i.e., ubuntu, busybox:latest).");
 
     add(&containerizer,
         "containerizer",
-        "Containerizer to be used (ie: docker, mesos)",
+        "Containerizer to be used (i.e., docker, mesos).",
         "mesos");
 
     add(&role,
         "role",
-        "Role to use when registering",
+        "Role to use when registering.",
         "*");
+
+    add(&kill_after,
+        "kill_after",
+        "Specifies a delay after which the task is killed\n"
+        "(e.g., 10secs, 2mins, etc).");
   }
 
   Option<string> master;
@@ -175,6 +185,7 @@ public:
   Option<string> docker_image;
   string containerizer;
   string role;
+  Option<Duration> kill_after;
 };
 
 
@@ -192,7 +203,8 @@ public:
       const Option<string>& _uri,
       const Option<string>& _appcImage,
       const Option<string>& _dockerImage,
-      const string& _containerizer)
+      const string& _containerizer,
+      const Option<Duration>& _killAfter)
     : state(DISCONNECTED),
       frameworkInfo(_frameworkInfo),
       master(_master),
@@ -205,6 +217,7 @@ public:
       appcImage(_appcImage),
       dockerImage(_dockerImage),
       containerizer(_containerizer),
+      killAfter(_killAfter),
       launched(false) {}
 
   virtual ~CommandScheduler() {}
@@ -253,6 +266,24 @@ protected:
     mesos->send(call);
 
     process::delay(Seconds(1), self(), &Self::doReliableRegistration);
+  }
+
+  void killTask(const TaskID& taskId, const AgentID& agentId)
+  {
+    cout << "Asked to kill task '" << taskId
+         << "' on agent '" << agentId << "'" << endl;
+
+    Call call;
+    call.set_type(Call::KILL);
+
+    CHECK(frameworkInfo.has_id());
+    call.mutable_framework_id()->CopyFrom(frameworkInfo.id());
+
+    Call::Kill* kill = call.mutable_kill();
+    kill->mutable_task_id()->CopyFrom(taskId);
+    kill->mutable_agent_id()->CopyFrom(agentId);
+
+    mesos->send(call);
   }
 
   void offers(const vector<Offer>& offers)
@@ -341,8 +372,8 @@ protected:
 
         mesos->send(call);
 
-        cout << "task " << name << " submitted to agent "
-             << offer.agent_id() << endl;
+        cout << "Submitted task '" << name << "' to agent '"
+             << offer.agent_id() << "'" << endl;
 
         launched = true;
       } else {
@@ -373,7 +404,7 @@ protected:
 
           state = SUBSCRIBED;
 
-          cout << "Subscribed with ID '" << frameworkInfo.id() << endl;
+          cout << "Subscribed with ID '" << frameworkInfo.id() << "'" << endl;
           break;
         }
 
@@ -414,7 +445,19 @@ protected:
     CHECK_EQ(name, status.task_id().value());
 
     cout << "Received status update " << status.state()
-         << " for task " << status.task_id() << endl;
+         << " for task '" << status.task_id() << "'" << endl;
+    if (status.has_message()) {
+      cout << "  message: '" << status.message() << "'" << endl;
+    }
+    if (status.has_source()) {
+      cout << "  source: " << TaskStatus::Source_Name(status.source()) << endl;
+    }
+    if (status.has_source()) {
+      cout << "  reason: " << TaskStatus::Reason_Name(status.reason()) << endl;
+    }
+    if (status.has_healthy()) {
+      cout << "  healthy?: " << status.healthy() << endl;
+    }
 
     if (status.has_uuid()) {
       Call call;
@@ -429,6 +472,15 @@ protected:
       acknowledge->set_uuid(status.uuid());
 
       mesos->send(call);
+    }
+
+    // If a task kill delay has been specified, schedule task kill.
+    if (killAfter.isSome() && TaskState::TASK_RUNNING == status.state()) {
+      delay(killAfter.get(),
+            self(),
+            &Self::killTask,
+            status.task_id(),
+            status.agent_id());
     }
 
     if (mesos::internal::protobuf::isTerminalState(devolve(status).state())) {
@@ -518,6 +570,8 @@ private:
   const Option<string> appcImage;
   const Option<string> dockerImage;
   const string containerizer;
+  const Option<Duration> killAfter;
+
   bool launched;
   Owned<Mesos> mesos;
 };
@@ -527,7 +581,7 @@ int main(int argc, char** argv)
 {
   Flags flags;
 
-  // Load flags from environment and command line.
+  // Load flags from command line only.
   Try<Nothing> load = flags.load(None(), argc, argv);
 
   if (load.isError()) {
@@ -655,9 +709,11 @@ int main(int argc, char** argv)
 
   FrameworkInfo frameworkInfo;
   frameworkInfo.set_user(user.get());
-  frameworkInfo.set_name("");
+  frameworkInfo.set_name("mesos-execute instance");
   frameworkInfo.set_role(flags.role);
   frameworkInfo.set_checkpoint(flags.checkpoint);
+  frameworkInfo.add_capabilities()->set_type(
+      FrameworkInfo::Capability::TASK_KILLING_STATE);
 
   Owned<CommandScheduler> scheduler(
       new CommandScheduler(
@@ -671,7 +727,8 @@ int main(int argc, char** argv)
         uri,
         appcImage,
         dockerImage,
-        flags.containerizer));
+        flags.containerizer,
+        flags.kill_after));
 
   process::spawn(scheduler.get());
   process::wait(scheduler.get());

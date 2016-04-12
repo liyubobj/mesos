@@ -662,7 +662,8 @@ TEST_F(MasterTest, StatusUpdateAck)
 
 TEST_F(MasterTest, RecoverResources)
 {
-  Try<Owned<cluster::Master>> master = StartMaster();
+  master::Flags masterFlags = CreateMasterFlags();
+  Try<Owned<cluster::Master>> master = StartMaster(masterFlags);
   ASSERT_SOME(master);
 
   MockExecutor exec(DEFAULT_EXECUTOR_ID);
@@ -763,6 +764,14 @@ TEST_F(MasterTest, RecoverResources)
 
   // Now kill the executor, scheduler should get an offer it's resources.
   containerizer.destroy(offer.framework_id(), executorInfo.executor_id());
+
+  // Ensure the container is destroyed, `ExitedExecutorMessage` message
+  // is received by the master and hence its resources will be recovered
+  // before a batch allocation is triggered.
+  Clock::pause();
+  Clock::settle();
+  Clock::advance(masterFlags.allocation_interval);
+  Clock::resume();
 
   // TODO(benh): We can't do driver.reviveOffers() because we need to
   // wait for the killed executors resources to get aggregated! We
@@ -997,7 +1006,8 @@ TEST_F(MasterTest, MasterInfo)
 
 TEST_F(MasterTest, MasterInfoOnReElection)
 {
-  Try<Owned<cluster::Master>> master = StartMaster();
+  master::Flags masterFlags = CreateMasterFlags();
+  Try<Owned<cluster::Master>> master = StartMaster(masterFlags);
   ASSERT_SOME(master);
 
   StandaloneMasterDetector detector(master.get()->pid);
@@ -1049,6 +1059,11 @@ TEST_F(MasterTest, MasterInfoOnReElection)
       net::IP(ntohl(masterInfo.get().ip())));
 
   EXPECT_EQ(MESOS_VERSION, masterInfo.get().version());
+
+  // Advance the clock and trigger a batch allocation.
+  Clock::pause();
+  Clock::advance(masterFlags.allocation_interval);
+  Clock::resume();
 
   // The re-registered framework should get offers.
   AWAIT_READY(resourceOffers2);
@@ -1197,7 +1212,8 @@ TEST_F(MasterTest, MasterLost)
 // all slave resources and a single task should be able to run on these.
 TEST_F(MasterTest, LaunchCombinedOfferTest)
 {
-  Try<Owned<cluster::Master>> master = StartMaster();
+  master::Flags masterFlags = CreateMasterFlags();
+  Try<Owned<cluster::Master>> master = StartMaster(masterFlags);
   ASSERT_SOME(master);
 
   MockExecutor exec(DEFAULT_EXECUTOR_ID);
@@ -1265,6 +1281,11 @@ TEST_F(MasterTest, LaunchCombinedOfferTest)
   AWAIT_READY(status1);
   EXPECT_EQ(TASK_RUNNING, status1.get().state());
 
+  // Advance the clock and trigger a batch allocation.
+  Clock::pause();
+  Clock::advance(masterFlags.allocation_interval);
+  Clock::resume();
+
   // Await 2nd offer.
   AWAIT_READY(offers2);
   EXPECT_NE(0u, offers2.get().size());
@@ -1291,6 +1312,11 @@ TEST_F(MasterTest, LaunchCombinedOfferTest)
 
   AWAIT_READY(status2);
   EXPECT_EQ(TASK_KILLED, status2.get().state());
+
+  // Advance the clock and trigger a batch allocation.
+  Clock::pause();
+  Clock::advance(masterFlags.allocation_interval);
+  Clock::resume();
 
   // Await 3rd offer - 2nd and 3rd offer to same slave are now ready.
   AWAIT_READY(offers3);
@@ -2572,6 +2598,11 @@ TEST_F(MasterTest, OfferTimeout)
 
   AWAIT_READY(recoverResources);
 
+  // Advance the clock and trigger a batch allocation.
+  Clock::pause();
+  Clock::advance(masterFlags.allocation_interval);
+  Clock::resume();
+
   // Expect that the resources are re-offered to the framework after
   // the rescind.
   AWAIT_READY(offers2);
@@ -3131,6 +3162,100 @@ TEST_F(MasterTest, StateSummaryEndpoint)
   ASSERT_EQ(1u, state.values["frameworks"].as<JSON::Array>().values.size());
   ASSERT_SOME_EQ(0u, state.find<JSON::Number>("frameworks[0].TASK_RUNNING"));
   ASSERT_SOME_EQ(1u, state.find<JSON::Number>("frameworks[0].TASK_KILLED"));
+
+  driver.stop();
+  driver.join();
+}
+
+
+// This test verifies that executor labels are
+// exposed in the master's state endpoint.
+TEST_F(MasterTest, ExecutorLabels)
+{
+  Try<Owned<cluster::Master>> master = StartMaster();
+  ASSERT_SOME(master);
+
+  MockExecutor exec(DEFAULT_EXECUTOR_ID);
+  TestContainerizer containerizer(&exec);
+
+  Owned<MasterDetector> detector = master.get()->createDetector();
+  Try<Owned<cluster::Slave>> slave = StartSlave(detector.get(), &containerizer);
+  ASSERT_SOME(slave);
+
+  MockScheduler sched;
+  MesosSchedulerDriver driver(
+      &sched, DEFAULT_FRAMEWORK_INFO, master.get()->pid, DEFAULT_CREDENTIAL);
+
+  EXPECT_CALL(sched, registered(&driver, _, _))
+    .Times(1);
+
+  Future<vector<Offer>> offers;
+  EXPECT_CALL(sched, resourceOffers(&driver, _))
+    .WillOnce(FutureArg<1>(&offers))
+    .WillRepeatedly(Return()); // Ignore subsequent offers.
+
+  driver.start();
+
+  AWAIT_READY(offers);
+  EXPECT_NE(0u, offers.get().size());
+
+  TaskInfo task;
+  task.set_name("");
+  task.mutable_task_id()->set_value("1");
+  task.mutable_slave_id()->MergeFrom(offers.get()[0].slave_id());
+  task.mutable_resources()->MergeFrom(offers.get()[0].resources());
+  task.mutable_executor()->MergeFrom(DEFAULT_EXECUTOR_INFO);
+
+  // Add three labels to the executor, two of which shares the same key.
+  Labels* labels = task.mutable_executor()->mutable_labels();
+
+  labels->add_labels()->CopyFrom(createLabel("key1", "value1"));
+  labels->add_labels()->CopyFrom(createLabel("key2", "value2"));
+  labels->add_labels()->CopyFrom(createLabel("key1", "value3"));
+
+  EXPECT_CALL(exec, registered(_, _, _, _))
+    .Times(1);
+
+  EXPECT_CALL(exec, launchTask(_, _))
+    .WillOnce(SendStatusUpdateFromTask(TASK_RUNNING));
+
+  Future<TaskStatus> status;
+  EXPECT_CALL(sched, statusUpdate(&driver, _))
+    .WillOnce(FutureArg<1>(&status));
+
+  driver.launchTasks(offers.get()[0].id(), {task});
+
+  AWAIT_READY(status);
+  EXPECT_EQ(TASK_RUNNING, status.get().state());
+
+  // Verify label key and value in the master's state endpoint.
+  Future<Response> response = process::http::get(
+      master.get()->pid,
+      "state",
+      None(),
+      createBasicAuthHeaders(DEFAULT_CREDENTIAL));
+
+  AWAIT_EXPECT_RESPONSE_STATUS_EQ(OK().status, response);
+  AWAIT_EXPECT_RESPONSE_HEADER_EQ(APPLICATION_JSON, "Content-Type", response);
+
+  Try<JSON::Object> parse = JSON::parse<JSON::Object>(response->body);
+  ASSERT_SOME(parse);
+
+  Result<JSON::Array> labels_ = parse->find<JSON::Array>(
+      "frameworks[0].executors[0].labels");
+  EXPECT_SOME(labels_);
+
+  // Verify the contents of labels.
+  EXPECT_EQ(3u, labels_->values.size());
+  EXPECT_EQ(JSON::Value(JSON::protobuf(createLabel("key1", "value1"))),
+            labels_->values[0]);
+  EXPECT_EQ(JSON::Value(JSON::protobuf(createLabel("key2", "value2"))),
+            labels_->values[1]);
+  EXPECT_EQ(JSON::Value(JSON::protobuf(createLabel("key1", "value3"))),
+            labels_->values[2]);
+
+  EXPECT_CALL(exec, shutdown(_))
+    .Times(AtMost(1));
 
   driver.stop();
   driver.join();
