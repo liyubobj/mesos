@@ -111,9 +111,9 @@ TEST_F(NvidiaGpuTest, ROOT_CGROUPS_NVIDIA_GPU_VerifyDeviceAccess)
   EXPECT_EQ(1u, offers1->size());
 
   TaskInfo task1 = createTask(
-    offers1.get()[0].slave_id(),
-    Resources::parse("cpus:0.1;mem:128;").get(),
-    "nvidia-smi");
+      offers1.get()[0].slave_id(),
+      Resources::parse("cpus:0.1;mem:128;").get(),
+      "nvidia-smi");
 
   Future<TaskStatus> statusRunning1, statusFailed1;
   EXPECT_CALL(sched, statusUpdate(_, _))
@@ -134,12 +134,12 @@ TEST_F(NvidiaGpuTest, ROOT_CGROUPS_NVIDIA_GPU_VerifyDeviceAccess)
   EXPECT_EQ(1u, offers2->size());
 
   TaskInfo task2 = createTask(
-    offers1.get()[0].slave_id(),
-    Resources::parse("cpus:0.1;mem:128;gpus:1").get(),
-    "NUM_GPUS=`nvidia-smi --list-gpus | wc -l`;\n"
-    "if [ \"$NUM_GPUS\" != \"1\" ]; then\n"
-    "  exit 1;\n"
-    "fi");
+      offers1.get()[0].slave_id(),
+      Resources::parse("cpus:0.1;mem:128;gpus:1").get(),
+      "NUM_GPUS=`nvidia-smi --list-gpus | wc -l`;\n"
+      "if [ \"$NUM_GPUS\" != \"1\" ]; then\n"
+      "  exit 1;\n"
+      "fi");
 
   Future<TaskStatus> statusRunning2, statusFinished2;
   EXPECT_CALL(sched, statusUpdate(_, _))
@@ -153,6 +153,72 @@ TEST_F(NvidiaGpuTest, ROOT_CGROUPS_NVIDIA_GPU_VerifyDeviceAccess)
 
   AWAIT_READY(statusFinished2);
   ASSERT_EQ(TASK_FINISHED, statusFinished2->state());
+
+  driver.stop();
+  driver.join();
+}
+
+
+// This test verifies correct failure semantics when
+// a task requests a fractional number of GPUs.
+TEST_F(NvidiaGpuTest, ROOT_CGROUPS_NVIDIA_GPU_FractionalResources)
+{
+  Try<Owned<cluster::Master>> master = StartMaster();
+  ASSERT_SOME(master);
+
+  // Turn on Nvidia GPU isolation.
+  // Assume at least one GPU is available for isolation.
+  slave::Flags flags = CreateSlaveFlags();
+  flags.isolation = "cgroups/devices/gpus/nvidia";
+  flags.nvidia_gpu_devices = vector<unsigned int>({0u});
+  flags.resources = "gpus:1";
+
+  Owned<MasterDetector> detector = master.get()->createDetector();
+
+  Try<Owned<cluster::Slave>> slave = StartSlave(detector.get(), flags);
+  ASSERT_SOME(slave);
+
+  MockScheduler sched;
+
+  MesosSchedulerDriver driver(
+      &sched, DEFAULT_FRAMEWORK_INFO, master.get()->pid, DEFAULT_CREDENTIAL);
+
+  Future<Nothing> schedRegistered;
+  EXPECT_CALL(sched, registered(_, _, _))
+    .WillOnce(FutureSatisfy(&schedRegistered));
+
+  Future<vector<Offer>> offers;
+  EXPECT_CALL(sched, resourceOffers(_, _))
+    .WillOnce(FutureArg<1>(&offers))
+    .WillRepeatedly(Return());      // Ignore subsequent offers.
+
+  driver.start();
+
+  AWAIT_READY(schedRegistered);
+
+  // Launch a task requesting a fractional number
+  // of GPUs and verify that it fails as expected.
+  AWAIT_READY(offers);
+  EXPECT_EQ(1u, offers->size());
+
+  TaskInfo task = createTask(
+      offers.get()[0].slave_id(),
+      Resources::parse("cpus:0.1;mem:128;gpus:0.1").get(),
+      "true");
+
+  Future<TaskStatus> status;
+  EXPECT_CALL(sched, statusUpdate(_, _))
+    .WillOnce(FutureArg<1>(&status));
+
+  driver.launchTasks(offers.get()[0].id(), {task});
+
+  AWAIT_READY(status);
+
+  EXPECT_EQ(TASK_ERROR, status->state());
+  EXPECT_EQ(TaskStatus::REASON_TASK_INVALID, status->reason());
+  EXPECT_TRUE(strings::contains(
+      status->message(),
+      "The 'gpus' resource must be an unsigned integer"));
 
   driver.stop();
   driver.join();
