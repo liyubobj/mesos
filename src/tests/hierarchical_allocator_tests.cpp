@@ -3122,7 +3122,8 @@ TEST_F(HierarchicalAllocatorTest, ReviveOffers)
 
   // Total cluster resources will become cpus=2, mem=1024.
   SlaveInfo agent = createSlaveInfo("cpus:2;mem:1024;disk:0");
-  allocator->addSlave(agent.id(), agent, None(), agent.resources(), EMPTY);
+  allocator->addSlave(
+      agent.id(), agent, None(), agent.resources(), EMPTY, EMPTYRUNNINGS);
 
   // Framework will be offered all of agent's resources since it is
   // the only framework running so far.
