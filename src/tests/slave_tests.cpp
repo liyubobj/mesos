@@ -59,6 +59,7 @@
 #include "slave/containerizer/mesos/containerizer.hpp"
 
 #include "tests/containerizer.hpp"
+#include "tests/environment.hpp"
 #include "tests/flags.hpp"
 #include "tests/limiter.hpp"
 #include "tests/mesos.hpp"
@@ -725,6 +726,8 @@ TEST_F(SlaveTest, GetExecutorInfoForTaskWithContainer)
 // executor even if it contains a ContainerInfo in the TaskInfo.
 // Prior to 0.26.0, this was only used to launch Docker containers, so
 // MesosContainerizer would fail the launch.
+//
+// TODO(jieyu): Move this test to the mesos containerizer tests.
 TEST_F(SlaveTest, LaunchTaskInfoWithContainerInfo)
 {
   Try<Owned<cluster::Master>> master = StartMaster();
@@ -777,13 +780,16 @@ TEST_F(SlaveTest, LaunchTaskInfoWithContainerInfo)
       "20141010-221431-251662764-60288-12345-0000");
   const ExecutorInfo& executor = slave.getExecutorInfo(frameworkInfo, task);
 
+  Try<string> sandbox = environment->mkdtemp();
+  ASSERT_SOME(sandbox);
+
   SlaveID slaveID;
   slaveID.set_value(UUID::random().toString());
   Future<bool> launch = containerizer->launch(
       containerId,
       task,
       executor,
-      "/tmp",
+      sandbox.get(),
       "test",
       slaveID,
       slave.self(),
