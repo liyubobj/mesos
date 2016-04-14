@@ -194,7 +194,23 @@ public:
       const Option<map<string, string>>& env)
   {
     LOG(INFO) << "Executing 'slavePreLaunchDockerHook'";
-    return os::touch(sandboxDirectory + "/foo");
+    return os::touch(path::join(sandboxDirectory, "foo"));
+  }
+
+
+  virtual Try<Nothing> slavePostFetchHook(
+      const ContainerID& containerId,
+      const string& directory)
+  {
+    LOG(INFO) << "Executing 'slavePostFetchHook'";
+
+    const string path = path::join(directory, "post_fetch_hook");
+
+    if (os::exists(path)) {
+      return os::rm(path);
+    } else {
+      return Nothing();
+    }
   }
 
 
