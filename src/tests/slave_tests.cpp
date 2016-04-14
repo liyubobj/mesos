@@ -27,6 +27,8 @@
 #include <mesos/executor.hpp>
 #include <mesos/scheduler.hpp>
 
+#include <mesos/authentication/http/basic_authenticator_factory.hpp>
+
 #include <process/clock.hpp>
 #include <process/future.hpp>
 #include <process/gmock.hpp>
@@ -81,6 +83,7 @@ using process::PID;
 using process::Promise;
 using process::UPID;
 
+using process::http::InternalServerError;
 using process::http::OK;
 using process::http::Response;
 using process::http::ServiceUnavailable;
@@ -1425,7 +1428,7 @@ TEST_F(SlaveTest, StateEndpoint)
       None(),
       createBasicAuthHeaders(DEFAULT_CREDENTIAL));
 
-  AWAIT_EXPECT_RESPONSE_STATUS_EQ(http::OK().status, response);
+  AWAIT_EXPECT_RESPONSE_STATUS_EQ(OK().status, response);
   AWAIT_EXPECT_RESPONSE_HEADER_EQ(APPLICATION_JSON, "Content-Type", response);
 
   parse = JSON::parse<JSON::Object>(response.get().body);
@@ -1632,7 +1635,7 @@ TEST_F(SlaveTest, StatisticsEndpointNoExecutor)
       None(),
       createBasicAuthHeaders(DEFAULT_CREDENTIAL));
 
-  AWAIT_EXPECT_RESPONSE_STATUS_EQ(http::OK().status, response);
+  AWAIT_EXPECT_RESPONSE_STATUS_EQ(OK().status, response);
   AWAIT_EXPECT_RESPONSE_HEADER_EQ(APPLICATION_JSON, "Content-Type", response);
   AWAIT_EXPECT_RESPONSE_BODY_EQ("[]", response);
 }
@@ -1701,7 +1704,7 @@ TEST_F(SlaveTest, StatisticsEndpointMissingStatistics)
       createBasicAuthHeaders(DEFAULT_CREDENTIAL));
 
   AWAIT_READY(response);
-  AWAIT_EXPECT_RESPONSE_STATUS_EQ(http::OK().status, response);
+  AWAIT_EXPECT_RESPONSE_STATUS_EQ(OK().status, response);
   AWAIT_EXPECT_RESPONSE_HEADER_EQ(APPLICATION_JSON, "Content-Type", response);
   AWAIT_EXPECT_RESPONSE_BODY_EQ("[]", response);
 
@@ -1742,7 +1745,7 @@ TEST_F(SlaveTest, StatisticsEndpointGetResourceUsageFailed)
 
   AWAIT_READY(response);
   AWAIT_EXPECT_RESPONSE_STATUS_EQ(
-      http::InternalServerError().status, response);
+      InternalServerError().status, response);
 
   terminate(slave);
   wait(slave);
@@ -1803,7 +1806,7 @@ TEST_F(SlaveTest, StatisticsEndpointRunningExecutor)
       None(),
       createBasicAuthHeaders(DEFAULT_CREDENTIAL));
 
-  AWAIT_EXPECT_RESPONSE_STATUS_EQ(http::OK().status, response);
+  AWAIT_EXPECT_RESPONSE_STATUS_EQ(OK().status, response);
   AWAIT_EXPECT_RESPONSE_HEADER_EQ(APPLICATION_JSON, "Content-Type", response);
 
   // Verify that the statistics in the response contains the proper
@@ -1826,6 +1829,64 @@ TEST_F(SlaveTest, StatisticsEndpointRunningExecutor)
 
   driver.stop();
   driver.join();
+}
+
+
+// This test confirms that an agent's statistics endpoint is
+// authenticated. We rely on the agent implicitly having HTTP
+// authentication enabled.
+TEST_F(SlaveTest, StatisticsEndpointAuthentication)
+{
+  Try<Owned<cluster::Master>> master = StartMaster();
+  ASSERT_SOME(master);
+
+  Owned<MasterDetector> detector = master.get()->createDetector();
+
+  Try<Owned<cluster::Slave>> agent = StartSlave(detector.get());
+  ASSERT_SOME(agent);
+
+  const string statisticsEndpoints[] =
+    {"monitor/statistics", "monitor/statistics.json"};
+
+  foreach (const string& statisticsEndpoint, statisticsEndpoints) {
+    // Unauthenticated requests are rejected.
+    {
+      Future<Response> response = process::http::get(
+          agent.get()->pid,
+          statisticsEndpoint);
+
+      AWAIT_EXPECT_RESPONSE_STATUS_EQ(Unauthorized({}).status, response)
+          << response.get().body;
+    }
+
+    // Incorrectly authenticated requests are rejected.
+    {
+      Credential badCredential;
+      badCredential.set_principal("badPrincipal");
+      badCredential.set_secret("badSecret");
+
+      Future<Response> response = process::http::get(
+          agent.get()->pid,
+          statisticsEndpoint,
+          None(),
+          createBasicAuthHeaders(badCredential));
+
+      AWAIT_EXPECT_RESPONSE_STATUS_EQ(Unauthorized({}).status, response)
+          << response.get().body;
+    }
+
+    // Correctly authenticated requests succeed.
+    {
+      Future<Response> response = process::http::get(
+          agent.get()->pid,
+          statisticsEndpoint,
+          None(),
+          createBasicAuthHeaders(DEFAULT_CREDENTIAL));
+
+      AWAIT_EXPECT_RESPONSE_STATUS_EQ(OK().status, response)
+          << response.get().body;
+    }
+  }
 }
 
 
