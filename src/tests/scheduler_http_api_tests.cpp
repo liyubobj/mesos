@@ -59,12 +59,12 @@ using process::Owned;
 using process::PID;
 
 using process::http::BadRequest;
-using process::http::Forbidden;
 using process::http::MethodNotAllowed;
 using process::http::NotAcceptable;
 using process::http::OK;
 using process::http::Pipe;
 using process::http::Response;
+using process::http::Unauthorized;
 using process::http::UnsupportedMediaType;
 
 using recordio::Decoder;
@@ -130,10 +130,7 @@ INSTANTIATE_TEST_CASE_P(
 
 TEST_F(SchedulerHttpApiTest, AuthenticationRequired)
 {
-  master::Flags flags = CreateMasterFlags();
-  flags.authenticate_frameworks = true;
-
-  Try<Owned<cluster::Master>> master = StartMaster(flags);
+  Try<Owned<cluster::Master>> master = StartMaster();
   ASSERT_SOME(master);
 
   Future<Response> response = process::http::post(
@@ -142,18 +139,14 @@ TEST_F(SchedulerHttpApiTest, AuthenticationRequired)
       None(),
       None());
 
-  AWAIT_EXPECT_RESPONSE_STATUS_EQ(Forbidden().status, response);
+  AWAIT_EXPECT_RESPONSE_STATUS_EQ(Unauthorized({}).status, response);
 }
 
 
 // TODO(anand): Add additional tests for validation.
 TEST_F(SchedulerHttpApiTest, NoContentType)
 {
-  // HTTP schedulers cannot yet authenticate.
-  master::Flags flags = CreateMasterFlags();
-  flags.authenticate_frameworks = false;
-
-  Try<Owned<cluster::Master>> master = StartMaster(flags);
+  Try<Owned<cluster::Master>> master = StartMaster();
   ASSERT_SOME(master);
 
   // Expect a BadRequest when 'Content-Type' is omitted.
@@ -163,7 +156,7 @@ TEST_F(SchedulerHttpApiTest, NoContentType)
   Future<Response> response = process::http::post(
       master.get()->pid,
       "api/v1/scheduler",
-      None(),
+      createBasicAuthHeaders(DEFAULT_CREDENTIAL),
       None());
 
   AWAIT_EXPECT_RESPONSE_STATUS_EQ(BadRequest().status, response);
@@ -174,17 +167,13 @@ TEST_F(SchedulerHttpApiTest, NoContentType)
 // into a valid protobuf resulting in a BadRequest.
 TEST_F(SchedulerHttpApiTest, ValidJsonButInvalidProtobuf)
 {
-  // HTTP schedulers cannot yet authenticate.
-  master::Flags flags = CreateMasterFlags();
-  flags.authenticate_frameworks = false;
-
-  Try<Owned<cluster::Master>> master = StartMaster(flags);
+  Try<Owned<cluster::Master>> master = StartMaster();
   ASSERT_SOME(master);
 
   JSON::Object object;
   object.values["string"] = "valid_json";
 
-  process::http::Headers headers;
+  process::http::Headers headers = createBasicAuthHeaders(DEFAULT_CREDENTIAL);
   headers["Accept"] = APPLICATION_JSON;
 
   Future<Response> response = process::http::post(
@@ -202,17 +191,14 @@ TEST_F(SchedulerHttpApiTest, ValidJsonButInvalidProtobuf)
 // into a valid protobuf resulting in a BadRequest.
 TEST_P(SchedulerHttpApiTest, MalformedContent)
 {
-  // HTTP schedulers cannot yet authenticate.
-  master::Flags flags = CreateMasterFlags();
-  flags.authenticate_frameworks = false;
-
-  Try<Owned<cluster::Master>> master = StartMaster(flags);
+  Try<Owned<cluster::Master>> master = StartMaster();
   ASSERT_SOME(master);
 
   const string body = "MALFORMED_CONTENT";
 
   const string contentType = GetParam();
-  process::http::Headers headers;
+
+  process::http::Headers headers = createBasicAuthHeaders(DEFAULT_CREDENTIAL);
   headers["Accept"] = contentType;
 
   Future<Response> response = process::http::post(
@@ -230,15 +216,12 @@ TEST_P(SchedulerHttpApiTest, MalformedContent)
 // should result in a 415 (UnsupportedMediaType) response.
 TEST_P(SchedulerHttpApiTest, UnsupportedContentMediaType)
 {
-  // HTTP schedulers cannot yet authenticate.
-  master::Flags flags = CreateMasterFlags();
-  flags.authenticate_frameworks = false;
-
-  Try<Owned<cluster::Master>> master = StartMaster(flags);
+  Try<Owned<cluster::Master>> master = StartMaster();
   ASSERT_SOME(master);
 
   const string contentType = GetParam();
-  process::http::Headers headers;
+
+  process::http::Headers headers = createBasicAuthHeaders(DEFAULT_CREDENTIAL);
   headers["Accept"] = contentType;
 
   Call call;
@@ -265,11 +248,7 @@ TEST_P(SchedulerHttpApiTest, UnsupportedContentMediaType)
 // call request.
 TEST_P(SchedulerHttpApiTest, Subscribe)
 {
-  // HTTP schedulers cannot yet authenticate.
-  master::Flags flags = CreateMasterFlags();
-  flags.authenticate_frameworks = false;
-
-  Try<Owned<cluster::Master>> master = StartMaster(flags);
+  Try<Owned<cluster::Master>> master = StartMaster();
   ASSERT_SOME(master);
 
   Call call;
@@ -280,7 +259,8 @@ TEST_P(SchedulerHttpApiTest, Subscribe)
 
   // Retrieve the parameter passed as content type to this test.
   const string contentType = GetParam();
-  process::http::Headers headers;
+
+  process::http::Headers headers = createBasicAuthHeaders(DEFAULT_CREDENTIAL);
   headers["Accept"] = contentType;
 
   Future<Response> response = process::http::streaming::post(
@@ -331,15 +311,61 @@ TEST_P(SchedulerHttpApiTest, Subscribe)
 }
 
 
+// This test verifies if the role is invalid in scheduler's framework message,
+// the event is error on the stream in response to a Subscribe call request.
+TEST_P(SchedulerHttpApiTest, RejectFrameworkWithInvalidRole)
+{
+  Try<Owned<cluster::Master>> master = StartMaster();
+  ASSERT_SOME(master);
+
+  Call call;
+  call.set_type(Call::SUBSCRIBE);
+
+  Call::Subscribe* subscribe = call.mutable_subscribe();
+  v1::FrameworkInfo framework = DEFAULT_V1_FRAMEWORK_INFO;
+  // Set invalid role.
+  framework.set_role("/test/test1");
+  subscribe->mutable_framework_info()->CopyFrom(framework);
+
+  // Retrieve the parameter passed as content type to this test.
+  const string contentType = GetParam();
+
+  process::http::Headers headers = createBasicAuthHeaders(DEFAULT_CREDENTIAL);
+  headers["Accept"] = contentType;
+
+  Future<Response> response = process::http::streaming::post(
+      master.get()->pid,
+      "api/v1/scheduler",
+      headers,
+      serialize(call, contentType),
+      contentType);
+
+  AWAIT_EXPECT_RESPONSE_STATUS_EQ(OK().status, response);
+  AWAIT_EXPECT_RESPONSE_HEADER_EQ("chunked", "Transfer-Encoding", response);
+  ASSERT_EQ(Response::PIPE, response.get().type);
+
+  Option<Pipe::Reader> reader = response.get().reader;
+  ASSERT_SOME(reader);
+
+  auto deserializer = lambda::bind(
+      &SchedulerHttpApiTest::deserialize, this, contentType, lambda::_1);
+
+  Reader<Event> responseDecoder(Decoder<Event>(deserializer), reader.get());
+
+  Future<Result<Event>> event = responseDecoder.read();
+  AWAIT_READY(event);
+  ASSERT_SOME(event.get());
+
+  // Check event type is error.
+  ASSERT_EQ(Event::ERROR, event.get().get().type());
+}
+
+
 // This test verifies that the client will receive a `BadRequest` response if it
 // includes a stream ID header with a subscribe call.
 TEST_P(SchedulerHttpApiTest, SubscribeWithStreamId)
 {
-  // HTTP schedulers cannot yet authenticate.
-  master::Flags flags = CreateMasterFlags();
-  flags.authenticate_frameworks = false;
-
-  Try<Owned<cluster::Master>> master = StartMaster(flags);
+  Try<Owned<cluster::Master>> master = StartMaster();
   ASSERT_SOME(master);
 
   Call call;
@@ -350,7 +376,8 @@ TEST_P(SchedulerHttpApiTest, SubscribeWithStreamId)
 
   // Retrieve the parameter passed as content type to this test.
   const string contentType = GetParam();
-  process::http::Headers headers;
+
+  process::http::Headers headers = createBasicAuthHeaders(DEFAULT_CREDENTIAL);
   headers["Accept"] = contentType;
   headers["Mesos-Stream-Id"] = UUID::random().toString();
 
@@ -369,11 +396,7 @@ TEST_P(SchedulerHttpApiTest, SubscribeWithStreamId)
 // e.g. after a ZK blip.
 TEST_P(SchedulerHttpApiTest, SubscribedOnRetry)
 {
-  // HTTP schedulers cannot yet authenticate.
-  master::Flags flags = CreateMasterFlags();
-  flags.authenticate_frameworks = false;
-
-  Try<Owned<cluster::Master>> master = StartMaster(flags);
+  Try<Owned<cluster::Master>> master = StartMaster();
   ASSERT_SOME(master);
 
   Call call;
@@ -384,7 +407,8 @@ TEST_P(SchedulerHttpApiTest, SubscribedOnRetry)
 
   // Retrieve the parameter passed as content type to this test.
   const string contentType = GetParam();
-  process::http::Headers headers;
+
+  process::http::Headers headers = createBasicAuthHeaders(DEFAULT_CREDENTIAL);
   headers["Accept"] = contentType;
 
   auto deserializer = lambda::bind(
@@ -458,17 +482,12 @@ TEST_P(SchedulerHttpApiTest, SubscribedOnRetry)
 // scheduler to HTTP scheduler.
 TEST_P(SchedulerHttpApiTest, UpdatePidToHttpScheduler)
 {
-  // HTTP schedulers cannot yet authenticate.
-  master::Flags flags = CreateMasterFlags();
-  flags.authenticate_frameworks = false;
-
-  Try<Owned<cluster::Master>> master = StartMaster(flags);
+  Try<Owned<cluster::Master>> master = StartMaster();
   ASSERT_SOME(master);
 
   v1::FrameworkInfo frameworkInfo = DEFAULT_V1_FRAMEWORK_INFO;
   frameworkInfo.set_failover_timeout(Weeks(2).secs());
 
-  // Start the scheduler without credentials.
   MockScheduler sched;
   StandaloneMasterDetector detector(master.get()->pid);
   TestingMesosSchedulerDriver driver(&sched, &detector, devolve(frameworkInfo));
@@ -502,7 +521,8 @@ TEST_P(SchedulerHttpApiTest, UpdatePidToHttpScheduler)
 
   // Retrieve the parameter passed as content type to this test.
   const string contentType = GetParam();
-  process::http::Headers headers;
+
+  process::http::Headers headers = createBasicAuthHeaders(DEFAULT_CREDENTIAL);
   headers["Accept"] = contentType;
 
   Future<Response> response = process::http::streaming::post(
@@ -549,11 +569,7 @@ TEST_P(SchedulerHttpApiTest, UpdatePidToHttpScheduler)
 // framework to PID.
 TEST_P(SchedulerHttpApiTest, UpdateHttpToPidScheduler)
 {
-  // HTTP schedulers cannot yet authenticate.
-  master::Flags flags = CreateMasterFlags();
-  flags.authenticate_frameworks = false;
-
-  Try<Owned<cluster::Master>> master = StartMaster(flags);
+  Try<Owned<cluster::Master>> master = StartMaster();
   ASSERT_SOME(master);
 
   v1::FrameworkInfo frameworkInfo = DEFAULT_V1_FRAMEWORK_INFO;
@@ -566,7 +582,8 @@ TEST_P(SchedulerHttpApiTest, UpdateHttpToPidScheduler)
 
   // Retrieve the parameter passed as content type to this test.
   const string contentType = GetParam();
-  process::http::Headers headers;
+
+  process::http::Headers headers = createBasicAuthHeaders(DEFAULT_CREDENTIAL);
   headers["Accept"] = contentType;
 
   Future<Response> response = process::http::streaming::post(
@@ -604,10 +621,9 @@ TEST_P(SchedulerHttpApiTest, UpdateHttpToPidScheduler)
 
   ASSERT_EQ(Event::HEARTBEAT, event.get().get().type());
 
-  // Start PID based scheduler without credentials.
   MockScheduler sched;
   MesosSchedulerDriver driver(
-      &sched, devolve(frameworkInfo), master.get()->pid);
+      &sched, devolve(frameworkInfo), master.get()->pid, DEFAULT_CREDENTIAL);
 
   Future<FrameworkID> frameworkId;
   EXPECT_CALL(sched, registered(&driver, _, _))
@@ -625,17 +641,13 @@ TEST_P(SchedulerHttpApiTest, UpdateHttpToPidScheduler)
 
 TEST_P(SchedulerHttpApiTest, NotAcceptable)
 {
-  // HTTP schedulers cannot yet authenticate.
-  master::Flags flags = CreateMasterFlags();
-  flags.authenticate_frameworks = false;
-
-  Try<Owned<cluster::Master>> master = StartMaster(flags);
+  Try<Owned<cluster::Master>> master = StartMaster();
   ASSERT_SOME(master);
 
   // Retrieve the parameter passed as content type to this test.
   const string contentType = GetParam();
 
-  process::http::Headers headers;
+  process::http::Headers headers = createBasicAuthHeaders(DEFAULT_CREDENTIAL);
   headers["Accept"] = "foo";
 
   // Only subscribe needs to 'Accept' json or protobuf.
@@ -658,11 +670,7 @@ TEST_P(SchedulerHttpApiTest, NotAcceptable)
 
 TEST_P(SchedulerHttpApiTest, NoAcceptHeader)
 {
-  // HTTP schedulers cannot yet authenticate.
-  master::Flags flags = CreateMasterFlags();
-  flags.authenticate_frameworks = false;
-
-  Try<Owned<cluster::Master>> master = StartMaster(flags);
+  Try<Owned<cluster::Master>> master = StartMaster();
   ASSERT_SOME(master);
 
   // Retrieve the parameter passed as content type to this test.
@@ -670,7 +678,7 @@ TEST_P(SchedulerHttpApiTest, NoAcceptHeader)
 
   // No 'Accept' header leads to all media types considered
   // acceptable. JSON will be chosen by default.
-  process::http::Headers headers;
+  process::http::Headers headers = createBasicAuthHeaders(DEFAULT_CREDENTIAL);
 
   // Only subscribe needs to 'Accept' json or protobuf.
   Call call;
@@ -693,14 +701,10 @@ TEST_P(SchedulerHttpApiTest, NoAcceptHeader)
 
 TEST_P(SchedulerHttpApiTest, DefaultAccept)
 {
-  // HTTP schedulers cannot yet authenticate.
-  master::Flags flags = CreateMasterFlags();
-  flags.authenticate_frameworks = false;
-
-  Try<Owned<cluster::Master>> master = StartMaster(flags);
+  Try<Owned<cluster::Master>> master = StartMaster();
   ASSERT_SOME(master);
 
-  process::http::Headers headers;
+  process::http::Headers headers = createBasicAuthHeaders(DEFAULT_CREDENTIAL);
   headers["Accept"] = "*/*";
 
   // Only subscribe needs to 'Accept' json or protobuf.
@@ -727,15 +731,14 @@ TEST_P(SchedulerHttpApiTest, DefaultAccept)
 
 TEST_F(SchedulerHttpApiTest, GetRequest)
 {
-  master::Flags flags = CreateMasterFlags();
-  flags.authenticate_frameworks = false;
-
-  Try<Owned<cluster::Master>> master = StartMaster(flags);
+  Try<Owned<cluster::Master>> master = StartMaster();
   ASSERT_SOME(master);
 
   Future<Response> response = process::http::get(
       master.get()->pid,
-      "api/v1/scheduler");
+      "api/v1/scheduler",
+      None(),
+      createBasicAuthHeaders(DEFAULT_CREDENTIAL));
 
   AWAIT_READY(response);
   AWAIT_EXPECT_RESPONSE_STATUS_EQ(MethodNotAllowed({"POST"}).status, response);
@@ -746,16 +749,13 @@ TEST_F(SchedulerHttpApiTest, GetRequest)
 // when a teardown call is made without including a stream ID header.
 TEST_P(SchedulerHttpApiTest, TeardownWithoutStreamId)
 {
-  // HTTP schedulers cannot yet authenticate.
-  master::Flags flags = CreateMasterFlags();
-  flags.authenticate_frameworks = false;
-
-  Try<Owned<cluster::Master>> master = StartMaster(flags);
+  Try<Owned<cluster::Master>> master = StartMaster();
   ASSERT_SOME(master);
 
   // Retrieve the parameter passed as content type to this test.
   const string contentType = GetParam();
-  process::http::Headers headers;
+
+  process::http::Headers headers = createBasicAuthHeaders(DEFAULT_CREDENTIAL);
   headers["Accept"] = contentType;
 
   v1::FrameworkID frameworkId;
@@ -820,16 +820,13 @@ TEST_P(SchedulerHttpApiTest, TeardownWithoutStreamId)
 // when a teardown call is made with an incorrect stream ID header.
 TEST_P(SchedulerHttpApiTest, TeardownWrongStreamId)
 {
-  // HTTP schedulers cannot yet authenticate.
-  master::Flags flags = CreateMasterFlags();
-  flags.authenticate_frameworks = false;
-
-  Try<Owned<cluster::Master>> master = StartMaster(flags);
+  Try<Owned<cluster::Master>> master = StartMaster();
   ASSERT_SOME(master);
 
   // Retrieve the parameter passed as content type to this test.
   const string contentType = GetParam();
-  process::http::Headers headers;
+
+  process::http::Headers headers = createBasicAuthHeaders(DEFAULT_CREDENTIAL);
   headers["Accept"] = contentType;
 
   v1::FrameworkID frameworkId;
