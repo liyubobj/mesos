@@ -66,6 +66,7 @@ using mesos::v1::Image;
 using mesos::v1::Label;
 using mesos::v1::Labels;
 using mesos::v1::Offer;
+using mesos::v1::Resource;
 using mesos::v1::Resources;
 using mesos::v1::TaskID;
 using mesos::v1::TaskInfo;
@@ -144,6 +145,11 @@ public:
         "Enable checkpointing for the framework.",
         false);
 
+    add(&use_revocable_resources,
+        "use_revocable_resources",
+        "Enable capability of using revocable resources",
+        false);
+
     add(&appc_image,
         "appc_image",
         "Appc image name that follows the Appc spec\n"
@@ -186,6 +192,7 @@ public:
   Option<string> package;
   bool overwrite;
   bool checkpoint;
+  bool use_revocable_resources;
   Option<string> appc_image;
   Option<string> docker_image;
   string containerizer;
@@ -310,17 +317,28 @@ protected:
     foreach (const Offer& offer, offers) {
       Resources offered = offer.resources();
 
-      if (!launched && offered.flatten().contains(TASK_RESOURCES.get())) {
+      // Takes resources first from the specified role, then from '*'.
+      Option<Resources> resources =
+        offered.find(TASK_RESOURCES.get().flatten(frameworkInfo.role()));
+
+      // Have another try to use revocable resources.
+      if (!resources.isSome() && !offered.revocable().empty()) {
+        Resources revocable_resources;
+        foreach (const Resource& resource, TASK_RESOURCES.get().flatten()) {
+          Resource _resource = resource;
+          _resource.mutable_revocable();
+
+          revocable_resources += _resource;
+        }
+
+        resources = offered.find(revocable_resources);
+      }
+
+      if (!launched && resources.isSome()) {
         TaskInfo task;
         task.set_name(name);
         task.mutable_task_id()->set_value(name);
         task.mutable_agent_id()->MergeFrom(offer.agent_id());
-
-        // Takes resources first from the specified role, then from '*'.
-        Option<Resources> resources =
-          offered.find(TASK_RESOURCES.get().flatten(frameworkInfo.role()));
-
-        CHECK_SOME(resources);
 
         task.mutable_resources()->CopyFrom(resources.get());
 
@@ -740,6 +758,11 @@ int main(int argc, char** argv)
   frameworkInfo.set_checkpoint(flags.checkpoint);
   frameworkInfo.add_capabilities()->set_type(
       FrameworkInfo::Capability::TASK_KILLING_STATE);
+
+  if (flags.use_revocable_resources) {
+    frameworkInfo.add_capabilities()->set_type(
+        FrameworkInfo::Capability::REVOCABLE_RESOURCES);
+  }
 
   Owned<CommandScheduler> scheduler(
       new CommandScheduler(
