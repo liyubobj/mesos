@@ -190,7 +190,7 @@ protected:
   SlaveInfo createSlaveInfo(const string& resources)
   {
     SlaveID slaveId;
-    slaveId.set_value("slave" + stringify(nextSlaveId++));
+    slaveId.set_value("agent" + stringify(nextSlaveId++));
 
     SlaveInfo slave;
     *(slave.mutable_resources()) = Resources::parse(resources).get();
@@ -1366,7 +1366,7 @@ TEST_F(HierarchicalAllocatorTest, Whitelist)
   initialize();
 
   hashset<string> whitelist;
-  whitelist.insert("dummy-slave");
+  whitelist.insert("dummy-agent");
 
   allocator->updateWhitelist(whitelist);
 
@@ -3443,7 +3443,7 @@ TEST_P(HierarchicalAllocator_BENCHMARK_Test, Metrics)
   watch.stop();
 
   cout << "/metrics/snapshot took " << watch.elapsed()
-       << " for " << slaveCount << " slaves"
+       << " for " << slaveCount << " agents"
        << " and " << frameworkCount << " frameworks" << endl;
 }
 
