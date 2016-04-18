@@ -19,16 +19,16 @@
 
 #include <mesos/mesos.hpp>
 
-#include <stout/hashset.hpp>
+#include <mesos/state/protobuf.hpp>
 
 #include <process/future.hpp>
 #include <process/owned.hpp>
 #include <process/pid.hpp>
 
+#include <stout/hashset.hpp>
+
 #include "master/flags.hpp"
 #include "master/registry.hpp"
-
-#include "state/protobuf.hpp"
 
 namespace mesos {
 namespace internal {
@@ -104,7 +104,7 @@ public:
   // If flags.registry_strict is true, all operations will be
   // permitted.
   Registrar(const Flags& flags,
-            state::protobuf::State* state,
+            mesos::state::protobuf::State* state,
             const Option<std::string>& authenticationRealm = None());
   ~Registrar();
 

@@ -18,20 +18,23 @@
 
 #include <string>
 
+#include <mesos/log/log.hpp>
+
+#include <mesos/state/log.hpp>
+#include <mesos/state/state.hpp>
+
 #include <stout/duration.hpp>
-
-#include "log/log.hpp"
-
-#include "state/state.hpp"
-#include "state/log.hpp"
 
 #include "construct.hpp"
 #include "convert.hpp"
 
-using namespace mesos::internal::log;
-using namespace mesos::internal::state;
-
 using std::string;
+
+using mesos::log::Log;
+
+using mesos::state::LogStorage;
+using mesos::state::State;
+using mesos::state::Storage;
 
 extern "C" {
 

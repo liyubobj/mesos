@@ -26,6 +26,12 @@
 
 #include <mesos/authentication/http/basic_authenticator_factory.hpp>
 
+#include <mesos/log/log.hpp>
+
+#include <mesos/state/log.hpp>
+#include <mesos/state/protobuf.hpp>
+#include <mesos/state/storage.hpp>
+
 #include <process/clock.hpp>
 #include <process/gmock.hpp>
 #include <process/gtest.hpp>
@@ -40,12 +46,9 @@
 
 #include "common/protobuf_utils.hpp"
 
-#include "log/log.hpp"
 #include "log/replica.hpp"
 
 #include "log/tool/initialize.hpp"
-
-#include "messages/state.hpp"
 
 #include "master/flags.hpp"
 #include "master/maintenance.hpp"
@@ -54,17 +57,14 @@
 #include "master/registrar.hpp"
 #include "master/weights.hpp"
 
-#include "state/log.hpp"
-#include "state/protobuf.hpp"
-#include "state/storage.hpp"
-
 #include "tests/mesos.hpp"
 
 using namespace mesos::internal::master;
 
 using namespace process;
 
-using mesos::internal::log::Log;
+using mesos::log::Log;
+
 using mesos::internal::log::Replica;
 
 using std::cout;
@@ -113,11 +113,11 @@ using namespace mesos::internal::master::weights;
 
 using mesos::http::authentication::BasicAuthenticatorFactory;
 
-using state::Entry;
-using state::LogStorage;
-using state::Storage;
+using mesos::state::LogStorage;
+using mesos::state::Storage;
+using mesos::state::protobuf::State;
 
-using state::protobuf::State;
+using state::Entry;
 
 
 static vector<WeightInfo> getWeightInfos(

@@ -171,6 +171,7 @@ MESOS_PROTO = $(top_srcdir)/include/mesos/mesos.proto
 MODULE_PROTO = $(top_srcdir)/include/mesos/module/module.proto
 QUOTA_PROTO = $(top_srcdir)/include/mesos/quota/quota.proto
 SCHEDULER_PROTO = $(top_srcdir)/include/mesos/scheduler/scheduler.proto
+STATE_PROTO = $(top_srcdir)/include/mesos/state/state.proto
 ISOLATOR_PROTO = $(top_srcdir)/include/mesos/slave/isolator.proto
 OVERSUBSCRIPTION_PROTO = $(top_srcdir)/include/mesos/slave/oversubscription.proto
 URI_PROTO = $(top_srcdir)/include/mesos/uri/uri.proto
@@ -216,6 +217,8 @@ CXX_PROTOS =								\
   ../include/mesos/slave/isolator.pb.h					\
   ../include/mesos/slave/oversubscription.pb.cc				\
   ../include/mesos/slave/oversubscription.pb.h				\
+  ../include/mesos/state/state.pb.cc					\
+  ../include/mesos/state/state.pb.h					\
   ../include/mesos/uri/uri.pb.cc					\
   ../include/mesos/uri/uri.pb.h						\
   ../include/mesos/v1/mesos.pb.cc					\
@@ -462,6 +465,11 @@ fetcher_HEADERS =							\
 nodist_fetcher_HEADERS =						\
   ../include/mesos/fetcher/fetcher.pb.h
 
+logdir = $(pkgincludedir)/log
+
+log_HEADERS =								\
+  $(top_srcdir)/include/mesos/log/log.hpp
+
 maintenancedir = $(pkgincludedir)/maintenance
 
 maintenance_HEADERS =							\
@@ -537,6 +545,21 @@ nodist_slave_HEADERS =							\
   ../include/mesos/slave/isolator.pb.h					\
   ../include/mesos/slave/oversubscription.pb.h
 
+statedir = $(pkgincludedir)/state
+
+state_HEADERS =								\
+  $(top_srcdir)/include/mesos/state/in_memory.hpp			\
+  $(top_srcdir)/include/mesos/state/leveldb.hpp				\
+  $(top_srcdir)/include/mesos/state/log.hpp				\
+  $(top_srcdir)/include/mesos/state/protobuf.hpp			\
+  $(top_srcdir)/include/mesos/state/state.hpp				\
+  $(top_srcdir)/include/mesos/state/state.proto				\
+  $(top_srcdir)/include/mesos/state/storage.hpp				\
+  $(top_srcdir)/include/mesos/state/zookeeper.hpp
+
+nodist_state_HEADERS =							\
+  ../include/mesos/state/state.pb.h
+
 uridir = $(pkgincludedir)/uri
 
 uri_HEADERS =								\
@@ -578,6 +601,17 @@ v1scheduler_HEADERS =							\
 
 nodist_v1scheduler_HEADERS =						\
   ../include/mesos/v1/scheduler/scheduler.pb.h
+
+zookeeperdir = $(pkgincludedir)/zookeeper
+
+zookeeper_HEADERS =							\
+  $(top_srcdir)/include/mesos/zookeeper/authentication.hpp		\
+  $(top_srcdir)/include/mesos/zookeeper/contender.hpp			\
+  $(top_srcdir)/include/mesos/zookeeper/detector.hpp			\
+  $(top_srcdir)/include/mesos/zookeeper/group.hpp			\
+  $(top_srcdir)/include/mesos/zookeeper/url.hpp				\
+  $(top_srcdir)/include/mesos/zookeeper/watcher.hpp			\
+  $(top_srcdir)/include/mesos/zookeeper/zookeeper.hpp
 
 
 # We even use a convenience library for most of Mesos so that we can
@@ -848,14 +882,7 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   uri/schemes/http.hpp							\
   usage/usage.hpp							\
   version/version.hpp							\
-  watcher/whitelist_watcher.hpp						\
-  zookeeper/authentication.hpp						\
-  zookeeper/contender.hpp						\
-  zookeeper/detector.hpp						\
-  zookeeper/group.hpp							\
-  zookeeper/url.hpp							\
-  zookeeper/watcher.hpp							\
-  zookeeper/zookeeper.hpp
+  watcher/whitelist_watcher.hpp
 
 MESOS_LINUX_FILES =							\
   linux/cgroups.cpp							\
@@ -1058,13 +1085,6 @@ libstate_la_SOURCES =							\
   state/log.cpp								\
   state/zookeeper.cpp
 libstate_la_SOURCES +=							\
-  state/in_memory.hpp							\
-  state/leveldb.hpp							\
-  state/log.hpp								\
-  state/protobuf.hpp							\
-  state/state.hpp							\
-  state/storage.hpp							\
-  state/zookeeper.hpp							\
   messages/state.hpp							\
   messages/state.proto
 nodist_libstate_la_SOURCES = $(CXX_STATE_PROTOS)
@@ -1089,13 +1109,14 @@ libmesos_la_SOURCES =							\
   $(DOCKER_V1_PROTO)							\
   $(DOCKER_V2_PROTO)							\
   $(FETCHER_PROTO)							\
+  $(ISOLATOR_PROTO)							\
   $(MAINTENANCE_PROTO)							\
   $(MESOS_PROTO)							\
   $(MODULE_PROTO)							\
+  $(OVERSUBSCRIPTION_PROTO)						\
   $(QUOTA_PROTO)							\
   $(SCHEDULER_PROTO)							\
-  $(ISOLATOR_PROTO)							\
-  $(OVERSUBSCRIPTION_PROTO)						\
+  $(STATE_PROTO)							\
   $(URI_PROTO)								\
   $(V1_EXECUTOR_PROTO)							\
   $(V1_MESOS_PROTO)							\
@@ -1813,6 +1834,8 @@ MESOS_TEST_MODULES =		\
   libtesthook.la		\
   libtesthttpauthenticator.la	\
   libtestisolator.la		\
+  libtestmastercontender.la	\
+  libtestmasterdetector.la	\
   libtestqos_controller.la	\
   libtestresource_estimator.la
 
@@ -1855,13 +1878,11 @@ libtestcontainer_logger_la_CPPFLAGS = $(MESOS_CPPFLAGS)
 libtestcontainer_logger_la_LDFLAGS = $(MESOS_TEST_MODULE_LDFLAGS)
 
 # Library containing the test contender module.
-noinst_LTLIBRARIES += libtestmastercontender.la
 libtestmastercontender_la_SOURCES = examples/test_master_contender_module.cpp
 libtestmastercontender_la_CPPFLAGS = $(MESOS_CPPFLAGS)
 libtestmastercontender_la_LDFLAGS = $(MESOS_TEST_MODULE_LDFLAGS)
 
 # Library containing the test detector module.
-noinst_LTLIBRARIES += libtestmasterdetector.la
 libtestmasterdetector_la_SOURCES = examples/test_master_detector_module.cpp
 libtestmasterdetector_la_CPPFLAGS = $(MESOS_CPPFLAGS)
 libtestmasterdetector_la_LDFLAGS = $(MESOS_TEST_MODULE_LDFLAGS)

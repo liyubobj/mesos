@@ -18,17 +18,19 @@
 
 #include <string>
 
-#include <stout/duration.hpp>
+#include <mesos/state/state.hpp>
+#include <mesos/state/zookeeper.hpp>
 
-#include "state/state.hpp"
-#include "state/zookeeper.hpp"
+#include <stout/duration.hpp>
 
 #include "construct.hpp"
 #include "convert.hpp"
 
-using namespace mesos::internal::state;
-
 using std::string;
+
+using mesos::state::State;
+using mesos::state::Storage;
+using mesos::state::ZooKeeperStorage;
 
 extern "C" {
 

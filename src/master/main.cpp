@@ -33,6 +33,13 @@
 #include <mesos/module/anonymous.hpp>
 #include <mesos/module/authorizer.hpp>
 
+#include <mesos/state/in_memory.hpp>
+#include <mesos/state/log.hpp>
+#include <mesos/state/protobuf.hpp>
+#include <mesos/state/storage.hpp>
+
+#include <mesos/zookeeper/detector.hpp>
+
 #include <process/limiter.hpp>
 #include <process/owned.hpp>
 #include <process/pid.hpp>
@@ -67,14 +74,7 @@
 
 #include "module/manager.hpp"
 
-#include "state/in_memory.hpp"
-#include "state/log.hpp"
-#include "state/protobuf.hpp"
-#include "state/storage.hpp"
-
 #include "version/version.hpp"
-
-#include "zookeeper/detector.hpp"
 
 using namespace mesos::internal;
 using namespace mesos::internal::log;
@@ -86,6 +86,8 @@ using mesos::MasterInfo;
 using mesos::Parameter;
 using mesos::Parameters;
 
+using mesos::log::Log;
+
 using mesos::master::allocator::Allocator;
 
 using mesos::master::contender::MasterContender;
@@ -95,6 +97,10 @@ using mesos::master::detector::StandaloneMasterDetector;
 
 using mesos::modules::Anonymous;
 using mesos::modules::ModuleManager;
+
+using mesos::state::InMemoryStorage;
+using mesos::state::LogStorage;
+using mesos::state::Storage;
 
 using process::Owned;
 using process::RateLimiter;
@@ -283,7 +289,7 @@ int main(int argc, char** argv)
   CHECK_NOTNULL(allocator.get());
   LOG(INFO) << "Using '" << allocatorName << "' allocator";
 
-  state::Storage* storage = NULL;
+  Storage* storage = NULL;
   Log* log = NULL;
 
   if (flags.registry == "in_memory") {
@@ -292,7 +298,7 @@ int main(int argc, char** argv)
         << "Cannot use '--registry_strict' when using in-memory storage"
         << " based registry";
     }
-    storage = new state::InMemoryStorage();
+    storage = new InMemoryStorage();
   } else if (flags.registry == "replicated_log" ||
              flags.registry == "log_storage") {
     // TODO(bmahler): "log_storage" is present for backwards
@@ -338,7 +344,7 @@ int main(int argc, char** argv)
           set<UPID>(),
           flags.log_auto_initialize);
     }
-    storage = new state::LogStorage(log);
+    storage = new LogStorage(log);
   } else {
     EXIT(EXIT_FAILURE)
       << "'" << flags.registry << "' is not a supported"
@@ -347,7 +353,8 @@ int main(int argc, char** argv)
 
   CHECK_NOTNULL(storage);
 
-  state::protobuf::State* state = new state::protobuf::State(storage);
+  mesos::state::protobuf::State* state =
+    new mesos::state::protobuf::State(storage);
   Registrar* registrar =
     new Registrar(flags, state, DEFAULT_HTTP_AUTHENTICATION_REALM);
   Repairer* repairer = new Repairer();

@@ -14,56 +14,49 @@
 // See the License for the specific language governing permissions and
 // limitations under the License
 
-#ifndef __STATE_ZOOKEEPER_HPP__
-#define __STATE_ZOOKEEPER_HPP__
+#ifndef __MESOS_STATE_LOG_HPP__
+#define __MESOS_STATE_LOG_HPP__
 
 #include <set>
 #include <string>
 
+#include <mesos/log/log.hpp>
+
+#include <mesos/state/storage.hpp>
+
 #include <process/future.hpp>
 
-#include <stout/duration.hpp>
 #include <stout/option.hpp>
 #include <stout/uuid.hpp>
 
-#include "messages/state.hpp"
-
-#include "state/storage.hpp"
-
-#include "zookeeper/authentication.hpp"
-
 namespace mesos {
-namespace internal {
 namespace state {
 
 // Forward declarations.
-class ZooKeeperStorageProcess;
+class LogStorageProcess;
 
 
-class ZooKeeperStorage : public Storage
+class LogStorage : public mesos::state::Storage
 {
 public:
-  // TODO(benh): Just take a zookeeper::URL.
-  ZooKeeperStorage(
-      const std::string& servers,
-      const Duration& timeout,
-      const std::string& znode,
-      const Option<zookeeper::Authentication>& auth = None());
-  virtual ~ZooKeeperStorage();
+  LogStorage(mesos::log::Log* log, size_t diffsBetweenSnapshots = 0);
+
+  virtual ~LogStorage();
 
   // Storage implementation.
-  virtual process::Future<Option<Entry>> get(const std::string& name);
-  virtual process::Future<bool> set(const Entry& entry, const UUID& uuid);
-  virtual process::Future<bool> expunge(const Entry& entry);
+  virtual process::Future<Option<internal::state::Entry>> get(
+      const std::string& name);
+  virtual process::Future<bool> set(
+      const internal::state::Entry& entry,
+      const UUID& uuid);
+  virtual process::Future<bool> expunge(const internal::state::Entry& entry);
   virtual process::Future<std::set<std::string>> names();
 
 private:
-  ZooKeeperStorageProcess* process;
+  LogStorageProcess* process;
 };
 
-
 } // namespace state {
-} // namespace internal {
 } // namespace mesos {
 
-#endif // __STATE_ZOOKEEPER_HPP__
+#endif // __MESOS_STATE_LOG_HPP__

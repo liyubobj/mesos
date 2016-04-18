@@ -12,32 +12,13 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
-// limitations under the License
+// limitations under the License.
 
-#include <mesos/zookeeper/authentication.hpp>
+package mesos.internal.state;
 
-namespace zookeeper {
-
-ACL _EVERYONE_READ_CREATOR_ALL_ACL[] = {
-  { ZOO_PERM_READ, ZOO_ANYONE_ID_UNSAFE },
-  { ZOO_PERM_ALL, ZOO_AUTH_IDS }
-};
-
-
-const ACL_vector EVERYONE_READ_CREATOR_ALL = {
-    2, _EVERYONE_READ_CREATOR_ALL_ACL
-};
-
-
-ACL _EVERYONE_CREATE_AND_READ_CREATOR_ALL_ACL[] = {
-  { ZOO_PERM_CREATE, ZOO_ANYONE_ID_UNSAFE },
-  { ZOO_PERM_READ, ZOO_ANYONE_ID_UNSAFE },
-  { ZOO_PERM_ALL, ZOO_AUTH_IDS }
-};
-
-
-const ACL_vector EVERYONE_CREATE_AND_READ_CREATOR_ALL = {
-    3, _EVERYONE_CREATE_AND_READ_CREATOR_ALL_ACL
-};
-
-} // namespace zookeeper {
+// Describes a state entry, a versioned (via a UUID) key/value pair.
+message Entry {
+  required string name = 1;
+  required bytes uuid = 2;
+  required bytes value = 3;
+}

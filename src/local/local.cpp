@@ -32,6 +32,11 @@
 
 #include <mesos/slave/resource_estimator.hpp>
 
+#include <mesos/state/in_memory.hpp>
+#include <mesos/state/log.hpp>
+#include <mesos/state/protobuf.hpp>
+#include <mesos/state/storage.hpp>
+
 #include <process/limiter.hpp>
 #include <process/owned.hpp>
 #include <process/pid.hpp>
@@ -71,13 +76,10 @@
 #include "slave/containerizer/containerizer.hpp"
 #include "slave/containerizer/fetcher.hpp"
 
-#include "state/in_memory.hpp"
-#include "state/log.hpp"
-#include "state/protobuf.hpp"
-#include "state/storage.hpp"
-
 using namespace mesos::internal;
 using namespace mesos::internal::log;
+
+using mesos::log::Log;
 
 using mesos::master::allocator::Allocator;
 
@@ -124,8 +126,8 @@ namespace local {
 
 static Allocator* allocator = NULL;
 static Log* log = NULL;
-static state::Storage* storage = NULL;
-static state::protobuf::State* state = NULL;
+static mesos::state::Storage* storage = NULL;
+static mesos::state::protobuf::State* state = NULL;
 static Registrar* registrar = NULL;
 static Repairer* repairer = NULL;
 static Master* master = NULL;
@@ -193,7 +195,7 @@ PID<Master> launch(const Flags& flags, Allocator* _allocator)
           << "Cannot use '--registry_strict' when using in-memory storage"
           << " based registry";
       }
-      storage = new state::InMemoryStorage();
+      storage = new mesos::state::InMemoryStorage();
     } else if (flags.registry == "replicated_log") {
       // For local runs, we use a temporary work directory.
       if (flags.work_dir.isNone()) {
@@ -210,7 +212,7 @@ PID<Master> launch(const Flags& flags, Allocator* _allocator)
           path::join(flags.work_dir.get(), "replicated_log"),
           set<UPID>(),
           flags.log_auto_initialize);
-      storage = new state::LogStorage(log);
+      storage = new mesos::state::LogStorage(log);
     } else {
       EXIT(EXIT_FAILURE)
         << "'" << flags.registry << "' is not a supported"
@@ -219,7 +221,7 @@ PID<Master> launch(const Flags& flags, Allocator* _allocator)
 
     CHECK_NOTNULL(storage);
 
-    state = new state::protobuf::State(storage);
+    state = new mesos::state::protobuf::State(storage);
     registrar =
       new Registrar(flags, state, master::DEFAULT_HTTP_AUTHENTICATION_REALM);
     repairer = new Repairer();

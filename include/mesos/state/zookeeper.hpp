@@ -14,48 +14,55 @@
 // See the License for the specific language governing permissions and
 // limitations under the License
 
-#ifndef __STATE_LEVELDB_HPP__
-#define __STATE_LEVELDB_HPP__
+#ifndef __MESOS_STATE_ZOOKEEPER_HPP__
+#define __MESOS_STATE_ZOOKEEPER_HPP__
 
 #include <set>
 #include <string>
 
+#include <mesos/zookeeper/authentication.hpp>
+
+#include <mesos/state/storage.hpp>
+
 #include <process/future.hpp>
 
+#include <stout/duration.hpp>
 #include <stout/option.hpp>
-#include <stout/try.hpp>
 #include <stout/uuid.hpp>
 
-#include "messages/state.hpp"
-
-#include "state/storage.hpp"
-
 namespace mesos {
-namespace internal {
 namespace state {
 
-// More forward declarations.
-class LevelDBStorageProcess;
+// Forward declarations.
+class ZooKeeperStorageProcess;
 
 
-class LevelDBStorage : public Storage
+class ZooKeeperStorage : public mesos::state::Storage
 {
 public:
-  explicit LevelDBStorage(const std::string& path);
-  virtual ~LevelDBStorage();
+  // TODO(benh): Just take a zookeeper::URL.
+  ZooKeeperStorage(
+      const std::string& servers,
+      const Duration& timeout,
+      const std::string& znode,
+      const Option<zookeeper::Authentication>& auth = None());
+  virtual ~ZooKeeperStorage();
 
   // Storage implementation.
-  virtual process::Future<Option<Entry>> get(const std::string& name);
-  virtual process::Future<bool> set(const Entry& entry, const UUID& uuid);
-  virtual process::Future<bool> expunge(const Entry& entry);
+  virtual process::Future<Option<internal::state::Entry>> get(
+      const std::string& name);
+  virtual process::Future<bool> set(
+      const internal::state::Entry& entry,
+      const UUID& uuid);
+  virtual process::Future<bool> expunge(const internal::state::Entry& entry);
   virtual process::Future<std::set<std::string>> names();
 
 private:
-  LevelDBStorageProcess* process;
+  ZooKeeperStorageProcess* process;
 };
 
+
 } // namespace state {
-} // namespace internal {
 } // namespace mesos {
 
-#endif // __STATE_LEVELDB_HPP__
+#endif // __MESOS_STATE_ZOOKEEPER_HPP__

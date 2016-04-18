@@ -23,6 +23,9 @@
 #include <set>
 #include <string>
 
+#include <mesos/state/leveldb.hpp>
+#include <mesos/state/storage.hpp>
+
 #include <process/dispatch.hpp>
 #include <process/future.hpp>
 #include <process/process.hpp>
@@ -36,19 +39,15 @@
 
 #include "logging/logging.hpp"
 
-#include "messages/state.hpp"
-
-#include "state/leveldb.hpp"
-#include "state/storage.hpp"
-
 using namespace process;
 
 // Note that we don't add 'using std::set' here because we need
 // 'std::' to disambiguate the 'set' member.
 using std::string;
 
+using mesos::internal::state::Entry;
+
 namespace mesos {
-namespace internal {
 namespace state {
 
 
@@ -310,5 +309,4 @@ Future<std::set<string>> LevelDBStorage::names()
 }
 
 } // namespace state {
-} // namespace internal {
 } // namespace mesos {

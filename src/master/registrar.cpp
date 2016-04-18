@@ -19,6 +19,8 @@
 
 #include <mesos/type_utils.hpp>
 
+#include <mesos/state/protobuf.hpp>
+
 #include <process/defer.hpp>
 #include <process/dispatch.hpp>
 #include <process/future.hpp>
@@ -42,10 +44,8 @@
 #include "master/registrar.hpp"
 #include "master/registry.hpp"
 
-#include "state/protobuf.hpp"
-
-using mesos::internal::state::protobuf::State;
-using mesos::internal::state::protobuf::Variable;
+using mesos::state::protobuf::State;
+using mesos::state::protobuf::Variable;
 
 using process::dispatch;
 using process::spawn;

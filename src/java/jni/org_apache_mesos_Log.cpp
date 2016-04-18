@@ -17,12 +17,12 @@
 #include <jni.h>
 #include <stdint.h>
 
+#include <mesos/log/log.hpp>
+
 #include <process/future.hpp>
 
 #include <stout/check.hpp>
 #include <stout/duration.hpp>
-
-#include "log/log.hpp"
 
 #include "construct.hpp"
 #include "convert.hpp"
@@ -31,9 +31,10 @@
 #include "org_apache_mesos_Log_Writer.h"
 
 using namespace mesos;
-using namespace mesos::internal::log;
 
 using namespace process;
+
+using mesos::log::Log;
 
 
 std::string identity(JNIEnv* env, jobject jposition)

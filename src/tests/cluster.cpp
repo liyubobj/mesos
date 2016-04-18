@@ -22,9 +22,18 @@
 
 #include <mesos/authorizer/authorizer.hpp>
 
+#include <mesos/log/log.hpp>
+
 #include <mesos/master/allocator.hpp>
 
 #include <mesos/slave/resource_estimator.hpp>
+
+#include <mesos/state/in_memory.hpp>
+#include <mesos/state/log.hpp>
+#include <mesos/state/protobuf.hpp>
+#include <mesos/state/storage.hpp>
+
+#include <mesos/zookeeper/url.hpp>
 
 #include <process/clock.hpp>
 #include <process/future.hpp>
@@ -54,8 +63,6 @@
 
 #include "files/files.hpp"
 
-#include "log/log.hpp"
-
 #include "master/constants.hpp"
 #include "master/flags.hpp"
 #include "master/master.hpp"
@@ -77,13 +84,6 @@
 
 #include "slave/containerizer/containerizer.hpp"
 #include "slave/containerizer/fetcher.hpp"
-
-#include "state/in_memory.hpp"
-#include "state/log.hpp"
-#include "state/protobuf.hpp"
-#include "state/storage.hpp"
-
-#include "zookeeper/url.hpp"
 
 #include "tests/cluster.hpp"
 
@@ -194,7 +194,7 @@ Try<process::Owned<Master>> Master::start(
   if (flags.registry == "replicated_log") {
     if (zookeeperUrl.isSome()) {
       // Use ZooKeeper-based replicated log.
-      master->log.reset(new log::Log(
+      master->log.reset(new mesos::log::Log(
           flags.quorum.get(),
           path::join(flags.work_dir.get(), "replicated_log"),
           zookeeperUrl.get().servers,
@@ -203,7 +203,7 @@ Try<process::Owned<Master>> Master::start(
           zookeeperUrl.get().authentication,
           flags.log_auto_initialize));
     } else {
-      master->log.reset(new log::Log(
+      master->log.reset(new mesos::log::Log(
           1,
           path::join(flags.work_dir.get(), "replicated_log"),
           std::set<process::UPID>(),
@@ -213,16 +213,16 @@ Try<process::Owned<Master>> Master::start(
 
   // Create the registry's storage backend.
   if (flags.registry == "in_memory") {
-    master->storage.reset(new state::InMemoryStorage());
+    master->storage.reset(new mesos::state::InMemoryStorage());
   } else if (flags.registry == "replicated_log") {
-    master->storage.reset(new state::LogStorage(master->log.get()));
+    master->storage.reset(new mesos::state::LogStorage(master->log.get()));
   } else {
     return Error(
         "Unsupported option for registry persistence: " + flags.registry);
   }
 
   // Instantiate some other master dependencies.
-  master->state.reset(new state::protobuf::State(master->storage.get()));
+  master->state.reset(new mesos::state::protobuf::State(master->storage.get()));
   master->registrar.reset(new master::Registrar(
       flags, master->state.get(), master::DEFAULT_HTTP_AUTHENTICATION_REALM));
   master->repairer.reset(new master::Repairer());

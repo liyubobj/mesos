@@ -23,6 +23,13 @@
 #include <string>
 #include <vector>
 
+#include <mesos/zookeeper/authentication.hpp>
+#include <mesos/zookeeper/watcher.hpp>
+#include <mesos/zookeeper/zookeeper.hpp>
+
+#include <mesos/state/storage.hpp>
+#include <mesos/state/zookeeper.hpp>
+
 #include <process/dispatch.hpp>
 #include <process/future.hpp>
 #include <process/process.hpp>
@@ -39,15 +46,6 @@
 
 #include "logging/logging.hpp"
 
-#include "messages/state.hpp"
-
-#include "state/storage.hpp"
-#include "state/zookeeper.hpp"
-
-#include "zookeeper/authentication.hpp"
-#include "zookeeper/watcher.hpp"
-#include "zookeeper/zookeeper.hpp"
-
 using namespace process;
 
 // Note that we don't add 'using std::set' here because we need
@@ -56,10 +54,11 @@ using std::queue;
 using std::string;
 using std::vector;
 
+using mesos::internal::state::Entry;
+
 using zookeeper::Authentication;
 
 namespace mesos {
-namespace internal {
 namespace state {
 
 
@@ -668,5 +667,4 @@ Future<std::set<string>> ZooKeeperStorage::names()
 }
 
 } // namespace state {
-} // namespace internal {
 } // namespace mesos {

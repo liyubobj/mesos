@@ -14,223 +14,176 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef __LOG_HPP__
-#define __LOG_HPP__
+#ifndef __LOG_LOG_HPP__
+#define __LOG_LOG_HPP__
 
 #include <stdint.h>
 
-#include <list>
-#include <set>
-#include <string>
+#include <mesos/log/log.hpp>
 
 #include <process/future.hpp>
 #include <process/owned.hpp>
 #include <process/process.hpp>
 #include <process/shared.hpp>
-#include <process/timeout.hpp>
 
-#include <stout/duration.hpp>
-#include <stout/none.hpp>
-#include <stout/option.hpp>
+#include <stout/nothing.hpp>
 
-#include "zookeeper/group.hpp"
+#include "log/coordinator.hpp"
+#include "log/network.hpp"
+#include "log/recover.hpp"
+#include "log/replica.hpp"
 
 namespace mesos {
 namespace internal {
 namespace log {
 
-// Forward declarations.
-class LogProcess;
-class LogReaderProcess;
-class LogWriterProcess;
-
-
-class Log
+class LogProcess : public process::Process<LogProcess>
 {
 public:
-  // Forward declarations.
-  class Reader;
-  class Writer;
-
-  class Position
-  {
-  public:
-    bool operator==(const Position& that) const
-    {
-      return value == that.value;
-    }
-
-    bool operator<(const Position& that) const
-    {
-      return value < that.value;
-    }
-
-    bool operator<=(const Position& that) const
-    {
-      return value <= that.value;
-    }
-
-    bool operator>(const Position& that) const
-    {
-      return value > that.value;
-    }
-
-    bool operator>=(const Position& that) const
-    {
-      return value >= that.value;
-    }
-
-    // Returns an "identity" off this position, useful for serializing
-    // to logs or across communication mediums.
-    std::string identity() const
-    {
-      CHECK(sizeof(value) == 8);
-      char bytes[8];
-      bytes[0] =(0xff & (value >> 56));
-      bytes[1] = (0xff & (value >> 48));
-      bytes[2] = (0xff & (value >> 40));
-      bytes[3] = (0xff & (value >> 32));
-      bytes[4] = (0xff & (value >> 24));
-      bytes[5] = (0xff & (value >> 16));
-      bytes[6] = (0xff & (value >> 8));
-      bytes[7] = (0xff & value);
-      return std::string(bytes, sizeof(bytes));
-    }
-
-  private:
-    friend class Log;
-    friend class Writer;
-    friend class LogReaderProcess;
-    friend class LogWriterProcess;
-
-    /*implicit*/ Position(uint64_t _value) : value(_value) {}
-
-    uint64_t value;
-  };
-
-  class Entry
-  {
-  public:
-    Position position;
-    std::string data;
-
-  private:
-    friend class LogReaderProcess;
-
-    Entry(const Position& _position, const std::string& _data)
-      : position(_position), data(_data) {}
-  };
-
-  class Reader
-  {
-  public:
-    explicit Reader(Log* log);
-    ~Reader();
-
-    // Returns all entries between the specified positions, unless
-    // those positions are invalid, in which case returns an error.
-    process::Future<std::list<Entry> > read(
-        const Position& from,
-        const Position& to);
-
-    // Returns the beginning position of the log from the perspective
-    // of the local replica (which may be out of date if the log has
-    // been opened and truncated while this replica was partitioned).
-    process::Future<Position> beginning();
-
-    // Returns the ending (i.e., last) position of the log from the
-    // perspective of the local replica (which may be out of date if
-    // the log has been opened and appended to while this replica was
-    // partitioned).
-    process::Future<Position> ending();
-
-  private:
-    LogReaderProcess* process;
-  };
-
-  class Writer
-  {
-  public:
-    // Creates a new writer associated with the specified log. Only
-    // one writer (local or remote) can be valid at any point in
-    // time. A writer becomes invalid if either Writer::append or
-    // Writer::truncate return None, in which case, the writer (or
-    // another writer) must be restarted.
-    explicit Writer(Log* log);
-    ~Writer();
-
-    // Attempts to get a promise (from the log's replicas) for
-    // exclusive writes, i.e., no other writer's will be able to
-    // perform append and truncate operations. Returns the ending
-    // position of the log or none if the promise to exclusively write
-    // could not be attained but may be retried.
-    process::Future<Option<Position> > start();
-
-    // Attempts to append the specified data to the log. Returns the
-    // new ending position of the log or 'none' if this writer has
-    // lost it's promise to exclusively write (which can be reacquired
-    // by invoking Writer::start).
-    process::Future<Option<Position> > append(const std::string& data);
-
-    // Attempts to truncate the log up to but not including the
-    // specificed position. Returns the new ending position of the log
-    // or 'none' if this writer has lost it's promise to exclusively
-    // write (which can be reacquired by invoking Writer::start).
-    process::Future<Option<Position> > truncate(const Position& to);
-
-  private:
-    LogWriterProcess* process;
-  };
-
-  // Creates a new replicated log that assumes the specified quorum
-  // size, is backed by a file at the specified path, and coordinates
-  // with other replicas via the set of process PIDs.
-  Log(int quorum,
+  LogProcess(
+      size_t _quorum,
       const std::string& path,
       const std::set<process::UPID>& pids,
-      bool autoInitialize = false);
+      bool _autoInitialize);
 
-  // Creates a new replicated log that assumes the specified quorum
-  // size, is backed by a file at the specified path, and coordinates
-  // with other replicas associated with the specified ZooKeeper
-  // servers, timeout, and znode.
-  Log(int quorum,
+  LogProcess(
+      size_t _quorum,
       const std::string& path,
       const std::string& servers,
       const Duration& timeout,
       const std::string& znode,
-      const Option<zookeeper::Authentication>& auth = None(),
-      bool autoInitialize = false);
+      const Option<zookeeper::Authentication>& auth,
+      bool _autoInitialize);
 
-  ~Log();
+  // Recovers the log by catching up if needed. Returns a shared
+  // pointer to the local replica if the recovery succeeds.
+  process::Future<process::Shared<Replica>> recover();
 
-  // Returns a position based off of the bytes recovered from
-  // Position.identity().
-  Position position(const std::string& identity) const
-  {
-    CHECK(identity.size() == 8);
-    const char* bytes = identity.c_str();
-    uint64_t value =
-      ((uint64_t) (bytes[0] & 0xff) << 56) |
-      ((uint64_t) (bytes[1] & 0xff) << 48) |
-      ((uint64_t) (bytes[2] & 0xff) << 40) |
-      ((uint64_t) (bytes[3] & 0xff) << 32) |
-      ((uint64_t) (bytes[4] & 0xff) << 24) |
-      ((uint64_t) (bytes[5] & 0xff) << 16) |
-      ((uint64_t) (bytes[6] & 0xff) << 8) |
-      ((uint64_t) (bytes[7] & 0xff));
-    return Position(value);
-  }
+protected:
+  virtual void initialize();
+  virtual void finalize();
 
 private:
   friend class LogReaderProcess;
   friend class LogWriterProcess;
 
-  LogProcess* process;
+  // Continuations.
+  void _recover();
+
+  // TODO(benh): Factor this out into "membership renewer".
+  void watch(
+      const process::UPID& pid,
+      const std::set<zookeeper::Group::Membership>& memberships);
+
+  void failed(const std::string& message);
+  void discarded();
+
+  const size_t quorum;
+  process::Shared<Replica> replica;
+  process::Shared<Network> network;
+  const bool autoInitialize;
+
+  // For replica recovery.
+  Option<process::Future<process::Owned<Replica>>> recovering;
+  process::Promise<Nothing> recovered;
+  std::list<process::Promise<process::Shared<Replica>>*> promises;
+
+  // For renewing membership. We store a Group instance in order to
+  // continually renew the replicas membership (when using ZooKeeper).
+  zookeeper::Group* group;
+  process::Future<zookeeper::Group::Membership> membership;
+};
+
+
+class LogReaderProcess : public process::Process<LogReaderProcess>
+{
+public:
+  explicit LogReaderProcess(mesos::log::Log* log);
+
+  process::Future<mesos::log::Log::Position> beginning();
+  process::Future<mesos::log::Log::Position> ending();
+
+  process::Future<std::list<mesos::log::Log::Entry>> read(
+      const mesos::log::Log::Position& from,
+      const mesos::log::Log::Position& to);
+
+protected:
+  virtual void initialize();
+  virtual void finalize();
+
+private:
+  // Returns a position from a raw value.
+  static mesos::log::Log::Position position(uint64_t value);
+
+  // Returns a future which gets set when the log recovery has
+  // finished (either succeeded or failed).
+  process::Future<Nothing> recover();
+
+  // Continuations.
+  void _recover();
+
+  process::Future<mesos::log::Log::Position> _beginning();
+  process::Future<mesos::log::Log::Position> _ending();
+
+  process::Future<std::list<mesos::log::Log::Entry>> _read(
+      const mesos::log::Log::Position& from,
+      const mesos::log::Log::Position& to);
+
+  process::Future<std::list<mesos::log::Log::Entry>> __read(
+      const mesos::log::Log::Position& from,
+      const mesos::log::Log::Position& to,
+      const std::list<Action>& actions);
+
+  process::Future<process::Shared<Replica>> recovering;
+  std::list<process::Promise<Nothing>*> promises;
+};
+
+
+class LogWriterProcess : public process::Process<LogWriterProcess>
+{
+public:
+  explicit LogWriterProcess(mesos::log::Log* log);
+
+  process::Future<Option<mesos::log::Log::Position>> start();
+  process::Future<Option<mesos::log::Log::Position>> append(
+      const std::string& bytes);
+  process::Future<Option<mesos::log::Log::Position>> truncate(
+      const mesos::log::Log::Position& to);
+
+protected:
+  virtual void initialize();
+  virtual void finalize();
+
+private:
+  // Helper for converting an optional position returned from the
+  // coordinator into a Log::Position.
+  static Option<mesos::log::Log::Position> position(
+      const Option<uint64_t>& position);
+
+  // Returns a future which gets set when the log recovery has
+  // finished (either succeeded or failed).
+  process::Future<Nothing> recover();
+
+  // Continuations.
+  void _recover();
+
+  process::Future<Option<mesos::log::Log::Position>> _start();
+  Option<mesos::log::Log::Position> __start(const Option<uint64_t>& position);
+
+  void failed(const std::string& message, const std::string& reason);
+
+  const size_t quorum;
+  const process::Shared<Network> network;
+
+  process::Future<process::Shared<Replica>> recovering;
+  std::list<process::Promise<Nothing>*> promises;
+
+  Coordinator* coordinator;
+  Option<std::string> error;
 };
 
 } // namespace log {
 } // namespace internal {
 } // namespace mesos {
 
-#endif // __LOG_HPP__
+#endif // __LOG_LOG_HPP__

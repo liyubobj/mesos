@@ -18,15 +18,17 @@
 
 #include <string>
 
-#include "state/leveldb.hpp"
-#include "state/state.hpp"
+#include <mesos/state/leveldb.hpp>
+#include <mesos/state/state.hpp>
 
 #include "construct.hpp"
 #include "convert.hpp"
 
-using namespace mesos::internal::state;
-
 using std::string;
+
+using mesos::state::LevelDBStorage;
+using mesos::state::State;
+using mesos::state::Storage;
 
 extern "C" {
 

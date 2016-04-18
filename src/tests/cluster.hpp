@@ -24,11 +24,20 @@
 
 #include <mesos/authorizer/authorizer.hpp>
 
+#include <mesos/log/log.hpp>
+
 #include <mesos/master/allocator.hpp>
 #include <mesos/master/contender.hpp>
 #include <mesos/master/detector.hpp>
 
 #include <mesos/slave/resource_estimator.hpp>
+
+#include <mesos/state/in_memory.hpp>
+#include <mesos/state/log.hpp>
+#include <mesos/state/protobuf.hpp>
+#include <mesos/state/storage.hpp>
+
+#include <mesos/zookeeper/url.hpp>
 
 #include <process/owned.hpp>
 #include <process/pid.hpp>
@@ -40,8 +49,6 @@
 #include "authorizer/local/authorizer.hpp"
 
 #include "files/files.hpp"
-
-#include "log/log.hpp"
 
 #include "master/constants.hpp"
 #include "master/flags.hpp"
@@ -57,13 +64,6 @@
 
 #include "slave/containerizer/containerizer.hpp"
 #include "slave/containerizer/fetcher.hpp"
-
-#include "state/in_memory.hpp"
-#include "state/log.hpp"
-#include "state/protobuf.hpp"
-#include "state/storage.hpp"
-
-#include "zookeeper/url.hpp"
 
 
 namespace mesos {
@@ -114,9 +114,9 @@ private:
   process::Owned<Authorizer> authorizer;
   process::Owned<mesos::master::contender::MasterContender> contender;
   process::Owned<mesos::master::detector::MasterDetector> detector;
-  process::Owned<log::Log> log;
-  process::Owned<state::Storage> storage;
-  process::Owned<state::protobuf::State> state;
+  process::Owned<mesos::log::Log> log;
+  process::Owned<mesos::state::Storage> storage;
+  process::Owned<mesos::state::protobuf::State> state;
   process::Owned<master::Registrar> registrar;
   process::Owned<master::Repairer> repairer;
 

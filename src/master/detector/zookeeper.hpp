@@ -19,18 +19,17 @@
 
 #include <string>
 
+#include <mesos/mesos.hpp>
+
+#include <mesos/master/detector.hpp>
+
+#include <mesos/zookeeper/group.hpp>
+#include <mesos/zookeeper/url.hpp>
+
 #include <process/future.hpp>
 #include <process/owned.hpp>
 
 #include <stout/option.hpp>
-#include <stout/stringify.hpp>
-#include <stout/try.hpp>
-
-#include "messages/messages.hpp"
-
-#include "zookeeper/detector.hpp"
-#include "zookeeper/group.hpp"
-#include "zookeeper/url.hpp"
 
 namespace mesos {
 namespace master {

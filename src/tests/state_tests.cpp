@@ -24,6 +24,15 @@
 #include <mesos/mesos.hpp>
 #include <mesos/type_utils.hpp>
 
+#include <mesos/log/log.hpp>
+
+#include <mesos/state/in_memory.hpp>
+#include <mesos/state/leveldb.hpp>
+#include <mesos/state/log.hpp>
+#include <mesos/state/protobuf.hpp>
+#include <mesos/state/storage.hpp>
+#include <mesos/state/zookeeper.hpp>
+
 #include <process/future.hpp>
 #include <process/gtest.hpp>
 #include <process/protobuf.hpp>
@@ -36,7 +45,6 @@
 
 #include <stout/tests/utils.hpp>
 
-#include "log/log.hpp"
 #include "log/replica.hpp"
 
 #include "log/tool/initialize.hpp"
@@ -44,13 +52,6 @@
 #include "master/registry.hpp"
 
 #include "messages/state.hpp"
-
-#include "state/in_memory.hpp"
-#include "state/leveldb.hpp"
-#include "state/log.hpp"
-#include "state/protobuf.hpp"
-#include "state/storage.hpp"
-#include "state/zookeeper.hpp"
 
 #ifdef MESOS_HAS_JAVA
 #include "tests/zookeeper.hpp"
@@ -65,19 +66,22 @@ using std::set;
 using std::string;
 using std::vector;
 
+using mesos::log::Log;
+
+using mesos::state::Storage;
+using mesos::state::LevelDBStorage;
+#ifdef MESOS_HAS_JAVA
+using mesos::state::ZooKeeperStorage;
+#endif
+
+using mesos::state::protobuf::State;
+using mesos::state::protobuf::Variable;
+
+using mesos::internal::state::Operation;
+
 namespace mesos {
 namespace internal {
 namespace tests {
-
-using state::LevelDBStorage;
-using state::Operation;
-using state::Storage;
-#ifdef MESOS_HAS_JAVA
-using state::ZooKeeperStorage;
-#endif
-
-using state::protobuf::State;
-using state::protobuf::Variable;
 
 typedef mesos::internal::Registry::Slaves Slaves;
 typedef mesos::internal::Registry::Slave Slave;
@@ -333,7 +337,7 @@ public:
 protected:
   virtual void SetUp()
   {
-    storage = new state::InMemoryStorage();
+    storage = new mesos::state::InMemoryStorage();
     state = new State(storage);
   }
 
@@ -343,7 +347,7 @@ protected:
     delete storage;
   }
 
-  state::Storage* storage;
+  mesos::state::Storage* storage;
   State* state;
 };
 
@@ -405,7 +409,7 @@ protected:
     ASSERT_SOME(sandbox);
     path = sandbox.get() + "/.state";
 
-    storage = new state::LevelDBStorage(path);
+    storage = new mesos::state::LevelDBStorage(path);
     state = new State(storage);
   }
 
@@ -417,7 +421,7 @@ protected:
     TemporaryDirectoryTest::TearDown();
   }
 
-  state::Storage* storage;
+  mesos::state::Storage* storage;
   State* state;
 
 private:
@@ -501,7 +505,7 @@ protected:
     pids.insert(replica2->pid());
 
     log = new Log(2, path1, pids);
-    storage = new state::LogStorage(log, 1024);
+    storage = new mesos::state::LogStorage(log, 1024);
     state = new State(storage);
   }
 
@@ -516,7 +520,7 @@ protected:
     TemporaryDirectoryTest::TearDown();
   }
 
-  state::Storage* storage;
+  mesos::state::Storage* storage;
   State* state;
 
   Replica* replica2;
@@ -699,7 +703,7 @@ protected:
   virtual void SetUp()
   {
     ZooKeeperTest::SetUp();
-    storage = new state::ZooKeeperStorage(
+    storage = new mesos::state::ZooKeeperStorage(
         server->connectString(),
         NO_TIMEOUT,
         "/state/");
@@ -713,7 +717,7 @@ protected:
     ZooKeeperTest::TearDown();
   }
 
-  state::Storage* storage;
+  mesos::state::Storage* storage;
   State* state;
 };
 

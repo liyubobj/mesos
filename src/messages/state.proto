@@ -14,15 +14,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import "mesos/state/state.proto";
+
 package mesos.internal.state;
-
-// Describes a state entry, a versioned (via a UUID) key/value pair.
-message Entry {
-  required string name = 1;
-  required bytes uuid = 2;
-  required bytes value = 3;
-}
-
 
 // Describes an operation used in the log storage implementation.
 message Operation {

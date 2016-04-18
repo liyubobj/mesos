@@ -19,23 +19,25 @@
 #include <set>
 #include <string>
 
+#include <mesos/state/state.hpp>
+
 #include <process/check.hpp>
 #include <process/future.hpp>
 
 #include <stout/duration.hpp>
 #include <stout/foreach.hpp>
 
-#include "state/state.hpp"
-
 #include "construct.hpp"
 #include "convert.hpp"
-
-using namespace mesos::internal::state;
 
 using process::Future;
 
 using std::set;
 using std::string;
+
+using mesos::state::State;
+using mesos::state::Storage;
+using mesos::state::Variable;
 
 extern "C" {
 
