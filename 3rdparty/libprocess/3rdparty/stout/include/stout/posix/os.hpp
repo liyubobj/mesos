@@ -90,6 +90,9 @@ namespace os {
 // Import `::gmtime_r` into `os::` namespace
 using ::gmtime_r;
 
+// Import `::hstrerror` into `os::` namespace
+using ::hstrerror;
+
 // Forward declarations.
 inline Try<Nothing> utime(const std::string&);
 
@@ -323,8 +326,6 @@ inline Try<std::set<pid_t>> pids(Option<pid_t> group, Option<pid_t> session)
 }
 
 
-/* TODO: MOVE BACK TO stout/os.hpp*/
-
 // Looks in the environment variables for the specified key and
 // returns a string representation of its value. If no environment
 // variable matching key is found, None() is returned.
@@ -451,7 +452,7 @@ inline std::set<pid_t> children(
 }
 
 
-inline Try<std::set<pid_t> > children(pid_t pid, bool recursive = true)
+inline Try<std::set<pid_t>> children(pid_t pid, bool recursive = true)
 {
   const Try<std::list<Process>> processes = os::processes();
 
@@ -462,7 +463,37 @@ inline Try<std::set<pid_t> > children(pid_t pid, bool recursive = true)
   return children(pid, processes.get(), recursive);
 }
 
-/* /TODO */
+
+inline Option<std::string> which(const std::string& command)
+{
+  Option<std::string> path = getenv("PATH");
+  if (path.isNone()) {
+    return None();
+  }
+
+  std::vector<std::string> tokens = strings::tokenize(path.get(), ":");
+  foreach (const std::string& token, tokens) {
+    const std::string commandPath = path::join(token, command);
+    if (!os::exists(commandPath)) {
+      continue;
+    }
+
+    Try<os::Permissions> permissions = os::permissions(commandPath);
+    if (permissions.isError()) {
+      continue;
+    }
+
+    if (!permissions.get().owner.x &&
+        !permissions.get().group.x &&
+        !permissions.get().others.x) {
+      continue;
+    }
+
+    return commandPath;
+  }
+
+  return None();
+}
 
 } // namespace os {
 
