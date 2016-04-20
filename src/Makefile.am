@@ -237,6 +237,8 @@ CXX_PROTOS +=								\
   messages/messages.pb.h						\
   slave/containerizer/mesos/provisioner/docker/message.pb.cc		\
   slave/containerizer/mesos/provisioner/docker/message.pb.h		\
+  slave/containerizer/mesos/isolators/docker/volume/state.pb.cc		\
+  slave/containerizer/mesos/isolators/docker/volume/state.pb.h		\
   slave/containerizer/mesos/isolators/network/cni/spec.pb.cc		\
   slave/containerizer/mesos/isolators/network/cni/spec.pb.h
 
@@ -628,6 +630,7 @@ libmesos_no_3rdparty_la_SOURCES =					\
   messages/flags.proto							\
   messages/messages.proto						\
   slave/containerizer/mesos/provisioner/docker/message.proto		\
+  slave/containerizer/mesos/isolators/docker/volume/state.proto		\
   slave/containerizer/mesos/isolators/network/cni/spec.proto
 
 # TODO(tillt): Remove authentication/cram_md5/* which will enable us to
@@ -715,6 +718,8 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   slave/containerizer/mesos/launcher.cpp				\
   slave/containerizer/mesos/mount.cpp					\
   slave/containerizer/mesos/isolators/filesystem/posix.cpp		\
+  slave/containerizer/mesos/isolators/docker/volume/driver.cpp		\
+  slave/containerizer/mesos/isolators/docker/volume/paths.cpp		\
   slave/containerizer/mesos/isolators/network/cni/paths.cpp		\
   slave/containerizer/mesos/isolators/network/cni/spec.cpp		\
   slave/containerizer/mesos/isolators/posix/disk.cpp			\
@@ -831,7 +836,11 @@ libmesos_no_3rdparty_la_SOURCES +=					\
   slave/containerizer/mesos/isolators/posix.hpp				\
   slave/containerizer/mesos/isolators/filesystem/posix.hpp		\
   slave/containerizer/mesos/isolators/posix/disk.hpp			\
+  slave/containerizer/mesos/isolators/docker/volume/driver.hpp		\
+  slave/containerizer/mesos/isolators/docker/volume/paths.hpp		\
+  slave/containerizer/mesos/isolators/docker/volume/state.hpp		\
   slave/containerizer/mesos/isolators/network/cni/paths.hpp		\
+  slave/containerizer/mesos/isolators/network/cni/spec.hpp		\
   slave/containerizer/mesos/isolators/network/cni/spec.hpp		\
   slave/containerizer/mesos/provisioner/backend.hpp			\
   slave/containerizer/mesos/provisioner/paths.hpp			\

@@ -19,9 +19,8 @@
 include(MesosProtobuf)
 
 # Build the protobuf structs.
-PROTOC_TO_INCLUDE_DIR(MESOS            mesos/mesos)
-PROTOC_TO_INCLUDE_DIR(V1_MESOS         mesos/v1/mesos)
 PROTOC_TO_INCLUDE_DIR(ACLS             mesos/authorizer/acls)
+PROTOC_TO_INCLUDE_DIR(ALLOCATOR        mesos/master/allocator)
 PROTOC_TO_INCLUDE_DIR(APPC_SPEC        mesos/appc/spec)
 PROTOC_TO_INCLUDE_DIR(AUTHENTICATION   mesos/authentication/authentication)
 PROTOC_TO_INCLUDE_DIR(AUTHORIZATION    mesos/authorizer/authorizer)
@@ -30,60 +29,61 @@ PROTOC_TO_INCLUDE_DIR(DOCKER_SPEC      mesos/docker/spec)
 PROTOC_TO_INCLUDE_DIR(DOCKER_V1        mesos/docker/v1)
 PROTOC_TO_INCLUDE_DIR(DOCKER_V2        mesos/docker/v2)
 PROTOC_TO_INCLUDE_DIR(EXECUTOR         mesos/executor/executor)
-PROTOC_TO_INCLUDE_DIR(V1_EXECUTOR      mesos/v1/executor/executor)
 PROTOC_TO_INCLUDE_DIR(FETCHER          mesos/fetcher/fetcher)
+PROTOC_TO_INCLUDE_DIR(ISOLATOR         mesos/slave/isolator)
 PROTOC_TO_INCLUDE_DIR(MAINTENANCE      mesos/maintenance/maintenance)
-PROTOC_TO_INCLUDE_DIR(ALLOCATOR        mesos/master/allocator)
+PROTOC_TO_INCLUDE_DIR(MESOS            mesos/mesos)
 PROTOC_TO_INCLUDE_DIR(MODULE           mesos/module/module)
+PROTOC_TO_INCLUDE_DIR(OVERSUBSCRIPTION mesos/slave/oversubscription)
 PROTOC_TO_INCLUDE_DIR(QUOTA            mesos/quota/quota)
 PROTOC_TO_INCLUDE_DIR(SCHEDULER        mesos/scheduler/scheduler)
-PROTOC_TO_INCLUDE_DIR(V1_SCHEDULER     mesos/v1/scheduler/scheduler)
-PROTOC_TO_INCLUDE_DIR(ISOLATOR         mesos/slave/isolator)
-PROTOC_TO_INCLUDE_DIR(OVERSUBSCRIPTION mesos/slave/oversubscription)
 PROTOC_TO_INCLUDE_DIR(STATE            mesos/state/state)
 PROTOC_TO_INCLUDE_DIR(URI              mesos/uri/uri)
+PROTOC_TO_INCLUDE_DIR(V1_EXECUTOR      mesos/v1/executor/executor)
+PROTOC_TO_INCLUDE_DIR(V1_MESOS         mesos/v1/mesos)
+PROTOC_TO_INCLUDE_DIR(V1_SCHEDULER     mesos/v1/scheduler/scheduler)
 
-PROTOC_TO_SRC_DIR(REGISTRY master/registry)
-
-PROTOC_TO_SRC_DIR(MESSAGES          messages/messages)
-PROTOC_TO_SRC_DIR(FLAGS             messages/flags)
-PROTOC_TO_SRC_DIR(LOG               messages/log)
-PROTOC_TO_SRC_DIR(INTERNAL_STATE    messages/state)
-
-PROTOC_TO_SRC_DIR(PROVISIONER_DOCKER slave/containerizer/mesos/provisioner/docker/message)
-PROTOC_TO_SRC_DIR(ISOLATOR_CNI_SPEC slave/containerizer/mesos/isolators/network/cni/spec)
+PROTOC_TO_SRC_DIR(REGISTRY                      master/registry)
+PROTOC_TO_SRC_DIR(INTERNAL_MESSAGES             messages/messages)
+PROTOC_TO_SRC_DIR(INTERNAL_FLAGS                messages/flags)
+PROTOC_TO_SRC_DIR(INTERNAL_LOG                  messages/log)
+PROTOC_TO_SRC_DIR(INTERNAL_STATE                messages/state)
+PROTOC_TO_SRC_DIR(PROVISIONER_DOCKER            slave/containerizer/mesos/provisioner/docker/message)
+PROTOC_TO_SRC_DIR(ISOLATOR_CNI_SPEC             slave/containerizer/mesos/isolators/network/cni/spec)
+PROTOC_TO_SRC_DIR(ISOLATOR_DOCKER_VOLUME_STATE  slave/containerizer/mesos/isolators/docker/volume/state)
 
 set(MESOS_PROTOBUF_SRC
-  ${MESOS_PROTO_CC}
-  ${V1_MESOS_PROTO_CC}
   ${ACLS_PROTO_CC}
+  ${ALLOCATOR_PROTO_CC}
   ${APPC_SPEC_PROTO_CC}
   ${AUTHENTICATION_PROTO_CC}
   ${AUTHORIZATION_PROTO_CC}
-  ${ISOLATOR_CNI_SPEC_PROTO_CC}
   ${CONTAINERIZER_PROTO_CC}
   ${DOCKER_SPEC_PROTO_CC}
   ${DOCKER_V1_PROTO_CC}
   ${DOCKER_V2_PROTO_CC}
   ${EXECUTOR_PROTO_CC}
-  ${V1_EXECUTOR_PROTO_CC}
   ${FETCHER_PROTO_CC}
+  ${INTERNAL_FLAGS_PROTO_CC}
+  ${INTERNAL_LOG_PROTO_CC}
+  ${INTERNAL_MESSAGES_PROTO_CC}
+  ${INTERNAL_STATE_PROTO_CC}
+  ${ISOLATOR_PROTO_CC}
+  ${ISOLATOR_CNI_SPEC_PROTO_CC}
+  ${ISOLATOR_DOCKER_VOLUME_STATE_CC}
   ${MAINTENANCE_PROTO_CC}
-  ${ALLOCATOR_PROTO_CC}
+  ${MESOS_PROTO_CC}
   ${MODULE_PROTO_CC}
   ${QUOTA_PROTO_CC}
-  ${SCHEDULER_PROTO_CC}
-  ${V1_SCHEDULER_PROTO_CC}
   ${OVERSUBSCRIPTION_PROTO_CC}
-  ${STATE_PROTO_CC}
-  ${MESSAGES_PROTO_CC}
-  ${FLAGS_PROTO_CC}
-  ${LOG_PROTO_CC}
-  ${INERNAL_STATE_PROTO_CC}
-  ${ISOLATOR_PROTO_CC}
-  ${REGISTRY_PROTO_CC}
   ${PROVISIONER_DOCKER_PROTO_CC}
+  ${REGISTRY_PROTO_CC}
+  ${SCHEDULER_PROTO_CC}
+  ${STATE_PROTO_CC}
   ${URI_PROTO_CC}
+  ${V1_EXECUTOR_PROTO_CC}
+  ${V1_MESOS_PROTO_CC}
+  ${V1_SCHEDULER_PROTO_CC}
   )
 
 # Configure Mesos files.
@@ -142,6 +142,7 @@ set(LINUX_SRC
   slave/containerizer/mesos/isolators/cgroups/net_cls.cpp
   slave/containerizer/mesos/isolators/cgroups/perf_event.cpp
   slave/containerizer/mesos/isolators/docker/runtime.cpp
+  slave/containerizer/mesos/isolators/docker/volume/driver.cpp
   slave/containerizer/mesos/isolators/docker/volume/isolator.cpp
   slave/containerizer/mesos/isolators/filesystem/linux.cpp
   slave/containerizer/mesos/isolators/filesystem/posix.cpp
@@ -212,7 +213,6 @@ set(MASTER_SRC
   master/quota.cpp
   master/quota_handler.cpp
   master/registry.hpp
-  master/registry.proto
   master/registrar.cpp
   master/repairer.cpp
   master/validation.cpp
@@ -279,8 +279,8 @@ if (NOT WIN32)
     slave/containerizer/mesos/mount.cpp
     slave/containerizer/mesos/isolators/filesystem/posix.cpp
     slave/containerizer/mesos/isolators/posix/disk.cpp
+    slave/containerizer/mesos/isolators/docker/volume/paths.cpp
     slave/containerizer/mesos/isolators/network/cni/paths.cpp
-    slave/containerizer/mesos/isolators/network/cni/spec.proto
     slave/containerizer/mesos/isolators/network/cni/spec.cpp
     slave/containerizer/mesos/provisioner/docker/local_puller.cpp
     slave/containerizer/mesos/provisioner/paths.cpp
@@ -292,7 +292,6 @@ if (NOT WIN32)
     slave/containerizer/mesos/provisioner/appc/store.cpp
     slave/containerizer/mesos/provisioner/backend.cpp
     slave/containerizer/mesos/provisioner/backends/copy.cpp
-    slave/containerizer/mesos/provisioner/docker/message.proto
     slave/containerizer/mesos/provisioner/docker/metadata_manager.cpp
     slave/containerizer/mesos/provisioner/docker/paths.cpp
     slave/containerizer/mesos/provisioner/docker/puller.cpp
