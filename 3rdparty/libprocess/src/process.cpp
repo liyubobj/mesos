@@ -775,7 +775,9 @@ void install(vector<Owned<FirewallRule>>&& rules)
 
 } // namespace firewall {
 
-void initialize(const Option<string>& delegate)
+bool initialize(
+    const Option<string>& delegate,
+    const Option<string>& authenticationRealm)
 {
   // TODO(benh): Return an error if attempting to initialize again
   // with a different delegate than originally specified.
@@ -797,7 +799,8 @@ void initialize(const Option<string>& delegate)
   // of initialization.  This is done because some methods called by
   // initialization will themselves call `process::initialize`.
   if (initialize_started.load() && initialize_complete.load()) {
-    return;
+    // Return `false` because `process::initialize()` was already called.
+    return false;
 
   } else {
     // NOTE: `compare_exchange_strong` needs an lvalue.
@@ -812,7 +815,9 @@ void initialize(const Option<string>& delegate)
     // initialization to complete.
     if (!initialize_started.compare_exchange_strong(expected, true)) {
       while (!initialize_complete.load());
-      return;
+
+      // Return `false` because `process::initialize()` was already called.
+      return false;
     }
   }
 
@@ -961,23 +966,26 @@ void initialize(const Option<string>& delegate)
   // Create global garbage collector process.
   gc = spawn(new GarbageCollector());
 
+  // Initialize the metrics process. We need to initialize this before the other
+  // global processes because `metrics::initialize` is also called when metrics
+  // are added in other initialization code, and we want this to be the first
+  // initialization in order to populate the authentication realm correctly.
+  metrics::initialize(authenticationRealm);
+
   // Create global help process.
   help = spawn(new Help(delegate), true);
 
   // Create the global logging process.
-  spawn(new Logging(), true);
+  spawn(new Logging(authenticationRealm), true);
 
   // Create the global profiler process.
-  spawn(new Profiler(), true);
+  spawn(new Profiler(authenticationRealm), true);
 
   // Create the global system statistics process.
   spawn(new System(), true);
 
   // Create the global HTTP authentication router.
   authenticator_manager = new AuthenticatorManager();
-
-  // Initialize the metrics process.
-  metrics::initialize();
 
   // Initialize the mime types.
   mime::initialize();
@@ -990,6 +998,10 @@ void initialize(const Option<string>& delegate)
 
   VLOG(1) << "libprocess is initialized on " << address() << " with "
           << num_worker_threads << " worker threads";
+
+  // Return `true` to indicate that this was the first invocation of
+  // `process::initialize()`.
+  return true;
 }
 
 

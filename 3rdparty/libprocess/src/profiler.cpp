@@ -14,7 +14,7 @@
 
 #include <glog/logging.h>
 
-#ifdef HAS_GPERFTOOLS
+#ifdef ENABLE_GPERFTOOLS
 #include <gperftools/profiler.h>
 #endif
 
@@ -56,9 +56,11 @@ const std::string Profiler::STOP_HELP()
 }
 
 
-Future<http::Response> Profiler::start(const http::Request& request)
+Future<http::Response> Profiler::start(
+    const http::Request& request,
+    const Option<std::string>& /* principal */)
 {
-#ifdef HAS_GPERFTOOLS
+#ifdef ENABLE_GPERFTOOLS
   const Option<std::string>
     enableProfiler = os::getenv("LIBPROCESS_ENABLE_PROFILER");
   if (enableProfiler.isNone() || enableProfiler.get() != "1") {
@@ -82,7 +84,7 @@ Future<http::Response> Profiler::start(const http::Request& request)
   // here:
   // https://groups.google.com/d/topic/google-perftools/Df10Uy4Djrg/discussion
   // NOTE: We have not tested this with libunwind > 1.0.1.
-  if (!ProfilerStart(PROFILE_FILE.c_str())) {
+  if (!ProfilerStart(PROFILE_FILE)) {
     Try<std::string> error =
       strings::format("Failed to start profiler: %s", os::strerror(errno));
     LOG(ERROR) << error.get();
@@ -99,9 +101,11 @@ Future<http::Response> Profiler::start(const http::Request& request)
 }
 
 
-Future<http::Response> Profiler::stop(const http::Request& request)
+Future<http::Response> Profiler::stop(
+    const http::Request& request,
+    const Option<std::string>& /* principal */)
 {
-#ifdef HAS_GPERFTOOLS
+#ifdef ENABLE_GPERFTOOLS
   if (!started) {
     return http::BadRequest("Profiler not running.\n");
   }
