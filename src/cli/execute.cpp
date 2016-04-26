@@ -72,6 +72,7 @@ using mesos::v1::TaskID;
 using mesos::v1::TaskInfo;
 using mesos::v1::TaskState;
 using mesos::v1::TaskStatus;
+using mesos::v1::Credential;
 
 using mesos::v1::scheduler::Call;
 using mesos::v1::scheduler::Event;
@@ -179,6 +180,14 @@ public:
         "networks",
         "Comma-separated list of networks that the container will join,\n"
         "e.g., `net1,net2`.");
+
+    add(&principal,
+        "principal",
+        "The principal to use for framework authentication.");
+
+    add(&secret,
+        "secret",
+        "The secret to use for framework authentication.");
   }
 
   Option<string> master;
@@ -199,6 +208,8 @@ public:
   string role;
   Option<Duration> kill_after;
   Option<string> networks;
+  Option<string> principal;
+  Option<string> secret;
 };
 
 
@@ -218,7 +229,8 @@ public:
       const Option<string>& _dockerImage,
       const string& _containerizer,
       const Option<Duration>& _killAfter,
-      const Option<string>& _networks)
+      const Option<string>& _networks,
+      const Option<Credential> _credential)
     : state(DISCONNECTED),
       frameworkInfo(_frameworkInfo),
       master(_master),
@@ -233,6 +245,7 @@ public:
       containerizer(_containerizer),
       killAfter(_killAfter),
       networks(_networks),
+      credential(_credential),
       launched(false) {}
 
   virtual ~CommandScheduler() {}
@@ -248,7 +261,7 @@ protected:
       process::defer(self(), &Self::connected),
       process::defer(self(), &Self::disconnected),
       process::defer(self(), &Self::received, lambda::_1),
-      None()));
+      credential));
   }
 
   void connected()
@@ -457,8 +470,9 @@ protected:
           break;
         }
 
-        default: {
-          UNREACHABLE();
+        case Event::UNKNOWN: {
+          LOG(WARNING) << "Received an UNKNOWN event and ignored";
+          break;
         }
       }
     }
@@ -617,6 +631,7 @@ private:
   const string containerizer;
   const Option<Duration> killAfter;
   const Option<string> networks;
+  const Option<Credential> credential;
   bool launched;
   Owned<Mesos> mesos;
 };
@@ -765,6 +780,19 @@ int main(int argc, char** argv)
         FrameworkInfo::Capability::REVOCABLE_RESOURCES);
   }
 
+  Option<Credential> credential = None();
+
+  if (flags.principal.isSome()) {
+    frameworkInfo.set_principal(flags.principal.get());
+
+    if (flags.secret.isSome()) {
+      Credential credential_;
+      credential_.set_principal(flags.principal.get());
+      credential_.set_secret(flags.secret.get());
+      credential = credential_;
+    }
+  }
+
   Owned<CommandScheduler> scheduler(
       new CommandScheduler(
         frameworkInfo,
@@ -779,7 +807,8 @@ int main(int argc, char** argv)
         dockerImage,
         flags.containerizer,
         flags.kill_after,
-        flags.networks));
+        flags.networks,
+        credential));
 
   process::spawn(scheduler.get());
   process::wait(scheduler.get());

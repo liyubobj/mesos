@@ -79,6 +79,10 @@
 #endif
 
 #ifdef __linux__
+#include "slave/containerizer/mesos/isolators/docker/volume/isolator.hpp"
+#endif
+
+#ifdef __linux__
 #include "slave/containerizer/mesos/isolators/filesystem/linux.hpp"
 #endif
 #include "slave/containerizer/mesos/isolators/filesystem/posix.hpp"
@@ -246,6 +250,7 @@ Try<MesosContainerizer*> MesosContainerizer::create(
     {"cgroups/devices/gpus/nvidia", &CgroupsNvidiaGpuIsolatorProcess::create},
 #endif
     {"docker/runtime", &DockerRuntimeIsolatorProcess::create},
+    {"docker/volume", &DockerVolumeIsolatorProcess::create},
     {"namespaces/pid", &NamespacesPidIsolatorProcess::create},
     {"network/cni", &NetworkCniIsolatorProcess::create},
 #endif
@@ -892,7 +897,22 @@ Future<list<Option<ContainerLaunchInfo>>> MesosContainerizerProcess::prepare(
     const Option<string>& user,
     const Option<ProvisionInfo>& provisionInfo)
 {
-  CHECK(containers_.contains(containerId));
+  // This is because if a 'destroy' happens during the provisoiner is
+  // provisioning in '_launch', even if the '____destroy' will wait
+  // for the 'provision' in '_launch' to finish, there is still a
+  // chance that '____destroy' and its dependencies finish before
+  // 'prepare' starts since onAny is not guaranteed to be executed
+  // in order.
+  if (!containers_.contains(containerId)) {
+    return Failure("Container has been destroyed");
+  }
+
+  // Make sure containerizer is not in DESTROYING state, to avoid
+  // a possible race that containerizer is destroying the container
+  // while it is preparing isolators for the container.
+  if (containers_[containerId]->state == DESTROYING) {
+    return Failure("Container is currently being destroyed");
+  }
 
   containers_[containerId]->state = PREPARING;
 
@@ -1471,9 +1491,10 @@ void MesosContainerizerProcess::destroy(
     await(container->provisionInfos)
       .onAny(defer(
           self(),
-          &Self::___destroy,
+          &Self::____destroy,
           containerId,
           None(),
+          list<Future<Nothing>>(),
           "Container destroyed while provisioning images"));
 
     return;

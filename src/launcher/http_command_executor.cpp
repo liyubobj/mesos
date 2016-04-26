@@ -194,8 +194,9 @@ public:
           cerr << "Error: " << event.error().message() << endl;
         }
 
-        default: {
-          UNREACHABLE();
+        case Event::UNKNOWN: {
+          LOG(WARNING) << "Received an UNKNOWN event and ignored";
+          break;
         }
       }
     }
@@ -740,7 +741,7 @@ private:
     terminate(self());
   }
 
-  void escalated(Duration timeout)
+  void escalated(const Duration& timeout)
   {
     cout << "Process " << pid << " did not terminate after " << timeout
          << ", sending SIGKILL to process tree at " << pid << endl;

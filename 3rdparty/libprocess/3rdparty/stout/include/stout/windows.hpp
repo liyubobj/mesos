@@ -26,6 +26,7 @@
 // re-definitions. This is a known pattern in the windows community.
 #include <WS2tcpip.h>
 #include <Winsock2.h>
+#include <mswsock.h>
 #include <Windows.h>
 
 #include <memory>
@@ -402,11 +403,20 @@ decltype(_access(fileName, accessMode))
 // `os::system` returns -1 if the processor cannot be started
 // therefore any return value indicates the process has been started
 #ifndef WIFEXITED
-  #define WIFEXITED(x) ((x) != -1)
+#define WIFEXITED(x) ((x) != -1)
 #endif // WIFWXITED
 
+// Returns the exit status of the child.
 #ifndef WEXITSTATUS
-  #define WEXITSTATUS(x) (x)
+#define WEXITSTATUS(x) (x & 0xFF)
 #endif // WEXITSTATUS
+
+#define SIGPIPE 100
+
+// Specifies that `::waitpid` should return immediately rather than blocking
+// and waiting for child to notify of state change.
+#ifndef WNOHANG
+#define WNOHANG 1
+#endif // WNOHANG
 
 #endif // __STOUT_WINDOWS_HPP__

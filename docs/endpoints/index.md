@@ -113,6 +113,7 @@ For example, http://agent.com:5051/files/browse
 
 ### slave(id) ###
 * [/api/v1/executor](slave/api/v1/executor.md)
+* [/containers](slave/containers.md)
 * [/flags](slave/flags.md)
 * [/health](slave/health.md)
 * [/state](slave/state.md)
