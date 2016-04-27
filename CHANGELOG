@@ -68,11 +68,21 @@ Additional API Changes:
   * [MESOS-4612] - Upgraded vendored ZooKeeper 3.4.5 to 3.4.8.
 
 Binary API Changes:
-  * [MESOS-5055] - Replace Master/Slave Terminology Phase I - Update strings in
-    the log message and standard output
-  * [MESOS-3782] - Replace Master/Slave Terminology Phase I - Duplicate/Rename binaries.
-  * [MESOS-5057] - Replace Master/Slave Terminology Phase I - Update strings in
-    error messages and other strings
+  * [MESOS-5055] - Slave/Agent Rename Phase I - Update strings in the log message
+    and standard output.
+  * [MESOS-3782] - Slave/Agent Rename Phase I - Duplicate/Rename binaries.
+  * [MESOS-5057] - Slave/Agent Rename Phase I - Update strings in error messages and
+    other strings.
+  * [MESOS-5230] - Slave/Agent Rename Phase I: Rename '/include/mesos/slave' folder
+
+
+Release Notes - Mesos - Version 0.28.2
+--------------------------------------
+* This is a bug fix release.
+
+All Issues:
+** Bug
+  * [MESOS-4705] - Linux 'perf' parsing logic may fail when OS distribution has perf backports.
 
 
 Release Notes - Mesos - Version 0.28.1
@@ -342,6 +352,17 @@ All Issues:
   * [MESOS-4834] - Add 'file' fetcher plugin.
 
 
+Release Notes - Mesos - Version 0.27.3
+--------------------------------------
+* This is a bug fix release.
+
+All Issues:
+** Bug
+  * [MESOS-4705] - Linux 'perf' parsing logic may fail when OS distribution has perf backports.
+  * [MESOS-4869] - /usr/libexec/mesos/mesos-health-check using/leaking a lot of memory.
+  * [MESOS-5021] - Memory leak in subprocess when 'environment' argument is provided.
+
+
 Release Notes - Mesos - Version 0.27.2
 --------------------------------------
 * This is a bug fix release.
@@ -582,6 +603,15 @@ All Issues:
 
 **  Wish
   * [MESOS-3962] - Add labels to the message Port
+
+
+Release Notes - Mesos - Version 0.26.2
+--------------------------------------
+* This is a bug fix release.
+
+All Issues:
+** Bug
+  * [MESOS-4705] - Linux 'perf' parsing logic may fail when OS distribution has perf backports.
 
 
 Release Notes - Mesos - Version 0.26.1

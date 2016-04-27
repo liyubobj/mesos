@@ -19,6 +19,9 @@
 #include <sstream>
 #include <string>
 #include <tuple>
+#include <vector>
+
+#include <mesos/authorizer/authorizer.hpp>
 
 #include <mesos/executor/executor.hpp>
 
@@ -29,8 +32,9 @@
 
 #include <process/collect.hpp>
 #include <process/help.hpp>
-#include <process/owned.hpp>
+#include <process/http.hpp>
 #include <process/limiter.hpp>
+#include <process/owned.hpp>
 
 #include <process/metrics/metrics.hpp>
 
@@ -80,6 +84,7 @@ using process::metrics::internal::MetricsProcess;
 using std::list;
 using std::string;
 using std::tuple;
+using std::vector;
 
 
 namespace mesos {
@@ -351,14 +356,32 @@ string Slave::Http::FLAGS_HELP()
 
 Future<Response> Slave::Http::flags(
     const Request& request,
-    const Option<string>& /* principal */) const
+    const Option<string>& principal) const
+{
+  const Flags slaveFlags = slave->flags;
+
+  return authorizeEndpoint(request, principal)
+    .then(defer(
+        slave->self(),
+        [request, slaveFlags](bool authorized) -> Future<Response> {
+          if (!authorized) {
+            return Forbidden();
+          }
+
+          return _flags(request, slaveFlags);
+        }));
+}
+
+Future<Response> Slave::Http::_flags(
+  const Request& request,
+  const Flags& slaveFlags)
 {
   JSON::Object object;
 
   {
     JSON::Object flags;
-    foreachpair (const string& name, const flags::Flag& flag, slave->flags) {
-      Option<string> value = flag.stringify(slave->flags);
+    foreachpair (const string& name, const flags::Flag& flag, slaveFlags) {
+      Option<string> value = flag.stringify(slaveFlags);
       if (value.isSome()) {
         flags.values[name] = value.get();
       }
@@ -599,37 +622,56 @@ string Slave::Http::STATISTICS_HELP()
 
 Future<Response> Slave::Http::statistics(
     const Request& request,
-    const Option<string>& /* principal */) const
+    const Option<string>& principal) const
 {
-  return statisticsLimiter->acquire()
-    .then(defer(slave->self(), &Slave::usage))
-    .then([=](const Future<ResourceUsage>& usage) -> Future<Response> {
-      JSON::Array result;
+  const PID<Slave> pid = slave->self();
+  Shared<RateLimiter> limiter = statisticsLimiter;
 
-      foreach (const ResourceUsage::Executor& executor,
-               usage.get().executors()) {
-        if (executor.has_statistics()) {
-          const ExecutorInfo info = executor.executor_info();
+  return authorizeEndpoint(request, principal)
+    .then(defer(
+        pid,
+        [pid, limiter, request](bool authorized) -> Future<Response> {
+          if (!authorized) {
+            return Forbidden();
+          }
 
-          JSON::Object entry;
-          entry.values["framework_id"] = info.framework_id().value();
-          entry.values["executor_id"] = info.executor_id().value();
-          entry.values["executor_name"] = info.name();
-          entry.values["source"] = info.source();
-          entry.values["statistics"] = JSON::protobuf(executor.statistics());
-
-          result.values.push_back(entry);
-        }
-      }
-
-      return process::http::OK(result, request.url.query.get("jsonp"));
-    })
+          return limiter->acquire()
+            .then(defer(pid, &Slave::usage))
+            .then(defer(pid, [request](const ResourceUsage& usage) {
+              return _statistics(usage, request);
+            }));
+        }))
     .repair([](const Future<Response>& future) {
-      LOG(WARNING) << "Could not collect resource usage: "
+      LOG(WARNING) << "Could not collect statistics: "
                    << (future.isFailed() ? future.failure() : "discarded");
 
-      return process::http::InternalServerError();
+      return InternalServerError();
     });
+}
+
+
+Response Slave::Http::_statistics(
+    const ResourceUsage& usage,
+    const Request& request)
+{
+  JSON::Array result;
+
+  foreach (const ResourceUsage::Executor& executor, usage.executors()) {
+    if (executor.has_statistics()) {
+      const ExecutorInfo info = executor.executor_info();
+
+      JSON::Object entry;
+      entry.values["framework_id"] = info.framework_id().value();
+      entry.values["executor_id"] = info.executor_id().value();
+      entry.values["executor_name"] = info.name();
+      entry.values["source"] = info.source();
+      entry.values["statistics"] = JSON::protobuf(executor.statistics());
+
+      result.values.push_back(entry);
+    }
+  }
+
+  return OK(result, request.url.query.get("jsonp"));
 }
 
 
@@ -760,6 +802,50 @@ Future<Response> Slave::Http::containers(const Request& request) const
 
         return process::http::InternalServerError();
       });
+}
+
+
+Future<bool> Slave::Http::authorizeEndpoint(
+    const Request& httpRequest,
+    const Option<string>& principal) const
+{
+  if (slave->authorizer.isNone()) {
+    return true;
+  }
+
+  // Paths are of the form "/slave(n)/endpoint". We're only interested
+  // in the part after "/slave(n)" and tokenize the path accordingly.
+  const vector<string> pathComponents =
+    strings::tokenize(httpRequest.url.path, "/", 2);
+
+  if (pathComponents.size() != 2u ||
+      pathComponents[0] != slave->self().id) {
+    return Failure("Unexpected path '" + httpRequest.url.path + "'");
+  }
+  const string endpoint = "/" + pathComponents[1];
+
+  authorization::Request authorizationRequest;
+
+  // TODO(nfnt): Add an additional case when POST requests need to be
+  // authorized separately from GET requests.
+  if (httpRequest.method == "GET") {
+    authorizationRequest.set_action(authorization::GET_ENDPOINT_WITH_PATH);
+  } else {
+    return Failure("Unexpected request method '" + httpRequest.method + "'");
+  }
+
+  if (principal.isSome()) {
+    authorizationRequest.mutable_subject()->set_value(principal.get());
+  }
+
+  authorizationRequest.mutable_object()->set_value(endpoint);
+
+  LOG(INFO) << "Authorizing principal '"
+            << (principal.isSome() ? principal.get() : "ANY")
+            << "' to " <<  httpRequest.method
+            << " the '" << endpoint << "' endpoint";
+
+  return slave->authorizer.get()->authorized(authorizationRequest);
 }
 
 } // namespace slave {
