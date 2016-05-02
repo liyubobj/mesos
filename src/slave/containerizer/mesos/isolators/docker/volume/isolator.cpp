@@ -80,6 +80,21 @@ Try<Isolator*> DockerVolumeIsolatorProcess::create(const Flags& flags)
         "Unable to create docker volume driver client: " + client.error());
   }
 
+  Try<Isolator*> isolator =
+    DockerVolumeIsolatorProcess::_create(flags, client.get());
+
+  if (isolator.isError()) {
+    return Error(isolator.error());
+  }
+
+  return isolator.get();
+}
+
+
+Try<Isolator*> DockerVolumeIsolatorProcess::_create(
+    const Flags& flags,
+    const Owned<DriverClient>& client)
+{
   // Create the docker volume information root directory if it does
   // not exist, this directory is used to checkpoint the docker
   // volumes used by containers.
@@ -105,7 +120,7 @@ Try<Isolator*> DockerVolumeIsolatorProcess::create(const Flags& flags)
       new DockerVolumeIsolatorProcess(
           flags,
           rootDir.get(),
-          client.get()));
+          client));
 
   return new MesosIsolator(process);
 }
@@ -198,7 +213,7 @@ Try<Nothing> DockerVolumeIsolatorProcess::_recover(
 
   if (!os::exists(volumesPath)) {
     VLOG(1) << "The docker volumes checkpointed at '" << volumesPath
-            << "' for container '" << containerId << "' does not exist";
+            << "' for container " << containerId << " does not exist";
 
     return Nothing();
   }
@@ -286,8 +301,8 @@ Future<Option<ContainerLaunchInfo>> DockerVolumeIsolatorProcess::prepare(
       continue;
     }
 
-    const string driver = _volume.source().docker_volume().driver();
-    const string name = _volume.source().docker_volume().name();
+    const string& driver = _volume.source().docker_volume().driver();
+    const string& name = _volume.source().docker_volume().name();
 
     DockerVolume volume;
     volume.set_driver(driver);
@@ -328,6 +343,13 @@ Future<Option<ContainerLaunchInfo>> DockerVolumeIsolatorProcess::prepare(
     volumes.insert(volume);
     mounts.push_back(mount);
     targets.push_back(target);
+  }
+
+  // It is possible that there is no external volume specified for
+  // this container. We avoid checkpointing empty state and creating
+  // an empty `Info`.
+  if (volumes.empty()) {
+    return None();
   }
 
   // Create the container directory.
@@ -412,12 +434,11 @@ Future<Option<ContainerLaunchInfo>> DockerVolumeIsolatorProcess::_prepare(
   CHECK_EQ(sources.size(), targets.size());
 
   for (size_t i = 0; i < sources.size(); i++) {
-    const string source = sources[i];
-    const string target = targets[i];
+    const string& source = sources[i];
+    const string& target = targets[i];
 
     VLOG(1) << "Mounting docker volume mount point '" << source
-            << "' to '" << target  << "' for container '"
-            << containerId << "'";
+            << "' to '" << target  << "' for container " << containerId;
 
     // Create the mount point if it does not exist.
     Try<Nothing> mkdir = os::mkdir(target);
@@ -470,8 +491,7 @@ Future<Nothing> DockerVolumeIsolatorProcess::cleanup(
     const ContainerID& containerId)
 {
   if (!infos.contains(containerId)) {
-    VLOG(1) << "Ignoring cleanup request for unknown container '"
-            << containerId << "'";
+    VLOG(1) << "Ignoring cleanup request for unknown container " << containerId;
 
     return Nothing();
   }
