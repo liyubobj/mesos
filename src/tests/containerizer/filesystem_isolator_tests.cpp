@@ -33,23 +33,16 @@
 #include <stout/path.hpp>
 #include <stout/uuid.hpp>
 
-#ifdef __linux__
 #include "linux/fs.hpp"
-#endif
 
 #include "slave/paths.hpp"
 
-#ifdef __linux__
+#include "slave/containerizer/mesos/containerizer.hpp"
 #include "slave/containerizer/mesos/linux_launcher.hpp"
 
 #include "slave/containerizer/mesos/isolators/filesystem/linux.hpp"
-#endif
-
-#include "slave/containerizer/mesos/containerizer.hpp"
-
 #include "slave/containerizer/mesos/provisioner/backend.hpp"
 #include "slave/containerizer/mesos/provisioner/paths.hpp"
-
 #include "slave/containerizer/mesos/provisioner/backends/copy.hpp"
 
 #include "tests/flags.hpp"
@@ -58,7 +51,10 @@
 #include "tests/containerizer/rootfs.hpp"
 #include "tests/containerizer/store.hpp"
 
-using namespace process;
+using process::Future;
+using process::Owned;
+using process::PID;
+using process::Shared;
 
 using std::string;
 using std::vector;
@@ -68,10 +64,8 @@ using mesos::internal::master::Master;
 using mesos::internal::slave::Backend;
 using mesos::internal::slave::Fetcher;
 using mesos::internal::slave::Launcher;
-#ifdef __linux__
 using mesos::internal::slave::LinuxFilesystemIsolatorProcess;
 using mesos::internal::slave::LinuxLauncher;
-#endif
 using mesos::internal::slave::MesosContainerizer;
 using mesos::internal::slave::MesosContainerizerProcess;
 using mesos::internal::slave::Provisioner;
@@ -88,7 +82,6 @@ namespace mesos {
 namespace internal {
 namespace tests {
 
-#ifdef __linux__
 class LinuxFilesystemIsolatorTest : public MesosTest
 {
 protected:
@@ -298,9 +291,6 @@ TEST_F(LinuxFilesystemIsolatorTest, ROOT_ChangeRootFilesystemCommandExecutor)
   slave::Flags flags = CreateSlaveFlags();
   flags.image_provisioner_backend = "copy";
 
-  ContainerID containerId;
-  containerId.set_value(UUID::random().toString());
-
   Try<Owned<MesosContainerizer>> containerizer = createContainerizer(
       flags,
       {{"test_image", path::join(os::getcwd(), "test_image")}});
@@ -314,8 +304,12 @@ TEST_F(LinuxFilesystemIsolatorTest, ROOT_ChangeRootFilesystemCommandExecutor)
   ASSERT_SOME(slave);
 
   MockScheduler sched;
+
   MesosSchedulerDriver driver(
-    &sched, DEFAULT_FRAMEWORK_INFO, master.get()->pid, DEFAULT_CREDENTIAL);
+      &sched,
+      DEFAULT_FRAMEWORK_INFO,
+      master.get()->pid,
+      DEFAULT_CREDENTIAL);
 
   Future<FrameworkID> frameworkId;
   EXPECT_CALL(sched, registered(&driver, _, _))
@@ -331,11 +325,9 @@ TEST_F(LinuxFilesystemIsolatorTest, ROOT_ChangeRootFilesystemCommandExecutor)
   AWAIT_READY(frameworkId);
 
   AWAIT_READY(offers);
-  ASSERT_NE(0u, offers.get().size());
+  ASSERT_NE(0u, offers->size());
 
   const Offer& offer = offers.get()[0];
-
-  SlaveID slaveId = offer.slave_id();
 
   TaskInfo task = createTask(
       offer.slave_id(),
@@ -349,7 +341,7 @@ TEST_F(LinuxFilesystemIsolatorTest, ROOT_ChangeRootFilesystemCommandExecutor)
   containerInfo.set_type(ContainerInfo::MESOS);
   task.mutable_container()->CopyFrom(containerInfo);
 
-  driver.launchTasks(offers.get()[0].id(), {task});
+  driver.launchTasks(offer.id(), {task});
 
   Future<TaskStatus> statusRunning;
   Future<TaskStatus> statusFinished;
@@ -360,9 +352,9 @@ TEST_F(LinuxFilesystemIsolatorTest, ROOT_ChangeRootFilesystemCommandExecutor)
 
   // Need to wait for Rootfs copying.
   AWAIT_READY_FOR(statusRunning, Seconds(60));
-  EXPECT_EQ(TASK_RUNNING, statusRunning.get().state());
+  EXPECT_EQ(TASK_RUNNING, statusRunning->state());
   AWAIT_READY(statusFinished);
-  EXPECT_EQ(TASK_FINISHED, statusFinished.get().state());
+  EXPECT_EQ(TASK_FINISHED, statusFinished->state());
 
   driver.stop();
   driver.join();
@@ -381,9 +373,6 @@ TEST_F(LinuxFilesystemIsolatorTest,
   slave::Flags flags = CreateSlaveFlags();
   flags.image_provisioner_backend = "copy";
 
-  ContainerID containerId;
-  containerId.set_value(UUID::random().toString());
-
   Try<Owned<MesosContainerizer>> containerizer = createContainerizer(
       flags,
       {{"test_image", path::join(os::getcwd(), "test_image")}});
@@ -397,8 +386,12 @@ TEST_F(LinuxFilesystemIsolatorTest,
   ASSERT_SOME(slave);
 
   MockScheduler sched;
+
   MesosSchedulerDriver driver(
-    &sched, DEFAULT_FRAMEWORK_INFO, master.get()->pid, DEFAULT_CREDENTIAL);
+      &sched,
+      DEFAULT_FRAMEWORK_INFO,
+      master.get()->pid,
+      DEFAULT_CREDENTIAL);
 
   Future<FrameworkID> frameworkId;
   EXPECT_CALL(sched, registered(&driver, _, _))
@@ -414,11 +407,9 @@ TEST_F(LinuxFilesystemIsolatorTest,
   AWAIT_READY(frameworkId);
 
   AWAIT_READY(offers);
-  ASSERT_NE(0u, offers.get().size());
+  ASSERT_NE(0u, offers->size());
 
   const Offer& offer = offers.get()[0];
-
-  SlaveID slaveId = offer.slave_id();
 
   // Preparing two volumes:
   // - host_path: dir1, container_path: /tmp
@@ -452,7 +443,7 @@ TEST_F(LinuxFilesystemIsolatorTest,
       createVolumeFromHostPath("relative_dir", dir2, Volume::RW));
   task.mutable_container()->CopyFrom(containerInfo);
 
-  driver.launchTasks(offers.get()[0].id(), {task});
+  driver.launchTasks(offer.id(), {task});
 
   Future<TaskStatus> statusRunning;
   Future<TaskStatus> statusFinished;
@@ -462,9 +453,9 @@ TEST_F(LinuxFilesystemIsolatorTest,
     .WillOnce(FutureArg<1>(&statusFinished));
 
   AWAIT_READY(statusRunning);
-  EXPECT_EQ(TASK_RUNNING, statusRunning.get().state());
+  EXPECT_EQ(TASK_RUNNING, statusRunning->state());
   AWAIT_READY(statusFinished);
-  EXPECT_EQ(TASK_FINISHED, statusFinished.get().state());
+  EXPECT_EQ(TASK_FINISHED, statusFinished->state());
 
   driver.stop();
   driver.join();
@@ -487,9 +478,6 @@ TEST_F(LinuxFilesystemIsolatorTest,
   // within the slave work_dir and thus not retrievable.
   flags.work_dir = os::getcwd();
 
-  ContainerID containerId;
-  containerId.set_value(UUID::random().toString());
-
   Try<Owned<MesosContainerizer>> containerizer = createContainerizer(
       flags,
       {{"test_image", path::join(os::getcwd(), "test_image")}});
@@ -507,7 +495,10 @@ TEST_F(LinuxFilesystemIsolatorTest,
   frameworkInfo.set_role("role1");
 
   MesosSchedulerDriver driver(
-    &sched, frameworkInfo, master.get()->pid, DEFAULT_CREDENTIAL);
+      &sched,
+      frameworkInfo,
+      master.get()->pid,
+      DEFAULT_CREDENTIAL);
 
   Future<FrameworkID> frameworkId;
   EXPECT_CALL(sched, registered(&driver, _, _))
@@ -523,7 +514,7 @@ TEST_F(LinuxFilesystemIsolatorTest,
   AWAIT_READY(frameworkId);
 
   AWAIT_READY(offers);
-  ASSERT_NE(0u, offers.get().size());
+  ASSERT_NE(0u, offers->size());
 
   Offer offer = offers.get()[0];
 
@@ -571,9 +562,9 @@ TEST_F(LinuxFilesystemIsolatorTest,
     .WillOnce(FutureArg<1>(&statusFinished));
 
   AWAIT_READY(statusRunning);
-  EXPECT_EQ(TASK_RUNNING, statusRunning.get().state());
+  EXPECT_EQ(TASK_RUNNING, statusRunning->state());
   AWAIT_READY(statusFinished);
-  EXPECT_EQ(TASK_FINISHED, statusFinished.get().state());
+  EXPECT_EQ(TASK_FINISHED, statusFinished->state());
 
   // NOTE: The command executor's id is the same as the task id.
   ExecutorID executorId;
@@ -616,9 +607,6 @@ TEST_F(LinuxFilesystemIsolatorTest, ROOT_RecoverOrphanedPersistentVolume)
   flags.resources = "cpus:2;mem:1024;disk(role1):1024";
   flags.isolation = "posix/disk,filesystem/linux";
 
-  ContainerID containerId;
-  containerId.set_value(UUID::random().toString());
-
   Try<Owned<MesosContainerizer>> containerizer = createContainerizer(
       flags,
       {{"test_image", path::join(os::getcwd(), "test_image")}});
@@ -637,7 +625,10 @@ TEST_F(LinuxFilesystemIsolatorTest, ROOT_RecoverOrphanedPersistentVolume)
   frameworkInfo.set_checkpoint(true);
 
   MesosSchedulerDriver driver(
-    &sched, frameworkInfo, master.get()->pid, DEFAULT_CREDENTIAL);
+      &sched,
+      frameworkInfo,
+      master.get()->pid,
+      DEFAULT_CREDENTIAL);
 
   Future<FrameworkID> frameworkId;
   EXPECT_CALL(sched, registered(&driver, _, _))
@@ -653,7 +644,7 @@ TEST_F(LinuxFilesystemIsolatorTest, ROOT_RecoverOrphanedPersistentVolume)
   AWAIT_READY(frameworkId);
 
   AWAIT_READY(offers);
-  EXPECT_FALSE(offers.get().empty());
+  EXPECT_FALSE(offers->empty());
 
   Offer offer = offers.get()[0];
 
@@ -1491,8 +1482,12 @@ TEST_F(LinuxFilesystemIsolatorTest, ROOT_VolumeUsageExceedsSandboxQuota)
   ASSERT_SOME(slave);
 
   MockScheduler sched;
+
   MesosSchedulerDriver driver(
-      &sched, frameworkInfo, master.get()->pid, DEFAULT_CREDENTIAL);
+      &sched,
+      frameworkInfo,
+      master.get()->pid,
+      DEFAULT_CREDENTIAL);
 
   Future<FrameworkID> frameworkId;
   EXPECT_CALL(sched, registered(&driver, _, _))
@@ -1508,7 +1503,7 @@ TEST_F(LinuxFilesystemIsolatorTest, ROOT_VolumeUsageExceedsSandboxQuota)
   AWAIT_READY(frameworkId);
 
   AWAIT_READY(offers);
-  ASSERT_NE(0u, offers.get().size());
+  ASSERT_NE(0u, offers->size());
 
   // We request a sandbox (1MB) that is smaller than the persistent
   // volume (4MB) and attempt to create a file in that volume that is
@@ -1541,18 +1536,16 @@ TEST_F(LinuxFilesystemIsolatorTest, ROOT_VolumeUsageExceedsSandboxQuota)
       LAUNCH({task})});
 
   AWAIT_READY(statusRunning);
-  EXPECT_EQ(task.task_id(), statusRunning.get().task_id());
-  EXPECT_EQ(TASK_RUNNING, statusRunning.get().state());
+  EXPECT_EQ(task.task_id(), statusRunning->task_id());
+  EXPECT_EQ(TASK_RUNNING, statusRunning->state());
 
   AWAIT_READY(statusFinished);
-  EXPECT_EQ(task.task_id(), statusFinished.get().task_id());
-  EXPECT_EQ(TASK_FINISHED, statusFinished.get().state());
+  EXPECT_EQ(task.task_id(), statusFinished->task_id());
+  EXPECT_EQ(TASK_FINISHED, statusFinished->state());
 
   driver.stop();
   driver.join();
 }
-
-#endif // __linux__
 
 } // namespace tests {
 } // namespace internal {
