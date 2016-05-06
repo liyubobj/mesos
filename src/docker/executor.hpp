@@ -64,6 +64,12 @@ struct Flags : public mesos::internal::logging::Flags
         "Directory path of Mesos binaries. Mesos would find health-check,\n"
         "fetcher, containerizer and executor binary files under this\n"
         "directory.");
+
+    // Yubo: Pass flag to notify executor the GPU assigned.
+    add(&gpu_allocated,
+        "gpu_allocated",
+        "GPU minor number allocated for the docker container.\n"
+        "Comma seperated for multiple GPUs, such as 0,1.");
   }
 
   Option<std::string> container;
@@ -76,6 +82,8 @@ struct Flags : public mesos::internal::logging::Flags
   Option<Duration> stop_timeout;
 
   Option<std::string> launcher_dir;
+  // Yubo: Add GPUs allocated to the container
+  Option<std::string> gpu_allocated;
 };
 
 } // namespace docker {

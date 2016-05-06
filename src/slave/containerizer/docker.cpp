@@ -76,6 +76,10 @@ using state::FrameworkState;
 using state::ExecutorState;
 using state::RunState;
 
+#ifdef ENABLE_NVIDIA_GPU_SUPPORT
+// Yubo: Nvidia major device is a fixed value 195
+static constexpr dev_t NVIDIA_MAJOR_DEVICE = 195;
+#endif
 
 // Declared in header, see explanation there.
 const string DOCKER_NAME_PREFIX = "mesos-";
@@ -159,6 +163,103 @@ Try<DockerContainerizer*> DockerContainerizer::create(
     }
   }
 
+  // Yubo: Check GPU numbers for initialization
+  LOG(INFO) << "Yubo -- in DockerContainerizer::create()";
+
+  list<Gpu> gpus = list<Gpu> ();
+#ifdef ENABLE_NVIDIA_GPU_SUPPORT
+  nvmlReturn_t result = nvmlInit();
+  if (result != NVML_SUCCESS) {
+    return Error("nvmlInit failed: " +  string(nvmlErrorString(result)));
+  }
+
+/*
+  // Yubo: Begin fake testing
+  if (flags.nvidia_gpu_devices.isSome()) {
+    LOG(INFO) << "Begin to check GPUs...";
+    foreach (unsigned int device, flags.nvidia_gpu_devices.get()) {
+      nvmlDevice_t handle;
+      nvmlDeviceGetHandleByIndex(0, &handle);
+      Gpu gpu;
+      gpu.handle = handle;
+      gpu.major = NVIDIA_MAJOR_DEVICE;
+      gpu.minor = device;
+      LOG(INFO) <<"GPU detected: " << gpu.major << ":" << gpu.minor;
+      gpus.push_back(gpu);
+      }
+    }
+    // Yubo: End fake testing
+*/
+  // Yubo: if --nvidia_gpu_devices is set, the devices passed by this
+  // parameter is used. Otherwise, enabling GPU auto discovery.
+  if (flags.nvidia_gpu_devices.isSome()) {
+    LOG(INFO) << "Begin to check GPUs...";
+    foreach (unsigned int device, flags.nvidia_gpu_devices.get()) {
+      nvmlDevice_t handle;
+      result = nvmlDeviceGetHandleByIndex(device, &handle);
+
+      if (result == NVML_ERROR_INVALID_ARGUMENT) {
+        return Error("GPU device " + stringify(device) + " not found");
+      }
+      if (result != NVML_SUCCESS) {
+        return Error("nvmlDeviceGetHandleByIndex failed: " +
+                     string(nvmlErrorString(result)));
+      }
+
+      unsigned int minor;
+      result = nvmlDeviceGetMinorNumber(handle, &minor);
+
+      if (result != NVML_SUCCESS) {
+        return Error("nvmlDeviceGetMinorNumber failed: " +
+                     string(nvmlErrorString(result)));
+      }
+
+      Gpu gpu;
+      gpu.major = NVIDIA_MAJOR_DEVICE;
+      gpu.minor = minor;
+      LOG(INFO) << "GPU detected: " << gpu.major << ":" << gpu.minor;
+      gpus.push_back(gpu);
+    }
+  }
+  else {
+    LOG(INFO) << "Flag --nvidia-gpu-devices is not detected.";
+    LOG(INFO) << "Enabling GPU auto discovery...";
+    unsigned int gpuCount;
+    nvmlReturn_t result = nvmlDeviceGetCount(&gpuCount);
+    if (result != NVML_SUCCESS) {
+      return Error("nvmlDeviceGetCount failed: " + \
+                      string(nvmlErrorString(result)));
+    }
+    // Yubo: Now we count GPU index as 0, 1, ..., n-1 if n GPUs detected
+    for (unsigned int device = 0; device < gpuCount; device++) {
+      nvmlDevice_t handle;
+      result = nvmlDeviceGetHandleByIndex(device, &handle);
+
+      if (result == NVML_ERROR_INVALID_ARGUMENT) {
+        return Error("GPU device " + stringify(device) + " not found");
+      }
+      if (result != NVML_SUCCESS) {
+        return Error("nvmlDeviceGetHandleByIndex failed: " +
+                     string(nvmlErrorString(result)));
+      }
+
+      unsigned int minor;
+      result = nvmlDeviceGetMinorNumber(handle, &minor);
+
+      if (result != NVML_SUCCESS) {
+        return Error("nvmlDeviceGetMinorNumber failed: " +
+                     string(nvmlErrorString(result)));
+      }
+
+      Gpu gpu;
+      gpu.major = NVIDIA_MAJOR_DEVICE;
+      gpu.minor = minor;
+      LOG(INFO) <<"GPU detected: " << gpu.major << ":" << gpu.minor;
+      gpus.push_back(gpu);
+    }
+  }
+#endif
+
   // TODO(tnachen): We should also mark the work directory as shared
   // mount here, more details please refer to MESOS-3483.
 
@@ -166,7 +267,8 @@ Try<DockerContainerizer*> DockerContainerizer::create(
       flags,
       fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker);
+      docker,
+      gpus);
 }
 
 
@@ -177,17 +279,18 @@ DockerContainerizer::DockerContainerizer(
   spawn(process.get());
 }
 
-
 DockerContainerizer::DockerContainerizer(
     const Flags& flags,
     Fetcher* fetcher,
     const Owned<ContainerLogger>& logger,
-    Shared<Docker> docker)
+    Shared<Docker> docker,
+    list<Gpu> gpuAvailable)
   : process(new DockerContainerizerProcess(
       flags,
       fetcher,
       logger,
-      docker))
+      docker,
+      gpuAvailable))
 {
   spawn(process.get());
 }
@@ -203,7 +306,8 @@ DockerContainerizer::~DockerContainerizer()
 docker::Flags dockerFlags(
   const Flags& flags,
   const string& name,
-  const string& directory)
+  const string& directory,
+  const Option<string>& gpu_allocated)
 {
   docker::Flags dockerFlags;
   dockerFlags.container = name;
@@ -215,6 +319,9 @@ docker::Flags dockerFlags(
 
   // TODO(alexr): Remove this after the deprecation cycle (started in 0.29).
   dockerFlags.stop_timeout = flags.docker_stop_timeout;
+
+  // Yubo: Add new dockerFlags for allocated GPU
+  dockerFlags.gpu_allocated = gpu_allocated;
 
   return dockerFlags;
 }
@@ -310,10 +417,12 @@ DockerContainerizerProcess::Container::create(
 
     newContainerInfo.mutable_docker()->CopyFrom(dockerInfo);
 
+    // Yubo: For ContainerizerCreate, no GPU is allocated.
     docker::Flags dockerExecutorFlags = dockerFlags(
       flags,
       Container::name(slaveId, stringify(id)),
-      containerWorkdir);
+      containerWorkdir,
+      None());
 
     CommandInfo newCommandInfo;
     // TODO(tnachen): Pass flags directly into docker run.
@@ -1131,6 +1240,7 @@ Future<Docker::Container> DockerContainerizerProcess::launchExecutorContainer(
         flags.sandbox_directory,
         container->resources,
         container->environment,
+        None(),
         subprocessInfo.out,
         subprocessInfo.err);
 
@@ -1161,12 +1271,60 @@ Future<Docker::Container> DockerContainerizerProcess::launchExecutorContainer(
 Future<pid_t> DockerContainerizerProcess::launchExecutorProcess(
     const ContainerID& containerId)
 {
+  foreach (Gpu &gpu, available) {
+    LOG(INFO) << "Yubo -- Available GPUs: " << gpu.major << ":" << gpu.minor;
+  }
   if (!containers_.contains(containerId)) {
     return Failure("Container is already destroyed");
   }
 
   Container* container = containers_[containerId];
   container->state = Container::RUNNING;
+  // Yubo: Allocate GPUs according to task resources.
+  const Option<TaskInfo>& taskInfo = container->task;
+  // Yubo: GPU allocated to the container
+  Option<string> gpu_allocated;
+  if (taskInfo.isSome()) {
+    const Resources& resources = taskInfo.get().resources();
+    Option<double> gpus = resources.gpus();
+    if (static_cast<long long>(gpus.getOrElse(0.0) * 1000.0) % 1000 != 0) {
+      return Failure("The 'gpus' resource must be an unsigned integer");
+    }
+    size_t requested = static_cast<size_t>(gpus.getOrElse(0.0));
+
+    // Calculate allocatable GPUs
+    LOG(INFO) << "Yubo -- GPU requested/available: " \
+              << requested << "/" << available.size();
+
+    if (requested == 0) {
+      // If no GPU requested
+      gpu_allocated = "";
+    }
+    else if (available.size() >= requested) {
+      // If available GPUs equal or greater than GPU requested, allocate GPUs
+      vector<string> argv;
+      for (size_t i = 0; i < requested; i++) {
+        Gpu& gpu = available.front();
+        // Passing GPU minor value to container
+        argv.push_back(boost::lexical_cast<string>(gpu.minor));
+        // Mark the GPU as allocated for the container
+        container->allocated.push_back(gpu);
+        // Remove GPU in availble list
+        available.pop_front();
+        LOG(INFO) << "Yubo -- GPU: " << gpu.major << ":" \
+                  << gpu.minor << " allocated to container " \
+                  << containerId;
+      }
+      gpu_allocated = strings::join(",", argv);
+    }
+    else {
+      // If available GPUs less than requested, return failure
+      return Failure("Not enough GPUs available to reserve");
+    }
+  }
+  else {
+    return Failure("No task information found");
+  }
 
   // Prepare environment variables for the executor.
   map<string, string> environment = executorEnvironment(
@@ -1239,7 +1397,8 @@ Future<pid_t> DockerContainerizerProcess::launchExecutorProcess(
         subprocessInfo.out,
         subprocessInfo.err,
         SETSID,
-        dockerFlags(flags, container->name(), container->directory),
+        dockerFlags(flags, container->name(), \
+                    container->directory, gpu_allocated),
         environment,
         None(),
         parentHooks,
@@ -1283,6 +1442,7 @@ Future<bool> DockerContainerizerProcess::reapExecutor(
     const ContainerID& containerId,
     pid_t pid)
 {
+  LOG(INFO) << "Yubo -- DockerContainerizerProcess::reapExecutor()";
   // After we do Docker::run we shouldn't remove a container until
   // after we set 'status', which we do in this function.
   CHECK(containers_.contains(containerId));
@@ -1355,6 +1515,21 @@ Future<Nothing> DockerContainerizerProcess::_update(
     const Resources& _resources,
     const Docker::Container& container)
 {
+  LOG(INFO) << "Yubo -- DockerContainerizerProcess::_update()";
+  // Yubo: _update() will be called when task completed. After that,
+  // release GPUs allocated to the container.
+  if (!containers_[containerId]->allocated.empty()) {
+    foreach (Gpu &gpu, containers_[containerId]->allocated) {
+      LOG(INFO) << "Yubo -- GPU: " << gpu.major << ":" << gpu.minor \
+                << " released from container " << containerId;
+    }
+    available.splice(available.end(), containers_[containerId]->allocated);
+    // Yubo: Log only.
+    foreach (Gpu &gpu, available) {
+      LOG(INFO) << "Yubo -- Available GPUs: " << gpu.major << ":" << gpu.minor;
+    }
+  }
+
   if (container.pid.isNone()) {
     return Nothing();
   }
@@ -1381,6 +1556,7 @@ Future<Nothing> DockerContainerizerProcess::__update(
   // 'memory' subsystems are mounted (they may be the same). Note that
   // we make these static so we can reuse the result for subsequent
   // calls.
+  LOG(INFO) << "Yubo -- DockerContainerizerProcess::__update()";
   static Result<string> cpuHierarchy = cgroups::hierarchy("cpu");
   static Result<string> memoryHierarchy = cgroups::hierarchy("memory");
 
@@ -1705,6 +1881,21 @@ void DockerContainerizerProcess::destroy(
   }
 
   Container* container = containers_[containerId];
+
+  // Yubo: Double check if GPUs need to be released when docker destroy.
+  // That is necessary when task failed that _update() was not called.
+  LOG(INFO) << "Yubo -- DockerContainerizerProcess::destroy()";
+  if (!container->allocated.empty()) {
+    foreach (Gpu &gpu, container->allocated) {
+      LOG(INFO) << "Yubo -- GPU: " << gpu.major << ":" << gpu.minor \
+                << " released from container " << containerId;
+    }
+    available.splice(available.end(), container->allocated);
+    // Yubo: Log only.
+    foreach (Gpu &gpu, available) {
+      LOG(INFO) << "Yubo -- Available GPUs: " << gpu.major << ":" << gpu.minor;
+    }
+  }
 
   if (container->launch.isFailed()) {
     VLOG(1) << "Container '" << containerId << "' launch failed";

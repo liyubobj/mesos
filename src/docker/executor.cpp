@@ -58,7 +58,6 @@ namespace docker {
 
 const Duration DOCKER_INSPECT_DELAY = Milliseconds(500);
 const Duration DOCKER_INSPECT_TIMEOUT = Seconds(5);
-
 // Executor that is responsible to execute a docker container and
 // redirect log output to configured stdout and stderr files. Similar
 // to `CommandExecutor`, it launches a single task (a docker container)
@@ -73,7 +72,8 @@ public:
       const string& sandboxDirectory,
       const string& mappedDirectory,
       const Duration& shutdownGracePeriod,
-      const string& healthCheckDir)
+      const string& healthCheckDir,
+      const string& gpuAllocated)
     : killed(false),
       killedByHealthCheck(false),
       healthPid(-1),
@@ -84,7 +84,8 @@ public:
       mappedDirectory(mappedDirectory),
       shutdownGracePeriod(shutdownGracePeriod),
       stop(Nothing()),
-      inspect(Nothing()) {}
+      inspect(Nothing()),
+      gpuAllocated(gpuAllocated) {}
 
   virtual ~DockerExecutorProcess() {}
 
@@ -133,11 +134,40 @@ public:
     }
 
     cout << "Starting task " << taskId.get() << endl;
-
     CHECK(task.has_container());
     CHECK(task.has_command());
 
     CHECK(task.container().type() == ContainerInfo::DOCKER);
+
+    // Yubo: Expose GPU devices with "docker run" config "--devices". Here we
+    // pass a list with format host_device:container_device:permission
+    cout << "Yubo -- GPU alloated index: " << gpuAllocated << endl;
+    Option<vector<string>> gpuExposed;
+    if (!gpuAllocated.empty()) {
+    // Yubo: GPU jobs
+      gpuExposed = vector<string> ();
+      string nvCtl = "/dev/nvidiactl";
+      string nvUvm = "/dev/nvidia-uvm";
+      string nvDataPrefix = "/dev/nvidia";
+      string nvPermission = "rwm";
+      // Yubo: Push nvCtl and nvUvm interfaces
+      gpuExposed.get().push_back(nvCtl + ":" + nvCtl + ":" + nvPermission);
+      cout << "Yubo -- Add GPU params: " << gpuExposed.get().back() << endl;
+      gpuExposed.get().push_back(nvUvm + ":" + nvUvm + ":" + nvPermission);
+      cout << "Yubo -- Add GPU params: " << gpuExposed.get().back() << endl;
+      // Parse allocated GPUs
+      vector<string> gpuAllocatedList = strings::split(gpuAllocated, ",");
+      // Push nvData interfaces
+      foreach(string &gpuMinor, gpuAllocatedList) {
+        string nvData = nvDataPrefix + gpuMinor;
+        gpuExposed.get().push_back(nvData + ":" + nvData + ":" + nvPermission);
+        cout << "Yubo -- Add GPU params: " << gpuExposed.get().back() << endl;
+      }
+    }
+    else {
+      // Non-GPU jobs
+      gpuExposed = None();
+    }
 
     // We're adding task and executor resources to launch docker since
     // the DockerContainerizer updates the container cgroup limits
@@ -153,6 +183,7 @@ public:
         mappedDirectory,
         task.resources() + task.executor().resources(),
         None(),
+        gpuExposed,
         Subprocess::FD(STDOUT_FILENO),
         Subprocess::FD(STDERR_FILENO));
 
@@ -481,6 +512,7 @@ private:
   Option<ExecutorDriver*> driver;
   Option<FrameworkInfo> frameworkInfo;
   Option<TaskID> taskId;
+  string gpuAllocated;
 };
 
 
@@ -493,7 +525,8 @@ public:
       const string& sandboxDirectory,
       const string& mappedDirectory,
       const Duration& shutdownGracePeriod,
-      const string& healthCheckDir)
+      const string& healthCheckDir,
+      const string& gpuAllocated)
   {
     process = Owned<DockerExecutorProcess>(new DockerExecutorProcess(
         docker,
@@ -501,7 +534,8 @@ public:
         sandboxDirectory,
         mappedDirectory,
         shutdownGracePeriod,
-        healthCheckDir));
+        healthCheckDir,
+        gpuAllocated));
 
     spawn(process.get());
   }
@@ -670,13 +704,20 @@ int main(int argc, char** argv)
     return EXIT_FAILURE;
   }
 
+  // Yubo: Check if gpu_allocated parameter exists
+  if (flags.gpu_allocated.isNone()) {
+    cout << flags.usage("Missing option --gpu_allocated, no GPU allocated.") \
+         << endl;
+    flags.gpu_allocated = "";
+  }
   mesos::internal::docker::DockerExecutor executor(
       docker.get(),
       flags.container.get(),
       flags.sandbox_directory.get(),
       flags.mapped_directory.get(),
       shutdownGracePeriod,
-      flags.launcher_dir.get());
+      flags.launcher_dir.get(),
+      flags.gpu_allocated.get());
 
   mesos::MesosExecutorDriver driver(&executor);
   return driver.run() == mesos::DRIVER_STOPPED ? EXIT_SUCCESS : EXIT_FAILURE;

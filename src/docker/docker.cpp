@@ -447,6 +447,7 @@ Future<Nothing> Docker::run(
     const string& mappedDirectory,
     const Option<Resources>& resources,
     const Option<map<string, string>>& env,
+    const Option<vector<string>>& gpuExposed,
     const process::Subprocess::IO& stdout,
     const process::Subprocess::IO& stderr) const
 {
@@ -650,6 +651,15 @@ Future<Nothing> Docker::run(
 
   argv.push_back("--name");
   argv.push_back(name);
+
+  // Yubo: Expose GPU into docker
+  if (gpuExposed.isSome()) {
+    foreach (const string& command, gpuExposed.get()) {
+    argv.push_back("--device");
+    argv.push_back(command);
+    }
+  }
+
   argv.push_back(image);
 
   if (commandInfo.shell()) {

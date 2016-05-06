@@ -25,6 +25,11 @@
 #include <stout/flags.hpp>
 #include <stout/hashset.hpp>
 
+#ifdef ENABLE_NVIDIA_GPU_SUPPORT
+// Yubo: Add nvml header
+#include <nvidia/gdk/nvml.h>
+#endif
+
 #include "docker/docker.hpp"
 #include "docker/executor.hpp"
 
@@ -52,6 +57,12 @@ extern const std::string DOCKER_SYMLINK_DIRECTORY;
 // Forward declaration.
 class DockerContainerizerProcess;
 
+// Yubo -- GPU related struct
+struct Gpu
+{
+  dev_t major;
+  dev_t minor;
+};
 
 class DockerContainerizer : public Containerizer
 {
@@ -65,7 +76,8 @@ public:
       const Flags& flags,
       Fetcher* fetcher,
       const process::Owned<mesos::slave::ContainerLogger>& logger,
-      process::Shared<Docker> docker);
+      process::Shared<Docker> docker,
+      std::list<Gpu> gpuAvailable);
 
   // This is only public for tests.
   DockerContainerizer(
@@ -114,7 +126,6 @@ private:
 };
 
 
-
 class DockerContainerizerProcess
   : public process::Process<DockerContainerizerProcess>
 {
@@ -123,11 +134,13 @@ public:
       const Flags& _flags,
       Fetcher* _fetcher,
       const process::Owned<mesos::slave::ContainerLogger>& _logger,
-      process::Shared<Docker> _docker)
+      process::Shared<Docker> _docker,
+      std::list<Gpu> _gpuAvailable)
     : flags(_flags),
       fetcher(_fetcher),
       logger(_logger),
-      docker(_docker) {}
+      docker(_docker),
+      available(_gpuAvailable) {}
 
   virtual process::Future<Nothing> recover(
       const Option<state::SlaveState>& state);
@@ -478,12 +491,18 @@ private:
     // on destroy.
     Option<pid_t> executorPid;
 
+    // Yubo: GPU allocated to the container.
+    std::list<Gpu> allocated;
+
     // Marks if this container launches an executor in a docker
     // container.
     bool launchesExecutorContainer;
   };
 
   hashmap<ContainerID, Container*> containers_;
+
+  // Yubo: GPUs available for slave.
+  std::list<Gpu> available;
 };
 
 

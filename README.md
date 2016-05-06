@@ -1,3 +1,6 @@
+# About this branch
+This branch will add GPU support for mesos docker containerizer based on [MESOS-4424](https://issues.apache.org/jira/browse/MESOS-4424).
+
 # About Apache Mesos
 
 Apache Mesos is a cluster manager that provides efficient resource isolation 
