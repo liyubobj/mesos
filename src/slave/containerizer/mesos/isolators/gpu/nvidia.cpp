@@ -39,7 +39,7 @@
 
 #include "slave/containerizer/mesos/isolator.hpp"
 
-#include "slave/containerizer/mesos/isolators/cgroups/devices/gpus/nvidia.hpp"
+#include "slave/containerizer/mesos/isolators/gpu/nvidia.hpp"
 
 using cgroups::devices::Entry;
 
@@ -102,7 +102,7 @@ static const cgroups::devices::Entry* NVIDIA_UVM_DEVICE_ENTRY =
     });
 
 
-CgroupsNvidiaGpuIsolatorProcess::CgroupsNvidiaGpuIsolatorProcess(
+NvidiaGpuIsolatorProcess::NvidiaGpuIsolatorProcess(
     const Flags& _flags,
     const string& _hierarchy,
     list<Gpu> gpus)
@@ -111,7 +111,7 @@ CgroupsNvidiaGpuIsolatorProcess::CgroupsNvidiaGpuIsolatorProcess(
     available(gpus) {}
 
 
-CgroupsNvidiaGpuIsolatorProcess::~CgroupsNvidiaGpuIsolatorProcess()
+NvidiaGpuIsolatorProcess::~NvidiaGpuIsolatorProcess()
 {
   nvmlReturn_t result = nvmlShutdown();
   if (result != NVML_SUCCESS) {
@@ -120,7 +120,7 @@ CgroupsNvidiaGpuIsolatorProcess::~CgroupsNvidiaGpuIsolatorProcess()
 }
 
 
-Try<Isolator*> CgroupsNvidiaGpuIsolatorProcess::create(const Flags& flags)
+Try<Isolator*> NvidiaGpuIsolatorProcess::create(const Flags& flags)
 {
   // Make sure the `cgroups/devices` isolator is present.
   vector<string> isolators_ = strings::tokenize(flags.isolation, ",");
@@ -179,13 +179,13 @@ Try<Isolator*> CgroupsNvidiaGpuIsolatorProcess::create(const Flags& flags)
   }
 
   process::Owned<MesosIsolatorProcess> process(
-      new CgroupsNvidiaGpuIsolatorProcess(flags, hierarchy.get(), gpus));
+      new NvidiaGpuIsolatorProcess(flags, hierarchy.get(), gpus));
 
   return new MesosIsolator(process);
 }
 
 
-Future<Nothing> CgroupsNvidiaGpuIsolatorProcess::recover(
+Future<Nothing> NvidiaGpuIsolatorProcess::recover(
     const list<ContainerState>& states,
     const hashset<ContainerID>& orphans)
 {
@@ -239,7 +239,7 @@ Future<Nothing> CgroupsNvidiaGpuIsolatorProcess::recover(
 }
 
 
-Future<Option<ContainerLaunchInfo>> CgroupsNvidiaGpuIsolatorProcess::prepare(
+Future<Option<ContainerLaunchInfo>> NvidiaGpuIsolatorProcess::prepare(
     const ContainerID& containerId,
     const mesos::slave::ContainerConfig& containerConfig)
 {
@@ -257,7 +257,7 @@ Future<Option<ContainerLaunchInfo>> CgroupsNvidiaGpuIsolatorProcess::prepare(
 }
 
 
-Future<Nothing> CgroupsNvidiaGpuIsolatorProcess::update(
+Future<Nothing> NvidiaGpuIsolatorProcess::update(
     const ContainerID& containerId,
     const Resources& resources)
 {
@@ -377,7 +377,7 @@ Future<Nothing> CgroupsNvidiaGpuIsolatorProcess::update(
 }
 
 
-Future<ResourceStatistics> CgroupsNvidiaGpuIsolatorProcess::usage(
+Future<ResourceStatistics> NvidiaGpuIsolatorProcess::usage(
     const ContainerID& containerId)
 {
   if (!infos.contains(containerId)) {
@@ -391,7 +391,7 @@ Future<ResourceStatistics> CgroupsNvidiaGpuIsolatorProcess::usage(
 }
 
 
-Future<Nothing> CgroupsNvidiaGpuIsolatorProcess::cleanup(
+Future<Nothing> NvidiaGpuIsolatorProcess::cleanup(
     const ContainerID& containerId)
 {
   // Multiple calls may occur during test clean up.

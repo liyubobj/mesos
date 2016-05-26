@@ -56,6 +56,12 @@
 #include "slave/containerizer/mesos/linux_launcher.hpp"
 #endif // __linux__
 
+#ifdef ENABLE_NVIDIA_GPU_SUPPORT
+#ifdef __linux__
+#include "slave/containerizer/mesos/isolators/gpu/nvidia.hpp"
+#endif
+#endif
+
 #include "slave/containerizer/mesos/isolators/posix.hpp"
 #ifdef __WINDOWS__
 #include "slave/containerizer/mesos/isolators/windows.hpp"
@@ -74,12 +80,6 @@
 #include "slave/containerizer/mesos/isolators/cgroups/net_cls.hpp"
 #include "slave/containerizer/mesos/isolators/cgroups/perf_event.hpp"
 #endif // __linux__
-
-#ifdef ENABLE_NVIDIA_GPU_SUPPORT
-#ifdef __linux__
-#include "slave/containerizer/mesos/isolators/cgroups/devices/gpus/nvidia.hpp"
-#endif // __linux__
-#endif
 
 #ifdef __linux__
 #include "slave/containerizer/mesos/isolators/docker/runtime.hpp"
@@ -312,7 +312,7 @@ Try<MesosContainerizer*> MesosContainerizer::create(
     {"docker/runtime", &DockerRuntimeIsolatorProcess::create},
     {"docker/volume", &DockerVolumeIsolatorProcess::create},
 #ifdef ENABLE_NVIDIA_GPU_SUPPORT
-    {"gpu/nvidia", &CgroupsNvidiaGpuIsolatorProcess::create},
+    {"gpu/nvidia", &NvidiaGpuIsolatorProcess::create},
 #endif
     {"namespaces/pid", &NamespacesPidIsolatorProcess::create},
     {"network/cni", &NetworkCniIsolatorProcess::create},
