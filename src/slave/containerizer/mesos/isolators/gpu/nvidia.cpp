@@ -71,49 +71,18 @@ namespace slave {
 // TODO(klueska): Expand this when we support other GPU types.
 static constexpr unsigned int NVIDIA_MAJOR_DEVICE = 195;
 
-// We also need to grant/revoke access to both /dev/nvidiactl
-// and /dev/nvidia-uvm when we grant/revoke access to GPUs in
-// a container.
-//
-// TODO(klueska): For now, we hard code the major/minor
-// numbers for these devices. In the future we should use
-// stat() on the device path.
-static const cgroups::devices::Entry* NVIDIA_CTL_DEVICE_ENTRY =
-  new cgroups::devices::Entry({
-      .selector = {
-        .type = Entry::Selector::Type::CHARACTER,
-        .major = NVIDIA_MAJOR_DEVICE,
-        .minor = 255,
-      },
-      .access = {
-        .read = true,
-        .write = true,
-        .mknod = true,
-      }
-    });
-
-static const cgroups::devices::Entry* NVIDIA_UVM_DEVICE_ENTRY =
-  new cgroups::devices::Entry({
-      .selector = {
-        .type = Entry::Selector::Type::CHARACTER,
-        .major = 246, // Nvidia uses the local/experimental device range.
-        .minor = 0,
-      },
-      .access = {
-        .read = true,
-        .write = true,
-        .mknod = true,
-      }
-    });
-
 
 NvidiaGpuIsolatorProcess::NvidiaGpuIsolatorProcess(
     const Flags& _flags,
     const string& _hierarchy,
-    list<Gpu> gpus)
+    list<Gpu> gpus,
+    const cgroups::devices::Entry& uvmDeviceEntry,
+    const cgroups::devices::Entry& ctlDeviceEntry)
   : flags(_flags),
     hierarchy(_hierarchy),
-    available(gpus) {}
+    available(gpus),
+    NVIDIA_CTL_DEVICE_ENTRY(ctlDeviceEntry),
+    NVIDIA_UVM_DEVICE_ENTRY(uvmDeviceEntry) {}
 
 
 Try<Isolator*> NvidiaGpuIsolatorProcess::create(const Flags& flags)
@@ -179,6 +148,32 @@ Try<Isolator*> NvidiaGpuIsolatorProcess::create(const Flags& flags)
     gpus.push_back(gpu);
   }
 
+  // Populate the device entries for
+  // `/dev/nvidiactl` and `/dev/nvidia-uvm`.
+  Try<dev_t> device = os::stat::rdev("/dev/nvidiactl");
+  if (device.isError()) {
+    return Error(device.error());
+  }
+  cgroups::devices::Entry ctlDeviceEntry;
+  ctlDeviceEntry.selector.type = Entry::Selector::Type::CHARACTER;
+  ctlDeviceEntry.selector.major = major(device.get());
+  ctlDeviceEntry.selector.minor = minor(device.get());
+  ctlDeviceEntry.access.read = true;
+  ctlDeviceEntry.access.write = true;
+  ctlDeviceEntry.access.mknod = true;
+
+  device = os::stat::rdev("/dev/nvidia-uvm");
+  if (device.isError()) {
+    return Error(device.error());
+  }
+  cgroups::devices::Entry uvmDeviceEntry;
+  uvmDeviceEntry.selector.type = Entry::Selector::Type::CHARACTER;
+  uvmDeviceEntry.selector.major = major(device.get());
+  uvmDeviceEntry.selector.minor = minor(device.get());
+  uvmDeviceEntry.access.read = true;
+  uvmDeviceEntry.access.write = true;
+  uvmDeviceEntry.access.mknod = true;
+
   // Retrieve the cgroups devices hierarchy.
   Result<string> hierarchy = cgroups::hierarchy("devices");
 
@@ -189,7 +184,12 @@ Try<Isolator*> NvidiaGpuIsolatorProcess::create(const Flags& flags)
   }
 
   process::Owned<MesosIsolatorProcess> process(
-      new NvidiaGpuIsolatorProcess(flags, hierarchy.get(), gpus));
+      new NvidiaGpuIsolatorProcess(
+          flags,
+          hierarchy.get(),
+          gpus,
+          ctlDeviceEntry,
+          uvmDeviceEntry));
 
   return new MesosIsolator(process);
 }
@@ -299,14 +299,14 @@ Future<Nothing> NvidiaGpuIsolatorProcess::update(
     // Grant access to /dev/nvidiactl and /dev/nvida-uvm
     // if this container is about to get its first GPU.
     if (info->allocated.empty()) {
-      map<string, const cgroups::devices::Entry*> entries = {
+      map<string, const cgroups::devices::Entry> entries = {
         { "/dev/nvidiactl", NVIDIA_CTL_DEVICE_ENTRY },
         { "/dev/nvidia-uvm", NVIDIA_UVM_DEVICE_ENTRY },
       };
 
       foreachkey (const string& device, entries) {
         Try<Nothing> allow = cgroups::devices::allow(
-            hierarchy, info->cgroup, *entries[device]);
+            hierarchy, info->cgroup, entries[device]);
 
         if (allow.isError()) {
           return Failure("Failed to grant cgroups access to"
@@ -366,14 +366,14 @@ Future<Nothing> NvidiaGpuIsolatorProcess::update(
     // Revoke access from /dev/nvidiactl and /dev/nvida-uvm
     // if this container no longer has access to any GPUs.
     if (info->allocated.empty()) {
-      map<string, const cgroups::devices::Entry*> entries = {
+      map<string, const cgroups::devices::Entry> entries = {
         { "/dev/nvidiactl", NVIDIA_CTL_DEVICE_ENTRY },
         { "/dev/nvidia-uvm", NVIDIA_UVM_DEVICE_ENTRY },
       };
 
       foreachkey (const string& device, entries) {
         Try<Nothing> deny = cgroups::devices::deny(
-            hierarchy, info->cgroup, *entries[device]);
+            hierarchy, info->cgroup, entries[device]);
 
         if (deny.isError()) {
           return Failure("Failed to deny cgroups access to"
