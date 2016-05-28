@@ -69,7 +69,7 @@ namespace internal {
 namespace slave {
 
 // TODO(klueska): Expand this when we support other GPU types.
-static constexpr dev_t NVIDIA_MAJOR_DEVICE = 195;
+static constexpr unsigned int NVIDIA_MAJOR_DEVICE = 195;
 
 // We also need to grant/revoke access to both /dev/nvidiactl
 // and /dev/nvidia-uvm when we grant/revoke access to GPUs in
