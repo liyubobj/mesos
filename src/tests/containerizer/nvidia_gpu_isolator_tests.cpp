@@ -14,6 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <set>
 #include <vector>
 
 #include <gmock/gmock.h>
@@ -36,6 +37,7 @@
 #include "slave/containerizer/containerizer.hpp"
 #include "slave/containerizer/fetcher.hpp"
 
+#include "slave/containerizer/mesos/isolators/gpu/allocator.hpp"
 #include "slave/containerizer/mesos/isolators/gpu/nvml.hpp"
 
 #include "tests/mesos.hpp"
@@ -44,8 +46,10 @@ using mesos::internal::master::Master;
 
 using mesos::internal::slave::Containerizer;
 using mesos::internal::slave::Fetcher;
+using mesos::internal::slave::Gpu;
 using mesos::internal::slave::MesosContainerizer;
 using mesos::internal::slave::MesosContainerizerProcess;
+using mesos::internal::slave::NvidiaGpuAllocator;
 using mesos::internal::slave::Slave;
 
 using mesos::master::detector::MasterDetector;
@@ -53,6 +57,7 @@ using mesos::master::detector::MasterDetector;
 using process::Future;
 using process::Owned;
 
+using std::set;
 using std::vector;
 
 using testing::_;
@@ -64,6 +69,7 @@ namespace internal {
 namespace tests {
 
 class NvidiaGpuTest : public MesosTest {};
+class NvidiaGpuAllocatorTest : public MesosTest {};
 
 
 // This test verifies that we are able to enable the Nvidia GPU
@@ -236,8 +242,7 @@ TEST_F(NvidiaGpuTest, ROOT_CGROUPS_NVIDIA_GPU_FractionalResources)
 }
 
 
-// Ensures that GPUs can be auto-discovered.
-TEST_F(NvidiaGpuTest, ROOT_CGROUPS_NVIDIA_GPU_Discovery)
+TEST_F(NvidiaGpuTest, NVIDIA_GPU_Discovery)
 {
   ASSERT_TRUE(nvml::isAvailable());
   ASSERT_SOME(nvml::initialize());
@@ -271,7 +276,7 @@ TEST_F(NvidiaGpuTest, ROOT_CGROUPS_NVIDIA_GPU_FlagValidation)
   // should not trigger-autodiscovery!
   slave::Flags flags = CreateSlaveFlags();
 
-  Try<Resources> resources = Containerizer::resources(flags);
+  Try<Resources> resources = NvidiaGpuAllocator::resources(flags);
 
   ASSERT_SOME(resources);
   ASSERT_NONE(resources->gpus());
@@ -303,7 +308,7 @@ TEST_F(NvidiaGpuTest, ROOT_CGROUPS_NVIDIA_GPU_FlagValidation)
   flags.resources = "cpus:1"; // To override the default with gpus:0.
   flags.isolation = "gpu/nvidia";
 
-  resources = Containerizer::resources(flags);
+  resources = NvidiaGpuAllocator::resources(flags);
 
   ASSERT_SOME(resources);
   ASSERT_SOME(resources->gpus());
@@ -325,7 +330,7 @@ TEST_F(NvidiaGpuTest, ROOT_CGROUPS_NVIDIA_GPU_FlagValidation)
   flags.resources = "gpus:1";
   flags.isolation = "gpu/nvidia";
 
-  resources = Containerizer::resources(flags);
+  resources = NvidiaGpuAllocator::resources(flags);
 
   ASSERT_SOME(resources);
   ASSERT_SOME(resources->gpus());
@@ -337,7 +342,7 @@ TEST_F(NvidiaGpuTest, ROOT_CGROUPS_NVIDIA_GPU_FlagValidation)
   flags.resources = "cpus:1"; // To override the default with gpus:0.
   flags.isolation = "gpu/nvidia";
 
-  resources = Containerizer::resources(flags);
+  resources = NvidiaGpuAllocator::resources(flags);
 
   ASSERT_ERROR(resources);
 
@@ -345,7 +350,7 @@ TEST_F(NvidiaGpuTest, ROOT_CGROUPS_NVIDIA_GPU_FlagValidation)
   flags.resources = "gpus:" + stringify(gpus.get());
   flags.isolation = "gpu/nvidia";
 
-  resources = Containerizer::resources(flags);
+  resources = NvidiaGpuAllocator::resources(flags);
 
   ASSERT_ERROR(resources);
 
@@ -355,7 +360,7 @@ TEST_F(NvidiaGpuTest, ROOT_CGROUPS_NVIDIA_GPU_FlagValidation)
   flags.resources = "gpus:2";
   flags.isolation = "gpu/nvidia";
 
-  resources = Containerizer::resources(flags);
+  resources = NvidiaGpuAllocator::resources(flags);
 
   ASSERT_ERROR(resources);
 
@@ -364,7 +369,7 @@ TEST_F(NvidiaGpuTest, ROOT_CGROUPS_NVIDIA_GPU_FlagValidation)
   flags.resources = "gpus:0";
   flags.isolation = "gpu/nvidia";
 
-  resources = Containerizer::resources(flags);
+  resources = NvidiaGpuAllocator::resources(flags);
 
   ASSERT_ERROR(resources);
 
@@ -378,7 +383,7 @@ TEST_F(NvidiaGpuTest, ROOT_CGROUPS_NVIDIA_GPU_FlagValidation)
     flags.nvidia_gpu_devices->push_back(i);
   }
 
-  resources = Containerizer::resources(flags);
+  resources = NvidiaGpuAllocator::resources(flags);
 
   ASSERT_ERROR(resources);
 
@@ -388,9 +393,85 @@ TEST_F(NvidiaGpuTest, ROOT_CGROUPS_NVIDIA_GPU_FlagValidation)
   flags.resources = "cpus:1;gpus:1";
   flags.isolation = "gpu/nvidia";
 
-  resources = Containerizer::resources(flags);
+  resources = NvidiaGpuAllocator::resources(flags);
 
   ASSERT_ERROR(resources);
+}
+
+
+// Test proper allocation / deallaoction of GPU devices.
+TEST_F(NvidiaGpuAllocatorTest, NVIDIA_GPU_VerifyAllocation)
+{
+  ASSERT_TRUE(nvml::isAvailable());
+  ASSERT_SOME(nvml::initialize());
+
+  slave::Flags flags = CreateSlaveFlags();
+  flags.resources = "cpus:1"; // To override the default with gpus:0.
+  flags.isolation = "gpu/nvidia";
+
+  Try<NvidiaGpuAllocator*> _allocator = NvidiaGpuAllocator::create(flags);
+  ASSERT_SOME(_allocator);
+
+  Owned<NvidiaGpuAllocator> allocator(_allocator.get());
+
+  Try<unsigned int> total = nvml::deviceGetCount();
+  ASSERT_SOME(total);
+  ASSERT_GE(total.get(), 1u);
+
+  // Allocate all GPUs at once.
+  Future<Option<set<Gpu>>> gpus = allocator->allocate(total.get());
+
+  AWAIT_ASSERT_READY(gpus);
+  ASSERT_SOME(gpus.get());
+  ASSERT_EQ(total.get(), gpus->get().size());
+
+  // Make sure there are no GPUs left to allocate.
+  Future<Option<set<Gpu>>> gpu = allocator->allocate(1);
+
+  AWAIT_ASSERT_READY(gpu);
+  ASSERT_NONE(gpu.get());
+
+  // Free all GPUs at once and reallocate them by reference.
+  Future<Nothing> result = allocator->deallocate(gpus->get());
+  AWAIT_ASSERT_READY(result);
+
+  result = allocator->allocate(gpus->get());
+
+  AWAIT_ASSERT_READY(result);
+
+  // Free 1 GPU back and reallocate it. Make sure they are the same.
+  result = allocator->deallocate({*gpus->get().begin()});
+
+  AWAIT_ASSERT_READY(result);
+
+  gpu = allocator->allocate(1);
+
+  AWAIT_ASSERT_READY(gpu);
+  ASSERT_SOME(gpu.get());
+  ASSERT_EQ(*gpus->get().begin(), *gpu->get().begin());
+
+  // Attempt to free the same GPU twice.
+  result = allocator->deallocate({*gpus->get().begin()});
+  AWAIT_ASSERT_READY(result);
+
+  result = allocator->deallocate({*gpus->get().begin()});
+  AWAIT_ASSERT_FAILED(result);
+
+  // Allocate a specific GPU by reference.
+  result = allocator->allocate({*gpus->get().begin()});
+  AWAIT_ASSERT_READY(result);
+
+  // Attempt to free a bogus GPU.
+  result = allocator->deallocate({Gpu()});
+  AWAIT_ASSERT_FAILED(result);
+
+  // Free all GPUs.
+  result = allocator->deallocate(gpus->get());
+  AWAIT_ASSERT_READY(result);
+
+  // Attempt to allocate a bogus GPU.
+  result = allocator->allocate({Gpu()});
+  AWAIT_ASSERT_FAILED(result);
 }
 
 } // namespace tests {
