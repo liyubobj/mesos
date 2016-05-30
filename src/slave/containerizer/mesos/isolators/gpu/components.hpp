@@ -19,6 +19,10 @@
 
 #include <process/shared.hpp>
 
+#ifdef __linux__
+#include "slave/containerizer/mesos/isolators/gpu/allocator.hpp"
+#endif
+
 namespace mesos {
 namespace internal {
 namespace slave {

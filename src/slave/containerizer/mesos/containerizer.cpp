@@ -94,6 +94,8 @@
 #include "slave/containerizer/mesos/isolators/filesystem/shared.hpp"
 #endif // __linux__
 
+#include "slave/containerizer/mesos/isolators/gpu/nvidia.hpp"
+
 #ifdef __linux__
 #include "slave/containerizer/mesos/isolators/gpu/nvidia.hpp"
 #endif // __linux__
