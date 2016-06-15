@@ -446,6 +446,7 @@ Future<Option<int>> Docker::run(
     const string& mappedDirectory,
     const Option<Resources>& resources,
     const Option<map<string, string>>& env,
+    const Option<vector<string>>& device,
     const process::Subprocess::IO& _stdout,
     const process::Subprocess::IO& _stderr) const
 {
@@ -672,6 +673,17 @@ Future<Option<int>> Docker::run(
 
   argv.push_back("--name");
   argv.push_back(name);
+
+  // Expose devices to docker container with --device.
+  if (device.isSome()) {
+    // TODO(Yubo): Move devPermission to docker containerizer?
+    string devPermission = "rmw";
+    foreach (const string &dev, device.get()) {
+      argv.push_back("--device");
+      argv.push_back(dev + ":" + dev + ":" + devPermission);
+    }
+  }
+
   argv.push_back(image);
 
   if (commandInfo.shell()) {
