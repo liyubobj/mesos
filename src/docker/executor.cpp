@@ -81,7 +81,8 @@ public:
       const string& mappedDirectory,
       const Duration& shutdownGracePeriod,
       const string& healthCheckDir,
-      const map<string, string>& taskEnvironment)
+      const map<string, string>& taskEnvironment,
+      const string& device)
     : killed(false),
       killedByHealthCheck(false),
       terminated(false),
@@ -93,6 +94,7 @@ public:
       mappedDirectory(mappedDirectory),
       shutdownGracePeriod(shutdownGracePeriod),
       taskEnvironment(taskEnvironment),
+      device(device),
       stop(Nothing()),
       inspect(Nothing()) {}
 
@@ -149,6 +151,16 @@ public:
 
     CHECK(task.container().type() == ContainerInfo::DOCKER);
 
+    // Pass exposed devices to docker executor.
+    Option<vector<string>> devExposed = None();
+    if (!device.empty()) {
+      devExposed = vector<string> ();
+      vector<string> devList = strings::split(device, ",");
+      foreach(const string &dev, devList) {
+        devExposed.get().push_back(dev);
+      }
+    }
+
     // We're adding task and executor resources to launch docker since
     // the DockerContainerizer updates the container cgroup limits
     // directly and it expects it to be the sum of both task and
@@ -163,6 +175,7 @@ public:
         mappedDirectory,
         task.resources() + task.executor().resources(),
         taskEnvironment,
+        devExposed,
         Subprocess::FD(STDOUT_FILENO),
         Subprocess::FD(STDERR_FILENO));
 
@@ -554,6 +567,7 @@ private:
   string mappedDirectory;
   Duration shutdownGracePeriod;
   map<string, string> taskEnvironment;
+  string device;
 
   Option<KillPolicy> killPolicy;
   Option<Future<Option<int>>> run;
@@ -575,7 +589,8 @@ public:
       const string& mappedDirectory,
       const Duration& shutdownGracePeriod,
       const string& healthCheckDir,
-      const map<string, string>& taskEnvironment)
+      const map<string, string>& taskEnvironment,
+      const string& device)
   {
     process = Owned<DockerExecutorProcess>(new DockerExecutorProcess(
         docker,
@@ -584,7 +599,8 @@ public:
         mappedDirectory,
         shutdownGracePeriod,
         healthCheckDir,
-        taskEnvironment));
+        taskEnvironment,
+        device));
 
     spawn(process.get());
   }
@@ -775,6 +791,15 @@ int main(int argc, char** argv)
     return EXIT_FAILURE;
   }
 
+  string device;
+  if (flags.device.isNone()) {
+    cout << "Missing option --device, no devices allocated." << endl;
+    device = "";
+  }
+  else {
+    device = flags.device.get();
+  }
+
   // The 2nd argument for docker create is set to false so we skip
   // validation when creating a docker abstraction, as the slave
   // should have already validated docker.
@@ -795,7 +820,8 @@ int main(int argc, char** argv)
       flags.mapped_directory.get(),
       shutdownGracePeriod,
       flags.launcher_dir.get(),
-      taskEnvironment);
+      taskEnvironment,
+      device);
 
   mesos::MesosExecutorDriver driver(&executor);
   return driver.run() == mesos::DRIVER_STOPPED ? EXIT_SUCCESS : EXIT_FAILURE;

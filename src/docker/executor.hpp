@@ -74,6 +74,11 @@ struct Flags : public mesos::internal::logging::Flags
         "task_environment",
         "A JSON map of environment variables and values that should\n"
         "be passed into the task launched by this executor.");
+
+    add(&device,
+        "device",
+        "Devices exposed to the docker container, with comma seperated.\n"
+        "/dev/nvidiactl,/dev/nvidia0,/dev/nvidia-uvm for NVIDIA GPU0 exposed.");
   }
 
   Option<std::string> container;
@@ -83,6 +88,7 @@ struct Flags : public mesos::internal::logging::Flags
   Option<std::string> mapped_directory;
   Option<std::string> launcher_dir;
   Option<std::string> task_environment;
+  Option<std::string> device;
 
   // TODO(alexr): Remove this after the deprecation cycle (started in 0.29).
   Option<Duration> stop_timeout;

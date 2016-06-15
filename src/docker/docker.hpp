@@ -130,6 +130,7 @@ public:
       const std::string& mappedDirectory,
       const Option<mesos::Resources>& resources = None(),
       const Option<std::map<std::string, std::string>>& env = None(),
+      const Option<std::vector<std::string>>& device = None(),
       const process::Subprocess::IO& _stdout = process::Subprocess::PIPE(),
       const process::Subprocess::IO& _stderr = process::Subprocess::PIPE())
     const;
