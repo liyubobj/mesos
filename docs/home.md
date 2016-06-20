@@ -44,6 +44,7 @@ layout: documentation
 * [Attributes and Resources](attributes-resources.md) for how to describe the agents that comprise a cluster.
 * [Fetcher Cache](fetcher.md) for how to configure the Mesos fetcher cache.
 * [Networking for Mesos-managed Containers](networking-for-mesos-managed-containers.md)
+* [Nvidia GPU Support](gpu-support.md) for information on Nvidia GPU support in Mesos.
 * [Oversubscription](oversubscription.md) for how to configure Mesos to take advantage of unused resources to launch "best-effort" tasks.
 * [Persistent Volume](persistent-volume.md) for how to allow tasks to access persistent storage resources.
 * [Multiple Disks](multiple-disk.md) for how to to allow tasks to use multiple isolated disk resources.
