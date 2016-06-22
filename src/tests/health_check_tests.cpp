@@ -336,7 +336,8 @@ TEST_F(HealthCheckTest, ROOT_DOCKER_DockerHealthyTask)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker);
+      docker,
+      None());
 
   Owned<MasterDetector> detector = master.get()->createDetector();
 
@@ -728,7 +729,8 @@ TEST_F(HealthCheckTest, ROOT_DOCKER_DockerHealthStatusChange)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker);
+      docker,
+      None());
 
   Owned<MasterDetector> detector = master.get()->createDetector();
 
