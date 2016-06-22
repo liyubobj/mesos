@@ -191,7 +191,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Launch_Executor)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker);
+      docker,
+      None());
 
   Owned<MasterDetector> detector = master.get()->createDetector();
 
@@ -318,7 +319,8 @@ TEST_F(DockerContainerizerTest, DISABLED_ROOT_DOCKER_Launch_Executor_Bridged)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker);
+      docker,
+      None());
 
   Owned<MasterDetector> detector = master.get()->createDetector();
 
@@ -437,7 +439,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Launch)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker);
+      docker,
+      None());
 
   Owned<MasterDetector> detector = master.get()->createDetector();
 
@@ -588,7 +591,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Kill)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker);
+      docker,
+      None());
 
   Owned<MasterDetector> detector = master.get()->createDetector();
 
@@ -706,7 +710,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_TaskKillingCapability)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker);
+      docker,
+      None());
 
   Owned<MasterDetector> detector = master.get()->createDetector();
 
@@ -835,7 +840,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Usage)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker);
+      docker,
+      None());
 
   Owned<MasterDetector> detector = master.get()->createDetector();
 
@@ -980,7 +986,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Update)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker);
+      docker,
+      None());
 
   Owned<MasterDetector> detector = master.get()->createDetector();
 
@@ -1144,7 +1151,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Recover)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker);
+      docker,
+      None());
 
   SlaveID slaveId;
   slaveId.set_value("s1");
@@ -1267,7 +1275,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_KillOrphanContainers)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker);
+      docker,
+      None());
 
   SlaveID slaveId;
   slaveId.set_value("s1");
@@ -1399,7 +1408,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_SkipRecoverNonDocker)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker);
+      docker,
+      None());
 
   ContainerID containerId;
   containerId.set_value(UUID::random().toString());
@@ -1465,7 +1475,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_LaunchWithPersistentVolumes)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker);
+      docker,
+      None());
 
   Owned<MasterDetector> detector = master.get()->createDetector();
 
@@ -1619,7 +1630,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_RecoverPersistentVolumes)
           flags,
           &fetcher,
           Owned<ContainerLogger>(logger.get()),
-          docker));
+          docker,
+          None()));
 
   Owned<MasterDetector> detector = master.get()->createDetector();
 
@@ -1724,7 +1736,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_RecoverPersistentVolumes)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker));
+      docker,
+      None()));
 
   slave = StartSlave(detector.get(), dockerContainerizer.get(), flags);
   ASSERT_SOME(slave);
@@ -1783,7 +1796,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_RecoverOrphanedPersistentVolumes)
           flags,
           &fetcher,
           Owned<ContainerLogger>(logger.get()),
-          docker));
+          docker,
+          None()));
 
   Owned<MasterDetector> detector = master.get()->createDetector();
 
@@ -1896,7 +1910,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_RecoverOrphanedPersistentVolumes)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker));
+      docker,
+      None()));
 
   slave = StartSlave(detector.get(), dockerContainerizer.get(), flags);
   ASSERT_SOME(slave);
@@ -1949,7 +1964,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Logs)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker);
+      docker,
+      None());
 
   // We skip stopping the docker container because stopping a container
   // even when it terminated might not flush the logs and we end up
@@ -2087,7 +2103,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Default_CMD)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker);
+      docker,
+      None());
 
   // We skip stopping the docker container because stopping a container
   // even when it terminated might not flush the logs and we end up
@@ -2220,7 +2237,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Default_CMD_Override)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker);
+      docker,
+      None());
 
   // We skip stopping the docker container because stopping  a container
   // even when it terminated might not flush the logs and we end up
@@ -2356,7 +2374,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Default_CMD_Args)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker);
+      docker,
+      None());
 
   // We skip stopping the docker container because stopping a container
   // even when it terminated might not flush the logs and we end up
@@ -2496,7 +2515,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_SlaveRecoveryTaskContainer)
           flags,
           &fetcher,
           Owned<ContainerLogger>(logger.get()),
-          docker));
+          docker,
+          None()));
 
   Owned<MasterDetector> detector = master.get()->createDetector();
 
@@ -2587,7 +2607,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_SlaveRecoveryTaskContainer)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker));
+      docker,
+      None()));
 
   slave = StartSlave(detector.get(), dockerContainerizer.get(), flags);
   ASSERT_SOME(slave);
@@ -2659,7 +2680,8 @@ TEST_F(DockerContainerizerTest,
           flags,
           &fetcher,
           Owned<ContainerLogger>(logger.get()),
-          docker));
+          docker,
+          None()));
 
   Owned<MasterDetector> detector = master.get()->createDetector();
 
@@ -2775,7 +2797,8 @@ TEST_F(DockerContainerizerTest,
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker));
+      docker,
+      None()));
 
   slave = StartSlave(detector.get(), dockerContainerizer.get(), flags);
   ASSERT_SOME(slave);
@@ -2832,7 +2855,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_NC_PortMapping)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker);
+      docker,
+      None());
 
   // We skip stopping the docker container because stopping a container
   // even when it terminated might not flush the logs and we end up
@@ -2985,7 +3009,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_LaunchSandboxWithColon)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker);
+      docker,
+      None());
 
   Owned<MasterDetector> detector = master.get()->createDetector();
 
@@ -3092,7 +3117,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_DestroyWhileFetching)
         flags,
         &fetcher,
         Owned<ContainerLogger>(logger.get()),
-        docker);
+        docker,
+        None());
 
   MockDockerContainerizer dockerContainerizer(
       (Owned<DockerContainerizerProcess>(process)));
@@ -3209,7 +3235,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_DestroyWhilePulling)
         flags,
         &fetcher,
         Owned<ContainerLogger>(logger.get()),
-        docker);
+        docker,
+        None());
 
   MockDockerContainerizer dockerContainerizer(
       (Owned<DockerContainerizerProcess>(process)));
@@ -3333,7 +3360,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_ExecutorCleanupWhenLaunchFailed)
         flags,
         &fetcher,
         Owned<ContainerLogger>(logger.get()),
-        docker);
+        docker,
+        None());
 
   MockDockerContainerizer dockerContainerizer(
       (Owned<DockerContainerizerProcess>(process)));
@@ -3441,7 +3469,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_FetchFailure)
         flags,
         &fetcher,
         Owned<ContainerLogger>(logger.get()),
-        docker);
+        docker,
+        None());
 
   MockDockerContainerizer dockerContainerizer(
       (Owned<DockerContainerizerProcess>(process)));
@@ -3552,7 +3581,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_DockerPullFailure)
         flags,
         &fetcher,
         Owned<ContainerLogger>(logger.get()),
-        docker);
+        docker,
+        None());
 
   MockDockerContainerizer dockerContainerizer(
       (Owned<DockerContainerizerProcess>(process)));
@@ -3663,7 +3693,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_DockerInspectDiscard)
         flags,
         &fetcher,
         Owned<ContainerLogger>(logger.get()),
-        docker);
+        docker,
+        None());
 
   MockDockerContainerizer dockerContainerizer(
       (Owned<DockerContainerizerProcess>(process)));
@@ -3674,7 +3705,7 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_DockerInspectDiscard)
                            Invoke((MockDocker*) docker.get(),
                                   &MockDocker::_inspect)));
 
-  EXPECT_CALL(*mockDocker, run(_, _, _, _, _, _, _, _, _))
+  EXPECT_CALL(*mockDocker, run(_, _, _, _, _, _, _, _, _, _))
     .WillOnce(Return(Failure("Run failed")));
 
   Owned<MasterDetector> detector = master.get()->createDetector();

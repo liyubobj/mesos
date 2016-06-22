@@ -640,7 +640,8 @@ TEST_F(HookTest, ROOT_DOCKER_VerifySlavePreLaunchDockerEnvironmentDecorator)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker);
+      docker,
+      None());
 
   Owned<MasterDetector> detector = master.get()->createDetector();
 
@@ -745,7 +746,8 @@ TEST_F(HookTest, ROOT_DOCKER_VerifySlavePreLaunchDockerValidator)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker);
+      docker,
+      None());
 
   Owned<MasterDetector> detector = master.get()->createDetector();
 
@@ -839,7 +841,8 @@ TEST_F(HookTest, ROOT_DOCKER_VerifySlavePreLaunchDockerHook)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker);
+      docker,
+      None());
 
   Owned<MasterDetector> detector = master.get()->createDetector();
 
@@ -965,7 +968,8 @@ TEST_F(HookTest, ROOT_DOCKER_VerifySlavePostFetchHook)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
-      docker);
+      docker,
+      None());
 
   Owned<MasterDetector> detector = master.get()->createDetector();
 

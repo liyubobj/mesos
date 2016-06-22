@@ -62,6 +62,8 @@ using mesos::master::detector::MasterDetector;
 
 using mesos::slave::ContainerLogger;
 
+using mesos::internal::slave::NvidiaGpuAllocator;
+
 using namespace process;
 
 #ifdef WITH_NETWORK_ISOLATOR
@@ -617,7 +619,7 @@ MockDocker::MockDocker(
   EXPECT_CALL(*this, stop(_, _, _))
     .WillRepeatedly(Invoke(this, &MockDocker::_stop));
 
-  EXPECT_CALL(*this, run(_, _, _, _, _, _, _, _, _))
+  EXPECT_CALL(*this, run(_, _, _, _, _, _, _, _, _, _))
     .WillRepeatedly(Invoke(this, &MockDocker::_run));
 
   EXPECT_CALL(*this, inspect(_, _))
@@ -632,8 +634,9 @@ MockDockerContainerizer::MockDockerContainerizer(
     const slave::Flags& flags,
     slave::Fetcher* fetcher,
     const process::Owned<ContainerLogger>& logger,
-    process::Shared<Docker> docker)
-  : slave::DockerContainerizer(flags, fetcher, logger, docker)
+    process::Shared<Docker> docker,
+    const Option<process::Shared<NvidiaGpuAllocator>>& allocator)
+  : slave::DockerContainerizer(flags, fetcher, logger, docker, allocator)
 {
   initialize();
 }
@@ -654,8 +657,9 @@ MockDockerContainerizerProcess::MockDockerContainerizerProcess(
     const slave::Flags& flags,
     slave::Fetcher* fetcher,
     const process::Owned<ContainerLogger>& logger,
-    const process::Shared<Docker>& docker)
-  : slave::DockerContainerizerProcess(flags, fetcher, logger, docker)
+    const process::Shared<Docker>& docker,
+    const Option<process::Shared<NvidiaGpuAllocator>>& allocator)
+  : slave::DockerContainerizerProcess(flags, fetcher, logger, docker, allocator)
 {
   EXPECT_CALL(*this, fetch(_, _))
     .WillRepeatedly(Invoke(this, &MockDockerContainerizerProcess::_fetch));

@@ -248,7 +248,8 @@ TEST_F(ContainerLoggerTest, ROOT_DOCKER_ContainerizerRecover)
       flags,
       &fetcher,
       Owned<ContainerLogger>(logger),
-      docker);
+      docker,
+      None());
 
   // Construct a mock response for `Docker::ps` that only has a meaningful
   // ID field set.  The other fields are effectively ignored.

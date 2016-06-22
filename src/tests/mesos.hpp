@@ -52,6 +52,7 @@
 #include <process/pid.hpp>
 #include <process/process.hpp>
 #include <process/queue.hpp>
+#include <process/shared.hpp>
 
 #include <process/ssl/gtest.hpp>
 
@@ -80,6 +81,8 @@
 
 #include "slave/containerizer/mesos/containerizer.hpp"
 
+#include "slave/containerizer/mesos/isolators/gpu/nvidia.hpp"
+
 #include "tests/cluster.hpp"
 #include "tests/limiter.hpp"
 #include "tests/utils.hpp"
@@ -93,6 +96,8 @@ using ::testing::An;
 using ::testing::DoDefault;
 using ::testing::Invoke;
 using ::testing::Return;
+
+using mesos::internal::slave::NvidiaGpuAllocator;
 
 namespace mesos {
 namespace internal {
@@ -1463,7 +1468,7 @@ public:
       const Option<JSON::Object>& config = None());
   virtual ~MockDocker();
 
-  MOCK_CONST_METHOD9(
+  MOCK_CONST_METHOD10(
       run,
       process::Future<Option<int>>(
           const mesos::ContainerInfo&,
@@ -1473,6 +1478,7 @@ public:
           const std::string&,
           const Option<mesos::Resources>&,
           const Option<std::map<std::string, std::string>>&,
+          const Option<std::vector<std::string>>& device,
           const process::Subprocess::IO&,
           const process::Subprocess::IO&));
 
@@ -1509,6 +1515,7 @@ public:
       const std::string& mappedDirectory,
       const Option<mesos::Resources>& resources,
       const Option<std::map<std::string, std::string>>& env,
+      const Option<std::vector<std::string>>& device,
       const process::Subprocess::IO& stdout,
       const process::Subprocess::IO& stderr) const
   {
@@ -1520,6 +1527,7 @@ public:
         mappedDirectory,
         resources,
         env,
+        device,
         stdout,
         stderr);
   }
@@ -1563,7 +1571,8 @@ public:
       const slave::Flags& flags,
       slave::Fetcher* fetcher,
       const process::Owned<mesos::slave::ContainerLogger>& logger,
-      process::Shared<Docker> docker);
+      process::Shared<Docker> docker,
+      const Option<process::Shared<NvidiaGpuAllocator>>& allocator);
 
   MockDockerContainerizer(
       const process::Owned<slave::DockerContainerizerProcess>& process);
@@ -1676,7 +1685,8 @@ public:
       const slave::Flags& flags,
       slave::Fetcher* fetcher,
       const process::Owned<mesos::slave::ContainerLogger>& logger,
-      const process::Shared<Docker>& docker);
+      const process::Shared<Docker>& docker,
+      const Option<process::Shared<NvidiaGpuAllocator>>& allocator);
 
   virtual ~MockDockerContainerizerProcess();
 
