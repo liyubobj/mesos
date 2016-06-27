@@ -656,6 +656,99 @@ TEST_F(DockerImageTest, ParseInspectonImage)
             image.get().environment.get().at("CA_CERTIFICATES_JAVA_VERSION"));
 }
 
+
+// This test tests the functionality of the docker's device exposition.
+TEST_F(DockerTest, ROOT_DOCKER_device)
+{
+  const string containerName = NAME_PREFIX + "-test";
+  Resources resources = Resources::parse("cpus:1;mem:512").get();
+
+  Owned<Docker> docker = Docker::create(
+      tests::flags.docker,
+      tests::flags.docker_socket,
+      false).get();
+
+  // Verify that we do not see the container.
+  Future<list<Docker::Container> > containers = docker->ps(true, containerName);
+  AWAIT_READY(containers);
+  foreach (const Docker::Container& container, containers.get()) {
+    EXPECT_NE("/" + containerName, container.name);
+  }
+
+  Try<string> directory = environment->mkdtemp();
+  ASSERT_SOME(directory);
+
+  ContainerInfo containerInfo;
+  containerInfo.set_type(ContainerInfo::DOCKER);
+
+  ContainerInfo::DockerInfo dockerInfo;
+  dockerInfo.set_image("alpine");
+  containerInfo.mutable_docker()->CopyFrom(dockerInfo);
+
+  CommandInfo commandInfo;
+  commandInfo.set_value("sleep 120");
+
+  // Generate device list for exposition in container.
+  Option<vector<string>> device = vector<string>();
+  device.get().push_back("/dev/null");
+  device.get().push_back("/dev/tty");
+
+  // Start the container.
+  Future<Option<int>> status = docker->run(
+      containerInfo,
+      commandInfo,
+      containerName,
+      directory.get(),
+      "/mnt/mesos/sandbox",
+      resources,
+      None(),
+      device);
+
+  // Test exposed devices through docker inspect.
+  Future<Docker::Container> inspect =
+    docker->inspect(containerName, Seconds(1));
+
+  AWAIT_READY(inspect);
+
+  string results = inspect.get().output;
+
+  string devPattern = "\"Devices\": [\n"
+    "            {\n"
+    "                \"PathOnHost\": \"/dev/null\",\n"
+    "                \"PathInContainer\": \"/dev/null\",\n"
+    "                \"CgroupPermissions\": \"rmw\"\n"
+    "            },\n"
+    "            {\n"
+    "                \"PathOnHost\": \"/dev/tty\",\n"
+    "                \"PathInContainer\": \"/dev/tty\",\n"
+    "                \"CgroupPermissions\": \"rmw\"\n"
+    "            }\n"
+    "        ]";
+
+  ASSERT_TRUE(results.find(devPattern) < results.length());
+
+  // Should be able to see the container now.
+  containers = docker->ps();
+  AWAIT_READY(containers);
+  bool found = false;
+  foreach (const Docker::Container& container, containers.get()) {
+    if ("/" + containerName == container.name) {
+      found = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(found);
+
+  // Stop the container.
+  Future<Nothing> stop = docker->stop(containerName);
+  AWAIT_READY(stop);
+
+  AWAIT_READY(status);
+  ASSERT_SOME(status.get());
+  EXPECT_TRUE(WIFEXITED(status->get())) << status->get();
+  EXPECT_EQ(128 + SIGKILL, WEXITSTATUS(status->get())) << status->get();
+}
+
 } // namespace tests {
 } // namespace internal {
 } // namespace mesos {
