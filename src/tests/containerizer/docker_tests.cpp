@@ -37,6 +37,7 @@ using namespace process;
 
 using std::list;
 using std::string;
+using std::set;
 
 namespace mesos {
 namespace internal {
@@ -66,6 +67,44 @@ class DockerTest : public MesosTest
     foreach (const Docker::Container& container, containers.get()) {
       AWAIT_READY_FOR(docker.get()->rm(container.id, true), Seconds(30));
     }
+  }
+
+public:
+  Option<set<string>> parseInspectDevices(const string& inspect) {
+    set<string> devices;
+    Try<JSON::Array> parse = JSON::parse<JSON::Array>(inspect);
+    if (parse.isError()) {
+        return None();
+    }
+
+    JSON::Array array = parse.get();
+    if (array.values.size() != 1) {
+        return None();
+    }
+
+    CHECK(array.values.front().is<JSON::Object>());
+    JSON::Object json = array.values.front().as<JSON::Object>();
+
+    Option<set<string>> hostDevices = set<string>();
+    Result<JSON::Array> deviceJson =
+      json.find<JSON::Array>("HostConfig.Devices");
+    if (deviceJson.isSome()) {
+      // Get elements in the array and push it to devices set
+      const vector<JSON::Value> values = deviceJson.get().values;
+      if (values.size() != 0) {
+        foreach(const JSON::Value& value, values) {
+          if (value.is<JSON::Object>()) {
+            Result<JSON::String> devicePath =
+              value.as<JSON::Object>().find<JSON::String>("PathOnHost");
+            if (devicePath.isSome()) {
+              // Push the device to the set
+              hostDevices.get().insert(devicePath.get().value);
+            }
+          }
+        }
+      }
+    }
+    return hostDevices;
   }
 };
 
@@ -712,20 +751,12 @@ TEST_F(DockerTest, ROOT_DOCKER_device)
 
   string results = inspect.get().output;
 
-  string devPattern = "\"Devices\": [\n"
-    "            {\n"
-    "                \"PathOnHost\": \"/dev/null\",\n"
-    "                \"PathInContainer\": \"/dev/null\",\n"
-    "                \"CgroupPermissions\": \"rmw\"\n"
-    "            },\n"
-    "            {\n"
-    "                \"PathOnHost\": \"/dev/tty\",\n"
-    "                \"PathInContainer\": \"/dev/tty\",\n"
-    "                \"CgroupPermissions\": \"rmw\"\n"
-    "            }\n"
-    "        ]";
+  Option<set<string>> deviceInspect = parseInspectDevices(results);
 
-  ASSERT_TRUE(results.find(devPattern) < results.length());
+  // Check if devices are successfully exposed.
+  ASSERT_SOME(deviceInspect);
+  ASSERT_NE(0, deviceInspect.get().count("/dev/tty"));
+  ASSERT_NE(0, deviceInspect.get().count("/dev/null"));
 
   // Should be able to see the container now.
   containers = docker->ps();

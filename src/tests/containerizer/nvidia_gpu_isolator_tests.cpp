@@ -159,6 +159,43 @@ public:
       AWAIT_READY_FOR(docker.get()->rm(container.id, true), Seconds(30));
     }
   }
+
+  Option<set<string>> parseInspectDevices(const string& inspect) {
+    set<string> devices;
+    Try<JSON::Array> parse = JSON::parse<JSON::Array>(inspect);
+    if (parse.isError()) {
+        return None();
+    }
+
+    JSON::Array array = parse.get();
+    if (array.values.size() != 1) {
+        return None();
+    }
+
+    CHECK(array.values.front().is<JSON::Object>());
+    JSON::Object json = array.values.front().as<JSON::Object>();
+
+    Option<set<string>> hostDevices = set<string>();
+    Result<JSON::Array> deviceJson =
+      json.find<JSON::Array>("HostConfig.Devices");
+    if (deviceJson.isSome()) {
+      // Get elements in the array and push it to devices set
+      const vector<JSON::Value> values = deviceJson.get().values;
+      if (values.size() != 0) {
+        foreach(const JSON::Value& value, values) {
+          if (value.is<JSON::Object>()) {
+            Result<JSON::String> devicePath =
+              value.as<JSON::Object>().find<JSON::String>("PathOnHost");
+            if (devicePath.isSome()) {
+              // Push the device to the set
+              hostDevices.get().insert(devicePath.get().value);
+            }
+          }
+        }
+      }
+    }
+    return hostDevices;
+  }
 };
 
 // This test verifies that we are able to enable the Nvidia GPU
@@ -734,28 +771,13 @@ TEST_F(NvidiaGpuDockerContainerizerTest, ROOT_DOCKER_LaunchWithGpu)
   // allocated the first GPU to the container.
   unsigned int minor = allocator.get()->allGpus().begin()->minor;
 
-  // Currently "docker inspect" json structure can not be parsed directly.
-  // Instead, we match the sensitive string to verify if GPU is successfully
-  // exposed to the docker container.
-  string devPattern = "\"Devices\": [\n"
-    "            {\n"
-    "                \"PathOnHost\": \"/dev/nvidiactl\",\n"
-    "                \"PathInContainer\": \"/dev/nvidiactl\",\n"
-    "                \"CgroupPermissions\": \"rmw\"\n"
-    "            },\n"
-    "            {\n"
-    "                \"PathOnHost\": \"/dev/nvidia-uvm\",\n"
-    "                \"PathInContainer\": \"/dev/nvidia-uvm\",\n"
-    "                \"CgroupPermissions\": \"rmw\"\n"
-    "            },\n"
-    "            {\n"
-    "                \"PathOnHost\": \"/dev/nvidia" + stringify(minor) + "\",\n" // NOLINT(whitespace/line_length)
-    "                \"PathInContainer\": \"/dev/nvidia" + stringify(minor) + "\",\n" // NOLINT(whitespace/line_length)
-    "                \"CgroupPermissions\": \"rmw\"\n"
-    "            }\n"
-    "        ]";
+  Option<set<string>> deviceInspect = parseInspectDevices(results);
 
-  ASSERT_TRUE(results.find(devPattern) < results.length());
+  // Check if nvidia GPU devices are successfully exposed.
+  ASSERT_SOME(deviceInspect);
+  ASSERT_NE(0, deviceInspect.get().count("/dev/nvidiactl"));
+  ASSERT_NE(0, deviceInspect.get().count("/dev/nvidia-uvm"));
+  ASSERT_NE(0, deviceInspect.get().count("/dev/nvidia" + stringify(minor)));
 
   Future<containerizer::Termination> termination =
     dockerContainerizer.wait(containerId.get());
