@@ -676,7 +676,6 @@ Future<Option<int>> Docker::run(
 
   // Expose devices to docker container with --device.
   if (device.isSome()) {
-    // TODO(Yubo): Move devPermission to docker containerizer?
     string devPermission = "rmw";
     foreach (const string &dev, device.get()) {
       argv.push_back("--device");

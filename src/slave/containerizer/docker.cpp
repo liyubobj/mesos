@@ -1322,9 +1322,6 @@ Future<pid_t> DockerContainerizerProcess::launchExecutorProcess(
   }
   size_t requested = static_cast<size_t>(gpus.getOrElse(0.0));
 
-  // Calculate allocatable GPUs.
-  LOG(INFO) << "Yubo -- GPU requested: " << requested;
-
   if (!allocator.isSome() && requested > 0) {
     return Failure("Can not request GPUs without enabling GPU support");
   }
@@ -1355,9 +1352,6 @@ Future<pid_t> DockerContainerizerProcess::launchExecutorProcess(
     foreach (const Gpu& gpu, allocated.get()) {
       argv.push_back(nvDataPrefix + boost::lexical_cast<string>(gpu.minor));
       container->gpuAllocated.push_back(gpu);
-      LOG(INFO) << "Yubo -- GPU: " << gpu.major << ":" \
-                << gpu.minor << " allocated to container " \
-                << containerId;
     }
     nvidiaGpus = strings::join(",", argv);
   }
@@ -1554,13 +1548,10 @@ Future<Nothing> DockerContainerizerProcess::_update(
     const Docker::Container& container)
 {
   // Release GPUs after the task exit.
-  LOG(INFO) << "Yubo -- DockerContainerizerProcess::_update()";
   set<Gpu> deallocated;
   if (!containers_[containerId]->gpuAllocated.empty()) {
     foreach (Gpu &gpu, containers_[containerId]->gpuAllocated) {
       deallocated.insert(gpu);
-      LOG(INFO) << "Yubo -- GPU: " << gpu.major << ":" << gpu.minor \
-                << " released from container " << containerId;
     }
     containers_[containerId]->gpuAllocated.clear();
     if (!allocator.isSome()) {
@@ -1920,18 +1911,13 @@ void DockerContainerizerProcess::destroy(
 
   Container* container = containers_[containerId];
 
-  LOG(INFO) << "Yubo -- DockerContainerizerProcess::destroy()";
-
   // Here we double check if GPUs are completely released after the task
   // finished or died. That is necessary when task failed that _update()
-  // was not called. (Not sure)
-  LOG(INFO) << "Yubo -- DockerContainerizerProcess::_update()";
+  // was not called.
   set<Gpu> deallocated;
   if (!containers_[containerId]->gpuAllocated.empty()) {
     foreach (Gpu &gpu, containers_[containerId]->gpuAllocated) {
       deallocated.insert(gpu);
-      LOG(INFO) << "Yubo -- GPU: " << gpu.major << ":" << gpu.minor \
-                << " released from container " << containerId;
     }
     containers_[containerId]->gpuAllocated.clear();
     if (allocator.isSome()) {
