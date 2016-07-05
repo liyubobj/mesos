@@ -68,7 +68,8 @@ public:
       const Flags& flags,
       Fetcher* fetcher,
       const process::Owned<mesos::slave::ContainerLogger>& logger,
-      process::Shared<Docker> docker);
+      process::Shared<Docker> docker,
+      const Option<NvidiaGpuAllocator>& allocator = None());
 
   // This is only public for tests.
   DockerContainerizer(
@@ -126,11 +127,13 @@ public:
       const Flags& _flags,
       Fetcher* _fetcher,
       const process::Owned<mesos::slave::ContainerLogger>& _logger,
-      process::Shared<Docker> _docker)
+      process::Shared<Docker> _docker,
+      const Option<NvidiaGpuAllocator>& _allocator)
     : flags(_flags),
       fetcher(_fetcher),
       logger(_logger),
-      docker(_docker) {}
+      docker(_docker),
+      allocator(_allocator) {}
 
   virtual process::Future<Nothing> recover(
       const Option<state::SlaveState>& state);
@@ -270,6 +273,8 @@ private:
   process::Owned<mesos::slave::ContainerLogger> logger;
 
   process::Shared<Docker> docker;
+
+  Option<NvidiaGpuAllocator> allocator;
 
   struct Container
   {
@@ -490,6 +495,9 @@ private:
     // container. This is stored so we can clean up the executor
     // on destroy.
     Option<pid_t> executorPid;
+
+    // GPU allocated to the container
+    std::list<Gpu> gpuAllocated;
 
     // Marks if this container launches an executor in a docker
     // container.

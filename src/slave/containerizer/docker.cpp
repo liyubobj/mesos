@@ -65,6 +65,7 @@ using std::list;
 using std::map;
 using std::string;
 using std::vector;
+using std::set;
 
 using namespace process;
 
@@ -166,11 +167,22 @@ Try<DockerContainerizer*> DockerContainerizer::create(
   // TODO(tnachen): We should also mark the work directory as shared
   // mount here, more details please refer to MESOS-3483.
 
-  return new DockerContainerizer(
-      flags,
-      fetcher,
-      Owned<ContainerLogger>(logger.get()),
-      docker);
+  if (nvidia.isSome()) {
+    return new DockerContainerizer(
+        flags,
+        fetcher,
+        Owned<ContainerLogger>(logger.get()),
+        docker,
+        nvidia.get().allocator);
+  }
+  else {
+    return new DockerContainerizer(
+        flags,
+        fetcher,
+        Owned<ContainerLogger>(logger.get()),
+        docker,
+        None());
+  }
 }
 
 
@@ -186,12 +198,14 @@ DockerContainerizer::DockerContainerizer(
     const Flags& flags,
     Fetcher* fetcher,
     const Owned<ContainerLogger>& logger,
-    Shared<Docker> docker)
+    Shared<Docker> docker,
+    const Option<NvidiaGpuAllocator>& allocator)
   : process(new DockerContainerizerProcess(
       flags,
       fetcher,
       logger,
-      docker))
+      docker,
+      allocator))
 {
   spawn(process.get());
 }
@@ -332,6 +346,7 @@ DockerContainerizerProcess::Container::create(
     // NOTE: We do not set the optional `taskEnvironment` here as
     // this field is currently used to propagate environment variables
     // from a hook. This hook is called after `Container::create`.
+    // For containerizer create, no GPU is allocated.
     docker::Flags dockerExecutorFlags = dockerFlags(
       flags,
       Container::name(slaveId, stringify(id)),
@@ -1221,6 +1236,7 @@ Future<Docker::Container> DockerContainerizerProcess::launchExecutorContainer(
     // Start the executor in a Docker container.
     // This executor could either be a custom executor specified by an
     // ExecutorInfo, or the docker executor.
+    // Do not expose devices to executor.
     Future<Option<int>> run = docker->run(
         container->container,
         container->command,
@@ -1285,6 +1301,61 @@ Future<pid_t> DockerContainerizerProcess::launchExecutorProcess(
 
   Container* container = containers_[containerId];
   container->state = Container::RUNNING;
+
+  // Allocate GPUs according to task resources.
+  const Option<TaskInfo>& taskInfo = container->task;
+  Option<string> nvidiaGpus;
+
+  if (!taskInfo.isSome()) {
+    return Failure("No task information found");
+  }
+
+  const Resources& resources = taskInfo.get().resources();
+  Option<double> gpus = resources.gpus();
+  if (static_cast<long long>(gpus.getOrElse(0.0) * 1000.0) % 1000 != 0) {
+    return Failure("The 'gpus' resource must be an unsigned integer");
+  }
+  size_t requested = static_cast<size_t>(gpus.getOrElse(0.0));
+
+  if (!allocator.isSome() && requested > 0) {
+    return Failure("Can not request GPUs without enabling GPU support");
+  }
+
+  // No GPU requested.
+  if (requested == 0) {
+    nvidiaGpus = None();
+  }
+  else {
+    // Some GPUs requested.
+    // We block the code until the GPU allocation finished.
+    // For docker containerizer, we must wait for GPUs allocated
+    // completed, and pass allocated GPUs to mesos-docker-executor.
+    Option<set<Gpu>> allocated = allocator.get().allocate(requested).get();
+    if (!allocated.isSome()) {
+      return Failure("Not enough GPUs available to reserve"
+                     " " + stringify(requested) + " GPUs");
+    }
+    // TODO(Yubo): Nvidia devices are hard-coded here. Will move to Nvidia
+    // specific modules so that all vendor specific data should be isolated
+    // into seperated module.
+    string nvidiaCtl = "/dev/nvidiactl";
+    string nvidiaUvm = "/dev/nvidia-uvm";
+    string nvidiaDataPrefix = "/dev/nvidia";
+    string permission = "mrw";
+    vector<string> argv;
+
+    // The GPU exposed format is DevHostPath:DevContainerPath:Permission.
+    // Permission: m--make node  r--read  w--write.
+    argv.push_back(nvidiaCtl + ":" + nvidiaCtl + ":" + permission);
+    argv.push_back(nvidiaUvm + ":" + nvidiaUvm + ":" + permission);
+    foreach (const Gpu& gpu, allocated.get()) {
+      string nvidiaData = nvidiaDataPrefix +
+        boost::lexical_cast<string>(gpu.minor);
+      argv.push_back(nvidiaData + ":" + nvidiaData + ":" + permission);
+      container->gpuAllocated.push_back(gpu);
+    }
+    nvidiaGpus = strings::join(",", argv);
+  }
 
   // Prepare environment variables for the executor.
   map<string, string> environment = container->environment;
@@ -1476,6 +1547,19 @@ Future<Nothing> DockerContainerizerProcess::_update(
     const Resources& _resources,
     const Docker::Container& container)
 {
+  // Release GPUs after the task exit.
+  set<Gpu> deallocated;
+  if (!containers_[containerId]->gpuAllocated.empty()) {
+    foreach (Gpu &gpu, containers_[containerId]->gpuAllocated) {
+      deallocated.insert(gpu);
+    }
+    containers_[containerId]->gpuAllocated.clear();
+    if (!allocator.isSome()) {
+      return Failure("Can not deallocate GPU without enabling GPU support.");
+    }
+    allocator.get().deallocate(deallocated).get();
+  }
+
   if (container.pid.isNone()) {
     return Nothing();
   }
@@ -1826,6 +1910,20 @@ void DockerContainerizerProcess::destroy(
   }
 
   Container* container = containers_[containerId];
+
+  // Here we double check if GPUs are completely released after the task
+  // finished or died. That is necessary when task failed that _update()
+  // was not called.
+  set<Gpu> deallocated;
+  if (!containers_[containerId]->gpuAllocated.empty()) {
+    foreach (Gpu &gpu, containers_[containerId]->gpuAllocated) {
+      deallocated.insert(gpu);
+    }
+    containers_[containerId]->gpuAllocated.clear();
+    if (allocator.isSome()) {
+      allocator.get().deallocate(deallocated).get();
+    }
+  }
 
   if (container->launch.isFailed()) {
     VLOG(1) << "Container '" << containerId << "' launch failed";
