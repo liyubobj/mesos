@@ -227,7 +227,8 @@ docker::Flags dockerFlags(
   const Flags& flags,
   const string& name,
   const string& directory,
-  const Option<map<string, string>>& taskEnvironment)
+  const Option<map<string, string>>& taskEnvironment,
+  const Option<string>& device)
 {
   docker::Flags dockerFlags;
   dockerFlags.container = name;
@@ -243,6 +244,9 @@ docker::Flags dockerFlags(
 
   // TODO(alexr): Remove this after the deprecation cycle (started in 1.0).
   dockerFlags.stop_timeout = flags.docker_stop_timeout;
+
+  // Exposed devices to this docker container.
+  dockerFlags.device = device;
 
   return dockerFlags;
 }
@@ -351,6 +355,7 @@ DockerContainerizerProcess::Container::create(
       flags,
       Container::name(slaveId, stringify(id)),
       containerWorkdir,
+      None(),
       None());
 
     // Override the command with the docker command executor.
@@ -1416,7 +1421,8 @@ Future<pid_t> DockerContainerizerProcess::launchExecutorProcess(
         flags,
         container->name(),
         container->directory,
-        container->taskEnvironment);
+        container->taskEnvironment,
+        nvidiaGpus);
 
     VLOG(1) << "Launching 'mesos-docker-executor' with flags '"
             << launchFlags << "'";
