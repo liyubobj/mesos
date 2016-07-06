@@ -158,19 +158,14 @@ public:
       dockerDevices = vector<Docker::Device> ();
       vector<string> deviceList = strings::split(device, ",");
       foreach(const string &dev, deviceList) {
-        vector<string> deviceInfo = strings::split(dev, ":");
-        if (deviceInfo.size() != 3) {
-          cerr << "Data format error for --device, \
-            PathInHost:PathInContainer:Permission expected." << endl;
-          return;
+        Docker::Device deviceInfo;
+        if(deviceInfo.parse(dev)) {
+          dockerDevices.get().push_back(deviceInfo);
         }
-        Docker::Device deviceExposed;
-        deviceExposed.hostPath = Path(deviceInfo[0]);
-        deviceExposed.containerPath = Path(deviceInfo[1]);
-        deviceExposed.access.read = strings::contains(deviceInfo[2], "r");
-        deviceExposed.access.write = strings::contains(deviceInfo[2], "w");
-        deviceExposed.access.mknod = strings::contains(deviceInfo[2], "m");
-        dockerDevices.get().push_back(deviceExposed);
+        else {
+          LOG(INFO) << "Parse device error: " << dev \
+                    << ", skip this device.";
+        }
       }
     }
 
