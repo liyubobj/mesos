@@ -98,6 +98,7 @@ using ::testing::Invoke;
 using ::testing::Return;
 
 using mesos::internal::slave::NvidiaGpuAllocator;
+using mesos::internal::slave::NvidiaVolume;
 
 namespace mesos {
 namespace internal {
@@ -1490,7 +1491,7 @@ public:
           const std::string&,
           const Option<mesos::Resources>&,
           const Option<std::map<std::string, std::string>>&,
-          const Option<std::vector<Device>>&,
+          const DockerDevices& dockerDevices,
           const process::Subprocess::IO&,
           const process::Subprocess::IO&));
 
@@ -1527,7 +1528,7 @@ public:
       const std::string& mappedDirectory,
       const Option<mesos::Resources>& resources,
       const Option<std::map<std::string, std::string>>& env,
-      const Option<std::vector<Device>>& devices,
+      const DockerDevices& dockerDevices,
       const process::Subprocess::IO& stdout,
       const process::Subprocess::IO& stderr) const
   {
@@ -1539,7 +1540,7 @@ public:
         mappedDirectory,
         resources,
         env,
-        devices,
+        dockerDevices,
         stdout,
         stderr);
   }
@@ -1584,7 +1585,8 @@ public:
       slave::Fetcher* fetcher,
       const process::Owned<mesos::slave::ContainerLogger>& logger,
       process::Shared<Docker> docker,
-      const Option<NvidiaGpuAllocator>& allocator = None());
+      const Option<NvidiaGpuAllocator>& allocator = None(),
+      const Option<NvidiaVolume>& volume = None());
 
   MockDockerContainerizer(
       const process::Owned<slave::DockerContainerizerProcess>& process);
@@ -1698,7 +1700,8 @@ public:
       slave::Fetcher* fetcher,
       const process::Owned<mesos::slave::ContainerLogger>& logger,
       const process::Shared<Docker>& docker,
-      const Option<NvidiaGpuAllocator>& allocator = None());
+      const Option<NvidiaGpuAllocator>& allocator = None(),
+      const Option<NvidiaVolume>& volume = None());
 
   virtual ~MockDockerContainerizerProcess();
 

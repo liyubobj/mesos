@@ -78,9 +78,16 @@ struct Flags : public mesos::internal::logging::Flags
     add(&device,
         "device",
         "Devices exposed to the docker container, multiple devices use comma\n"
-        "to seperated. The format follows --devices flag of docker run,\n"
+        "to seperate. The format follows --devices flag of docker run,\n"
         "for each device likes PathInHost:PathInContainer:Permission.\n"
         "For example, /dev/tty:/dev/tty:mrw for /dev/tty fully exposed.");
+
+    add(&volume,
+        "volume",
+        "Volumes injected to the docker container, multiple volumes use\n"
+        "comma to seperate. The format follows --volume flag of docker run,\n"
+        "for each volume likes PathInHost:PathInContainer:Permission.\n"
+        "For example, /host/volume:/container/volume:rw.");
   }
 
   Option<std::string> container;
@@ -91,6 +98,7 @@ struct Flags : public mesos::internal::logging::Flags
   Option<std::string> launcher_dir;
   Option<std::string> task_environment;
   Option<std::string> device;
+  Option<std::string> volume;
 
   // TODO(alexr): Remove this after the deprecation cycle (started in 1.0).
   Option<Duration> stop_timeout;

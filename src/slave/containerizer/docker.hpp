@@ -69,7 +69,8 @@ public:
       Fetcher* fetcher,
       const process::Owned<mesos::slave::ContainerLogger>& logger,
       process::Shared<Docker> docker,
-      const Option<NvidiaGpuAllocator>& allocator = None());
+      const Option<NvidiaGpuAllocator>& allocator = None(),
+      const Option<NvidiaVolume>& volume = None());
 
   // This is only public for tests.
   DockerContainerizer(
@@ -128,12 +129,14 @@ public:
       Fetcher* _fetcher,
       const process::Owned<mesos::slave::ContainerLogger>& _logger,
       process::Shared<Docker> _docker,
-      const Option<NvidiaGpuAllocator>& _allocator)
+      const Option<NvidiaGpuAllocator>& _allocator,
+      const Option<NvidiaVolume>& _volume)
     : flags(_flags),
       fetcher(_fetcher),
       logger(_logger),
       docker(_docker),
-      allocator(_allocator) {}
+      allocator(_allocator),
+      volume(_volume) {}
 
   virtual process::Future<Nothing> recover(
       const Option<state::SlaveState>& state);
@@ -275,6 +278,8 @@ private:
   process::Shared<Docker> docker;
 
   Option<NvidiaGpuAllocator> allocator;
+
+  Option<NvidiaVolume> volume;
 
   struct Container
   {

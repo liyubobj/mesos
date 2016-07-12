@@ -763,11 +763,13 @@ TEST_F(NvidiaGpuDockerContainerizerTest, ROOT_DOCKER_LaunchWithGpu)
 
   Try<NvidiaGpuAllocator> allocator =
     NvidiaGpuAllocator::create(flags, resources.get());
-
   ASSERT_SOME(allocator);
 
   // Make sure GPU number > 1 for following tests.
   ASSERT_NE(0u, allocator.get().total().size());
+
+  Try<NvidiaVolume> volume = NvidiaVolume::create();
+  ASSERT_SOME(volume);
 
   Fetcher fetcher;
 
@@ -781,7 +783,8 @@ TEST_F(NvidiaGpuDockerContainerizerTest, ROOT_DOCKER_LaunchWithGpu)
       &fetcher,
       Owned<ContainerLogger>(logger.get()),
       docker,
-      allocator.get());
+      allocator.get(),
+      volume.get());
 
   Owned<MasterDetector> detector = master.get()->createDetector();
 

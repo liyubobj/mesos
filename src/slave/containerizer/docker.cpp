@@ -173,15 +173,15 @@ Try<DockerContainerizer*> DockerContainerizer::create(
         fetcher,
         Owned<ContainerLogger>(logger.get()),
         docker,
-        nvidia.get().allocator);
+        nvidia.get().allocator,
+        nvidia.get().volume);
   }
   else {
     return new DockerContainerizer(
         flags,
         fetcher,
         Owned<ContainerLogger>(logger.get()),
-        docker,
-        None());
+        docker);
   }
 }
 
@@ -199,13 +199,15 @@ DockerContainerizer::DockerContainerizer(
     Fetcher* fetcher,
     const Owned<ContainerLogger>& logger,
     Shared<Docker> docker,
-    const Option<NvidiaGpuAllocator>& allocator)
+    const Option<NvidiaGpuAllocator>& allocator,
+    const Option<NvidiaVolume>& volume)
   : process(new DockerContainerizerProcess(
       flags,
       fetcher,
       logger,
       docker,
-      allocator))
+      allocator,
+      volume))
 {
   spawn(process.get());
 }
@@ -228,7 +230,8 @@ docker::Flags dockerFlags(
   const string& name,
   const string& directory,
   const Option<map<string, string>>& taskEnvironment,
-  const Option<string>& device)
+  const Option<string>& device,
+  const Option<string>& volume)
 {
   docker::Flags dockerFlags;
   dockerFlags.container = name;
@@ -247,6 +250,9 @@ docker::Flags dockerFlags(
 
   // Exposed devices to this docker container.
   dockerFlags.device = device;
+
+  // Volumes injected to this docker container.
+  dockerFlags.volume = volume;
 
   return dockerFlags;
 }
@@ -356,7 +362,9 @@ DockerContainerizerProcess::Container::create(
       Container::name(slaveId, stringify(id)),
       containerWorkdir,
       None(),
-      None());
+      None(),  // No extra devices
+      None()   // No extra volumes
+    );
 
     // Override the command with the docker command executor.
     CommandInfo newCommandInfo;
@@ -1241,7 +1249,7 @@ Future<Docker::Container> DockerContainerizerProcess::launchExecutorContainer(
     // Start the executor in a Docker container.
     // This executor could either be a custom executor specified by an
     // ExecutorInfo, or the docker executor.
-    // Do not expose devices to executor.
+    // Do not expose devices and inject volumes to executor.
     Future<Option<int>> run = docker->run(
         container->container,
         container->command,
@@ -1250,7 +1258,7 @@ Future<Docker::Container> DockerContainerizerProcess::launchExecutorContainer(
         flags.sandbox_directory,
         container->resources,
         container->environment,
-        None(), // No extra devices.
+        Docker::DockerDevices(), // No extra devices and volumes.
         subprocessInfo.out,
         subprocessInfo.err);
 
@@ -1310,6 +1318,7 @@ Future<pid_t> DockerContainerizerProcess::launchExecutorProcess(
   // Allocate GPUs according to task resources.
   const Option<TaskInfo>& taskInfo = container->task;
   Option<string> nvidiaGpus;
+  Option<string> nvidiaVolume;
 
   if (!taskInfo.isSome()) {
     return Failure("No task information found");
@@ -1322,15 +1331,19 @@ Future<pid_t> DockerContainerizerProcess::launchExecutorProcess(
   }
   size_t requested = static_cast<size_t>(gpus.getOrElse(0.0));
 
-  if (!allocator.isSome() && requested > 0) {
-    return Failure("Can not request GPUs without enabling GPU support");
-  }
-
   // No GPU requested.
   if (requested == 0) {
     nvidiaGpus = None();
+    nvidiaVolume = None();
   }
   else {
+    if (!allocator.isSome()) {
+      return Failure("Can not request GPUs without enabling GPU support");
+    }
+
+    if (!volume.isSome()) {
+      return Failure("Can not load GPU driver volume.");
+    }
     // Some GPUs requested.
     // We block the code until the GPU allocation finished.
     // For docker containerizer, we must wait for GPUs allocated
@@ -1363,6 +1376,15 @@ Future<pid_t> DockerContainerizerProcess::launchExecutorProcess(
       container->gpuAllocated.push_back(gpu);
     }
     nvidiaGpus = strings::join(",", argv);
+
+    // TODO(Yubo): Inject GPU driver volume. In current we inject the volume
+    // when "gpus" requested, but should be revised to depend on the docker
+    // image label "com.nvidia.volumes.needed": "nvidia_driver".
+    nvidiaVolume = Docker::Volume(
+                   volume.get().HOST_PATH(),
+                   volume.get().CONTAINER_PATH(),
+                   false
+                   ).serialize();
   }
 
   // Prepare environment variables for the executor.
@@ -1425,7 +1447,8 @@ Future<pid_t> DockerContainerizerProcess::launchExecutorProcess(
         container->name(),
         container->directory,
         container->taskEnvironment,
-        nvidiaGpus);
+        nvidiaGpus,
+        nvidiaVolume);
 
     VLOG(1) << "Launching 'mesos-docker-executor' with flags '"
             << launchFlags << "'";

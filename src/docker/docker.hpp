@@ -106,6 +106,69 @@ public:
     }
   };
 
+  struct Volume
+  {
+    Path hostPath;
+    Path containerPath;
+
+    // Docker Volume has two access permission, "ro" (read-only) and
+    // "wr" (read-write). Only the write permission need to be controlled.
+    struct Access
+    {
+      Access() : write(false) {}
+
+      bool write;
+    } access;
+
+    Volume() {}
+
+    Volume(std::string host,
+           std::string container,
+           bool write)
+    {
+      hostPath = Path(host);
+      containerPath = Path(container);
+      access.write = write;
+    }
+
+    std::string serialize() const {
+      std::string permissions;
+      permissions = access.write ? "rw" : "ro";
+      return hostPath.string() + ":" + containerPath.string()
+        + ":" + permissions;
+    }
+
+    bool parse(const std::string& volume) {
+      std::vector<std::string> volumeInfo = strings::split(volume, ":");
+
+      if (volumeInfo.size() != 3) {
+        LOG(INFO) << "Parse volume information error, \
+          PathInHost:PathInContainer:Permission expected.";
+        return false;
+      };
+      hostPath = Path(volumeInfo[0]);
+      containerPath = Path(volumeInfo[1]);
+      access.write = strings::contains(volumeInfo[2], "w");
+      return true;
+    }
+  };
+
+  class DockerDevices
+  {
+  public:
+    // Devices exposed to docker container.
+    Option<std::vector<Device>> devices;
+
+    // Volumes injected to docker container.
+    Option<std::vector<Volume>> volumes;
+
+    DockerDevices(
+        const Option<std::vector<Device>> devices = None(),
+        const Option<std::vector<Volume>> volumes = None())
+      : devices(devices),
+        volumes(volumes) {}
+  };
+
   class Container
   {
   public:
@@ -188,7 +251,7 @@ public:
       const std::string& mappedDirectory,
       const Option<mesos::Resources>& resources = None(),
       const Option<std::map<std::string, std::string>>& env = None(),
-      const Option<std::vector<Device>>& devices = None(),
+      const DockerDevices& dockerDevices = DockerDevices(),
       const process::Subprocess::IO& _stdout =
         process::Subprocess::FD(STDOUT_FILENO),
       const process::Subprocess::IO& _stderr =

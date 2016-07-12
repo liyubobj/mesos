@@ -670,8 +670,10 @@ MockDockerContainerizer::MockDockerContainerizer(
     slave::Fetcher* fetcher,
     const process::Owned<ContainerLogger>& logger,
     process::Shared<Docker> docker,
-    const Option<NvidiaGpuAllocator>& allocator)
-  : slave::DockerContainerizer(flags, fetcher, logger, docker, allocator)
+    const Option<NvidiaGpuAllocator>& allocator,
+    const Option<NvidiaVolume>& volume)
+  : slave::DockerContainerizer(
+           flags, fetcher, logger, docker, allocator, volume)
 {
   initialize();
 }
@@ -693,8 +695,10 @@ MockDockerContainerizerProcess::MockDockerContainerizerProcess(
     slave::Fetcher* fetcher,
     const process::Owned<ContainerLogger>& logger,
     const process::Shared<Docker>& docker,
-    const Option<NvidiaGpuAllocator>& allocator)
-  : slave::DockerContainerizerProcess(flags, fetcher, logger, docker, allocator)
+    const Option<NvidiaGpuAllocator>& allocator,
+    const Option<NvidiaVolume>& volume)
+  : slave::DockerContainerizerProcess(
+           flags, fetcher, logger, docker, allocator, volume)
 {
   EXPECT_CALL(*this, fetch(_, _))
     .WillRepeatedly(Invoke(this, &MockDockerContainerizerProcess::_fetch));

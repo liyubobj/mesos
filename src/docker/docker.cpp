@@ -491,7 +491,7 @@ Future<Option<int>> Docker::run(
     const string& mappedDirectory,
     const Option<Resources>& resources,
     const Option<map<string, string>>& env,
-    const Option<vector<Device>>& devices,
+    const DockerDevices& dockerDevices,
     const process::Subprocess::IO& _stdout,
     const process::Subprocess::IO& _stderr) const
 {
@@ -552,7 +552,21 @@ Future<Option<int>> Docker::run(
   argv.push_back("-e");
   argv.push_back("MESOS_CONTAINER_NAME=" + name);
 
-  foreach (const Volume& volume, containerInfo.volumes()) {
+  // Injected volumes.
+  Option<vector<Volume>> volumes = dockerDevices.volumes;
+  if (volumes.isSome()) {
+    foreach (const Volume& volume, volumes.get()) {
+      if (!volume.hostPath.absolute()) {
+        return Failure("Volume path '" + volume.hostPath.string() + "'"
+                       " is not an absolute path");
+      }
+
+      argv.push_back("-v");
+      argv.push_back(volume.serialize());
+    }
+  }
+
+  foreach (const mesos::Volume& volume, containerInfo.volumes()) {
     string volumeConfig = volume.container_path();
 
     // TODO(gyliu513): Set `host_path` as source.
@@ -568,12 +582,12 @@ Future<Option<int>> Docker::run(
       }
 
       switch (volume.mode()) {
-        case Volume::RW: volumeConfig += ":rw"; break;
-        case Volume::RO: volumeConfig += ":ro"; break;
+        case mesos::Volume::RW: volumeConfig += ":rw"; break;
+        case mesos::Volume::RO: volumeConfig += ":ro"; break;
         default: return Failure("Unsupported volume mode");
       }
     } else if (volume.has_source()) {
-      if (volume.source().type() != Volume::Source::DOCKER_VOLUME) {
+      if (volume.source().type() != mesos::Volume::Source::DOCKER_VOLUME) {
         VLOG(1) << "Ignored volume type '" << volume.source().type()
                 << "' for container '" << name << "' as only "
                 << "'DOCKER_VOLUME' was supported by docker";
@@ -589,8 +603,8 @@ Future<Option<int>> Docker::run(
       }
 
       switch (volume.mode()) {
-        case Volume::RW: volumeConfig += ":rw"; break;
-        case Volume::RO: volumeConfig += ":ro"; break;
+        case mesos::Volume::RW: volumeConfig += ":rw"; break;
+        case mesos::Volume::RO: volumeConfig += ":ro"; break;
         default: return Failure("Unsupported volume mode");
       }
     } else {
@@ -707,6 +721,7 @@ Future<Option<int>> Docker::run(
     }
   }
 
+  Option<vector<Device>> devices = dockerDevices.devices;
   if (devices.isSome()) {
     foreach (const Device& device, devices.get()) {
       if (!device.hostPath.absolute()) {

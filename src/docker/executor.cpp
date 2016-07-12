@@ -83,7 +83,8 @@ public:
       const Duration& shutdownGracePeriod,
       const string& healthCheckDir,
       const map<string, string>& taskEnvironment,
-      const string& device)
+      const string& device,
+      const string& volume)
     : killed(false),
       killedByHealthCheck(false),
       terminated(false),
@@ -96,6 +97,7 @@ public:
       shutdownGracePeriod(shutdownGracePeriod),
       taskEnvironment(taskEnvironment),
       device(device),
+      volume(volume),
       stop(Nothing()),
       inspect(Nothing()) {}
 
@@ -153,14 +155,14 @@ public:
     CHECK(task.container().type() == ContainerInfo::DOCKER);
 
     // Pass exposed devices to docker executor.
-    Option<vector<Docker::Device>> dockerDevices = None();
+    Option<vector<Docker::Device>> devicesInjected = None();
     if (!device.empty()) {
-      dockerDevices = vector<Docker::Device> ();
+      devicesInjected = vector<Docker::Device> ();
       vector<string> deviceList = strings::split(device, ",");
       foreach(const string &dev, deviceList) {
         Docker::Device deviceInfo;
         if(deviceInfo.parse(dev)) {
-          dockerDevices.get().push_back(deviceInfo);
+          devicesInjected.get().push_back(deviceInfo);
         }
         else {
           LOG(INFO) << "Parse device error: " << dev \
@@ -169,6 +171,25 @@ public:
       }
     }
 
+    // Pass injected volumes to docker executor.
+    Option<vector<Docker::Volume>> volumesInjected = None();
+    if (!volume.empty()) {
+      volumesInjected = vector<Docker::Volume> ();
+      vector<string> volumeList = strings::split(volume, ",");
+      foreach(const string &vol, volumeList) {
+        Docker::Volume volumeInfo;
+        if(volumeInfo.parse(vol)) {
+          volumesInjected.get().push_back(volumeInfo);
+        }
+        else {
+          LOG(INFO) << "Parse volume error: " << vol \
+                    << ", skip this volume.";
+        }
+      }
+    }
+
+    Docker::DockerDevices dockerDevices =
+        Docker::DockerDevices(devicesInjected, volumesInjected);
     // We're adding task and executor resources to launch docker since
     // the DockerContainerizer updates the container cgroup limits
     // directly and it expects it to be the sum of both task and
@@ -587,6 +608,7 @@ private:
   Duration shutdownGracePeriod;
   map<string, string> taskEnvironment;
   string device;
+  string volume;
 
   Option<KillPolicy> killPolicy;
   Option<Future<Option<int>>> run;
@@ -609,7 +631,8 @@ public:
       const Duration& shutdownGracePeriod,
       const string& healthCheckDir,
       const map<string, string>& taskEnvironment,
-      const string& device)
+      const string& device,
+      const string& volume)
   {
     process = Owned<DockerExecutorProcess>(new DockerExecutorProcess(
         docker,
@@ -619,7 +642,8 @@ public:
         shutdownGracePeriod,
         healthCheckDir,
         taskEnvironment,
-        device));
+        device,
+        volume));
 
     spawn(process.get());
   }
@@ -819,6 +843,17 @@ int main(int argc, char** argv)
     device = flags.device.get();
   }
 
+  string volume;
+  if (flags.volume.isNone()) {
+    cout << "Missing option --volume, no volume injected." << endl;
+    volume = "";
+  }
+  else {
+    volume = flags.volume.get();
+  }
+
+
+
   // The 2nd argument for docker create is set to false so we skip
   // validation when creating a docker abstraction, as the slave
   // should have already validated docker.
@@ -840,7 +875,8 @@ int main(int argc, char** argv)
       shutdownGracePeriod,
       flags.launcher_dir.get(),
       taskEnvironment,
-      device);
+      device,
+      volume);
 
   mesos::MesosExecutorDriver driver(&executor);
   return driver.run() == mesos::DRIVER_STOPPED ? EXIT_SUCCESS : EXIT_FAILURE;

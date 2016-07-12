@@ -687,14 +687,11 @@ TEST_F(DockerTest, ROOT_DOCKER_NVIDIA_GPU_DeviceAllow)
   CommandInfo commandInfo;
   commandInfo.set_value("touch /dev/nvidiactl && touch /dev/null");
 
-  Docker::Device nvidiaCtl;
-  nvidiaCtl.hostPath = Path("/dev/nvidiactl");
-  nvidiaCtl.containerPath = Path("/dev/nvidiactl");
-  nvidiaCtl.access.read = true;
-  nvidiaCtl.access.write = true;
-  nvidiaCtl.access.mknod = true;
+  Docker::Device nvidiaCtl = Docker::Device(
+                             "/dev/nvidiactl", "/dev/nvidiactl", "mrw");
 
   vector<Docker::Device> devices = { nvidiaCtl };
+  Docker::DockerDevices dockerDevices = Docker::DockerDevices(devices, None());
 
   Future<Option<int>> status = docker->run(
       containerInfo,
@@ -704,7 +701,7 @@ TEST_F(DockerTest, ROOT_DOCKER_NVIDIA_GPU_DeviceAllow)
       "/mnt/mesos/sandbox",
       resources,
       None(),
-      devices);
+      dockerDevices);
 
   AWAIT_READY(status);
   ASSERT_SOME(status.get());
@@ -744,14 +741,11 @@ TEST_F(DockerTest, ROOT_DOCKER_NVIDIA_GPU_InspectDevices)
   CommandInfo commandInfo;
   commandInfo.set_value("touch /dev/nvidiactl && touch /dev/null && sleep 120");
 
-  Docker::Device nvidiaCtl;
-  nvidiaCtl.hostPath = Path("/dev/nvidiactl");
-  nvidiaCtl.containerPath = Path("/dev/nvidiactl");
-  nvidiaCtl.access.read = true;
-  nvidiaCtl.access.write = true;
-  nvidiaCtl.access.mknod = false;
+  Docker::Device nvidiaCtl = Docker::Device(
+                             "/dev/nvidiactl", "/dev/nvidiactl", "mrw");
 
   vector<Docker::Device> devices = { nvidiaCtl };
+  Docker::DockerDevices dockerDevices = Docker::DockerDevices(devices, None());
 
   Future<Option<int>> status = docker->run(
       containerInfo,
@@ -761,7 +755,7 @@ TEST_F(DockerTest, ROOT_DOCKER_NVIDIA_GPU_InspectDevices)
       "/mnt/mesos/sandbox",
       resources,
       None(),
-      devices);
+      dockerDevices);
 
   Future<Docker::Container> container =
     docker->inspect(containerName, Milliseconds(1));
