@@ -17,6 +17,12 @@
 #ifndef __DOCKER_CONTAINERIZER_HPP__
 #define __DOCKER_CONTAINERIZER_HPP__
 
+#include <list>
+#include <map>
+#include <set>
+#include <string>
+#include <vector>
+
 #include <mesos/slave/container_logger.hpp>
 
 #include <process/owned.hpp>
@@ -68,7 +74,8 @@ public:
       const Flags& flags,
       Fetcher* fetcher,
       const process::Owned<mesos::slave::ContainerLogger>& logger,
-      process::Shared<Docker> docker);
+      process::Shared<Docker> docker,
+      const Option<NvidiaGpuAllocator>& allocator = None());
 
   // This is only public for tests.
   DockerContainerizer(
@@ -126,11 +133,13 @@ public:
       const Flags& _flags,
       Fetcher* _fetcher,
       const process::Owned<mesos::slave::ContainerLogger>& _logger,
-      process::Shared<Docker> _docker)
+      process::Shared<Docker> _docker,
+      const Option<NvidiaGpuAllocator>& _allocator)
     : flags(_flags),
       fetcher(_fetcher),
       logger(_logger),
-      docker(_docker) {}
+      docker(_docker),
+      allocator(_allocator) {}
 
   virtual process::Future<Nothing> recover(
       const Option<state::SlaveState>& state);
@@ -270,6 +279,8 @@ private:
   process::Owned<mesos::slave::ContainerLogger> logger;
 
   process::Shared<Docker> docker;
+
+  Option<NvidiaGpuAllocator> allocator;
 
   struct Container
   {

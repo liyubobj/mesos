@@ -16,6 +16,7 @@
 
 #include <list>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -63,6 +64,7 @@
 
 using std::list;
 using std::map;
+using std::set;
 using std::string;
 using std::vector;
 
@@ -166,6 +168,15 @@ Try<DockerContainerizer*> DockerContainerizer::create(
   // TODO(tnachen): We should also mark the work directory as shared
   // mount here, more details please refer to MESOS-3483.
 
+  if (nvidia.isSome()) {
+    return new DockerContainerizer(
+        flags,
+        fetcher,
+        Owned<ContainerLogger>(logger.get()),
+        docker,
+        nvidia->allocator);
+  }
+
   return new DockerContainerizer(
       flags,
       fetcher,
@@ -186,12 +197,14 @@ DockerContainerizer::DockerContainerizer(
     const Flags& flags,
     Fetcher* fetcher,
     const Owned<ContainerLogger>& logger,
-    Shared<Docker> docker)
+    Shared<Docker> docker,
+    const Option<NvidiaGpuAllocator>& allocator)
   : process(new DockerContainerizerProcess(
       flags,
       fetcher,
       logger,
-      docker))
+      docker,
+      allocator))
 {
   spawn(process.get());
 }
@@ -1285,6 +1298,32 @@ Future<pid_t> DockerContainerizerProcess::launchExecutorProcess(
 
   Container* container = containers_[containerId];
   container->state = Container::RUNNING;
+
+  // Allocate GPUs according to task resources.
+  const Option<TaskInfo>& taskInfo = container->task;
+  if (!taskInfo.isSome()) {
+    return Failure("No task information found");
+  }
+
+  const Resources& resources = taskInfo->resources();
+
+  Option<double> gpus = resources.gpus();
+
+  // Make sure that the `gpus` resource is not fractional.
+  // We rely on scala resources only have 3 digits of precision.
+  if (static_cast<long long>(gpus.getOrElse(0.0) * 1000.0) % 1000 != 0) {
+    return Failure("The 'gpus' resource must be an unsigned integer");
+  }
+
+  size_t requested = static_cast<size_t>(gpus.getOrElse(0.0));
+
+  if (requested > 0) {
+    if (!allocator.isSome()) {
+      return Failure("Can not request GPUs without enabling GPU support");
+    }
+
+    // TODO(Yubo): allocate requested GPUs through `NvidiaGpuAllocator`.
+  }
 
   // Prepare environment variables for the executor.
   map<string, string> environment = container->environment;
