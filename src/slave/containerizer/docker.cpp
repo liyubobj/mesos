@@ -244,8 +244,8 @@ docker::Flags dockerFlags(
   // TODO(alexr): Remove this after the deprecation cycle (started in 1.0).
   dockerFlags.stop_timeout = flags.docker_stop_timeout;
 
-  // TODO(Yubo): Expose device through dockerFlags after device control
-  // feature supported by `mesos-docker-executor`.
+  // Exposed devices to this docker container.
+  dockerFlags.device = device;
 
   return dockerFlags;
 }

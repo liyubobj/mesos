@@ -74,6 +74,13 @@ struct Flags : public mesos::internal::logging::Flags
         "task_environment",
         "A JSON map of environment variables and values that should\n"
         "be passed into the task launched by this executor.");
+
+    add(&device,
+        "device",
+        "Devices exposed to the docker container, multiple devices use comma\n"
+        "to seperated. The format follows `--device` flag of docker run,\n"
+        "for each device likes `PathInHost:PathInContainer:Permission`.\n"
+        "For example, `/dev/tty:/dev/tty:mrw` for `/dev/tty` fully exposed.");
   }
 
   Option<std::string> container;
@@ -83,6 +90,7 @@ struct Flags : public mesos::internal::logging::Flags
   Option<std::string> mapped_directory;
   Option<std::string> launcher_dir;
   Option<std::string> task_environment;
+  Option<std::string> device;
 
   // TODO(alexr): Remove this after the deprecation cycle (started in 1.0).
   Option<Duration> stop_timeout;
