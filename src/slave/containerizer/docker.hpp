@@ -263,6 +263,11 @@ private:
       const ContainerID& containerId,
       const size_t count);
 
+  // Allocate a set of GPU resources for a specified container.
+  process::Future<Nothing> allocateNvidiaGpus(
+      const ContainerID& containerId,
+      const std::set<Gpu>& gpus);
+
   process::Future<Nothing> _allocateNvidiaGpus(
       const ContainerID& containerId,
       const std::set<Gpu>& allocated);
@@ -274,6 +279,11 @@ private:
   process::Future<Nothing> _deallocateNvidiaGpus(
       const ContainerID& containerId,
       const std::set<Gpu>& deallocated);
+
+  // Recover nvidia devices during docker recovery.
+  process::Future<Nothing> recoverNvidiaDevices(
+      const ContainerID& containerId,
+      const std::string& containerName);
 #endif // __linux__
 
   Try<ResourceStatistics> cgroupsStatistics(pid_t pid) const;

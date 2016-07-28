@@ -82,6 +82,9 @@ namespace mesos {
 namespace internal {
 namespace slave {
 
+static constexpr unsigned int NVIDIA_MAJOR_DEVICE = 195;
+
+
 // Declared in header, see explanation there.
 const string DOCKER_NAME_PREFIX = "mesos-";
 
@@ -677,6 +680,28 @@ Try<Nothing> DockerContainerizerProcess::unmountPersistentVolumes(
 #ifdef __linux__
 Future<Nothing> DockerContainerizerProcess::allocateNvidiaGpus(
     const ContainerID& containerId,
+    const set<Gpu>& gpus)
+{
+  if (!nvidia.isSome()) {
+    return Failure("Attempted to allocate GPUs"
+                   " without Nvidia libraries available");
+  }
+
+  if (!containers_.contains(containerId)) {
+    return Failure("Container is already destroyed");
+  }
+
+  return nvidia->allocator.allocate(gpus)
+    .then(defer(
+        self(),
+        &Self::_allocateNvidiaGpus,
+        containerId,
+        gpus));
+}
+
+
+Future<Nothing> DockerContainerizerProcess::allocateNvidiaGpus(
+    const ContainerID& containerId,
     const size_t count)
 {
   if (!nvidia.isSome()) {
@@ -766,6 +791,68 @@ Future<Nothing> DockerContainerizerProcess::_deallocateNvidiaGpus(
   }
 
   return Nothing();
+}
+
+
+process::Future<Nothing> DockerContainerizerProcess::recoverNvidiaDevices(
+    const ContainerID& containerId,
+    const string& containerName)
+{
+  // Invoke docker inspect on the recovered container.
+  return docker->inspect(containerName, slave::DOCKER_INSPECT_DELAY)
+    .then(defer(self(), [this, containerId](
+        const Docker::Container& container)-> Future<Nothing> {
+      if (container.devices.empty()) {
+        return Nothing();
+      }
+
+      // If the devices vector is not empty.
+      // Look for nvidia device in the vector of devices. Get the GPU device
+      // numbers from the vector of devices used by the container.
+      const string nvidiaDevicePrefix = "/dev/nvidia";
+      set<Gpu> gpus;
+
+      foreach(const Docker::Device& device, container.devices) {
+        const string deviceString = device.hostPath.string();
+
+        if (strings::startsWith(deviceString, nvidiaDevicePrefix)) {
+          // If the device string is one of the control devices then
+          // we can skip to the next device until we find the GPU
+          // device(s) of the format /dev/nvidia<minor-number>.
+          if ((deviceString.compare("/dev/nvidiactl") == 0)
+              || (deviceString.compare("/dev/nvidia-uvm") == 0)
+              || (deviceString.compare("/dev/nvidia-uvm-tools") == 0)) {
+            continue;
+          }
+
+          // The string should be of the format /dev/nvidia<minor-number>.
+          // Pull out the Nvidia device minor number from the string.
+          const string minorNumberString = strings::remove(
+              deviceString, nvidiaDevicePrefix, strings::PREFIX);
+
+          // Numify the leftover string.
+          Try<unsigned int> minorNumber =
+            numify<unsigned int>(minorNumberString);
+          if (minorNumber.isError()) {
+            return Failure("Failed to get minor number from the device string");
+          }
+
+          // Use the minor number to account for the GPUs on recovery.
+          Gpu gpu;
+          gpu.major = NVIDIA_MAJOR_DEVICE;
+          gpu.minor = minorNumber.get();
+          gpus.insert(gpu);
+        }
+      }
+
+      if (!gpus.empty()) {
+        // Invoke allocator to account for the GPUs used by the
+        // recovered containers.
+        return allocateNvidiaGpus(containerId, gpus);
+      }
+
+      return Nothing();
+  }));
 }
 #endif // __linux__
 
@@ -896,6 +983,8 @@ Future<Nothing> DockerContainerizerProcess::_recover(
     const Option<SlaveState>& state,
     const list<Docker::Container>& _containers)
 {
+  list<Future<Nothing>> futures;
+
   if (state.isSome()) {
     // Although the slave checkpoints executor pids, before 0.23
     // docker containers without custom executors didn't record the
@@ -1026,12 +1115,23 @@ Future<Nothing> DockerContainerizerProcess::_recover(
             containerId);
 
         container->directory = sandboxDirectory;
+
+#ifdef __linux__
+        futures.push_back(
+            recoverNvidiaDevices(
+                containerId,
+                container->name()));
+#endif
       }
     }
   }
 
   if (flags.docker_kill_orphans) {
-    return __recover(_containers);
+    return await(futures)
+      .then(defer(
+          self(),
+          &Self::__recover,
+          _containers));
   }
 
   return Nothing();
