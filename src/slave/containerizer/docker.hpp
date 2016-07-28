@@ -197,6 +197,11 @@ private:
   process::Future<Nothing> __recover(
       const std::list<Docker::Container>& containers);
 
+  Option<std::set<std::string>> parseInspectDevices(
+      const std::string& inspect);
+
+  void recoverDevices(const std::string& containerName);
+
   // Starts the executor in a Docker container.
   process::Future<Docker::Container> launchExecutorContainer(
       const ContainerID& containerId,
