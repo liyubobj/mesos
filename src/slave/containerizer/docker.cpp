@@ -1010,6 +1010,7 @@ Future<Nothing> DockerContainerizerProcess::__recover(
     }));
 }
 
+
 void DockerContainerizerProcess::recoverDevices(
     const std::string& containerName)
 {
@@ -1017,15 +1018,15 @@ void DockerContainerizerProcess::recoverDevices(
     Future<Nothing> inspect =
       docker->inspect(containerName, slave::DOCKER_INSPECT_DELAY)
       .then(defer(self(), [=](const Docker::Container& container) {
-      // Get all the devices in the inspect output.
-      Option<set<string>> deviceInspect = parseInspectDevices(container.output);
-      if (deviceInspect.isSome()) {
+        // If the devices vector is not empty.
+        if (!container.devices.empty()) {
         // Look for NV devices in the list of devices. Get the GPU device
         // numbers from the list of devices used by the container.
         std::string nvDevicePrefix = "/dev/nvidia";
         Option<set<Gpu>> gpus = None();
 
-        foreach(const std::string& deviceString, deviceInspect.get()) {
+        foreach(const Docker::Device &device, container.devices) {
+          const std::string& deviceString = device.hostPath.string();
           if (strings::startsWith(deviceString, nvDevicePrefix)) {
             std::string leftOverString = deviceString.substr(
                     nvDevicePrefix.length(),
@@ -1059,45 +1060,6 @@ void DockerContainerizerProcess::recoverDevices(
 
       return Nothing();
     }));
-}
-
-Option<std::set<std::string>> DockerContainerizerProcess::parseInspectDevices(
-        const std::string& inspect) {
-    set<std::string> devices;
-    Try<JSON::Array> parse = JSON::parse<JSON::Array>(inspect);
-    if (parse.isError()) {
-      return None();
-    }
-
-    JSON::Array array = parse.get();
-    if (array.values.size() != 1) {
-      return None();
-    }
-
-    CHECK(array.values.front().is<JSON::Object>());
-    JSON::Object json = array.values.front().as<JSON::Object>();
-
-    Option<set < string>> hostDevices = set<string>();
-    Result<JSON::Array> deviceJson =
-      json.find<JSON::Array>("HostConfig.Devices");
-    if (deviceJson.isSome()) {
-      // Get elements in the array and push it to devices set.
-      const std::vector<JSON::Value> values = deviceJson.get().values;
-      if (values.size() != 0) {
-        foreach(const JSON::Value& value, values) {
-          if (value.is<JSON::Object>()) {
-            Result<JSON::String> devicePath =
-                    value.as<JSON::Object>().find<JSON::String>("PathOnHost");
-            if (devicePath.isSome()) {
-              // Push the device to the set.
-              hostDevices.get().insert(devicePath.get().value);
-            }
-          }
-        }
-      }
-    }
-
-    return hostDevices;
 }
 
 
