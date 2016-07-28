@@ -66,6 +66,44 @@ public:
       bool write;
       bool mknod;
     } access;
+
+    Device() {}
+
+    Device(std::string host,
+           std::string container,
+           std::string permissions)
+    {
+      hostPath = Path(host);
+      containerPath = Path(container);
+      access.read = strings::contains(permissions, "r");
+      access.write = strings::contains(permissions, "w");
+      access.mknod = strings::contains(permissions, "m");
+    }
+
+    std::string serialize() const {
+      std::string permissions;
+      permissions += access.read ? "r" : "";
+      permissions += access.write ? "w" : "";
+      permissions += access.mknod ? "m" : "";
+      return hostPath.string() + ":" + containerPath.string()
+        + ":" + permissions;
+    }
+
+    bool parse(const std::string& device) {
+      std::vector<std::string> deviceInfo = strings::split(device, ":");
+
+      if (deviceInfo.size() != 3) {
+        LOG(INFO) << "Parse device information error, \
+          PathInHost:PathInContainer:Permission expected.";
+        return false;
+      };
+      hostPath = Path(deviceInfo[0]);
+      containerPath = Path(deviceInfo[1]);
+      access.read = strings::contains(deviceInfo[2], "r");
+      access.write = strings::contains(deviceInfo[2], "w");
+      access.mknod = strings::contains(deviceInfo[2], "m");
+      return true;
+    }
   };
 
   class Container

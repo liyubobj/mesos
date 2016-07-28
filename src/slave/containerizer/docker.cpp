@@ -1343,20 +1343,23 @@ Future<pid_t> DockerContainerizerProcess::launchExecutorProcess(
     // TODO(Yubo): Nvidia devices are hard-coded here. Will move to Nvidia
     // specific modules so that all vendor specific data should be isolated
     // into seperated module.
-    string nvidiaCtl = "/dev/nvidiactl";
-    string nvidiaUvm = "/dev/nvidia-uvm";
     string nvidiaDataPrefix = "/dev/nvidia";
-    string permission = "mrw";
     vector<string> argv;
 
     // The GPU exposed format is DevHostPath:DevContainerPath:Permission.
     // Permission: m--make node  r--read  w--write.
-    argv.push_back(nvidiaCtl + ":" + nvidiaCtl + ":" + permission);
-    argv.push_back(nvidiaUvm + ":" + nvidiaUvm + ":" + permission);
+    Docker::Device nvidiaCtl = Docker::Device(
+                               "/dev/nvidiactl", "/dev/nvidiactl", "mrw");
+    argv.push_back(nvidiaCtl.serialize());
+    Docker::Device nvidiaUvm = Docker::Device(
+                               "/dev/nvidia-uvm", "/dev/nvidia-uvm", "mrw");
+    argv.push_back(nvidiaUvm.serialize());
     foreach (const Gpu& gpu, allocated.get()) {
-      string nvidiaData = nvidiaDataPrefix +
-        boost::lexical_cast<string>(gpu.minor);
-      argv.push_back(nvidiaData + ":" + nvidiaData + ":" + permission);
+      string nvidiaDataPath = nvidiaDataPrefix +
+                              boost::lexical_cast<string>(gpu.minor);
+      Docker::Device nvidiaData = Docker::Device(
+                                  nvidiaDataPath, nvidiaDataPath, "mrw");
+      argv.push_back(nvidiaData.serialize());
       container->gpuAllocated.push_back(gpu);
     }
     nvidiaGpus = strings::join(",", argv);

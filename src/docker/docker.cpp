@@ -386,12 +386,9 @@ Try<Docker::Container> Docker::Container::create(const string& output)
                      " '" + stringify(object) + "'");
       }
 
-      Device device;
-      device.hostPath = Path(hostPath->value);
-      device.containerPath = Path(containerPath->value);
-      device.access.read = strings::contains(permissions->value, "r");
-      device.access.write = strings::contains(permissions->value, "w");
-      device.access.mknod = strings::contains(permissions->value, "m");
+      Device device = Device(hostPath->value,
+                             containerPath->value,
+                             permissions->value);
 
       devices.push_back(device);
     }
@@ -747,14 +744,9 @@ Future<Option<int>> Docker::run(
                        " is not an absolute path");
       }
 
-      string permissions;
-      permissions += device.access.read ? "r" : "";
-      permissions += device.access.write ? "w" : "";
-      permissions += device.access.mknod ? "m" : "";
-
       // Docker doesn't handle this case (it fails by saying
       // that an absolute path is not being provided).
-      if (permissions.empty()) {
+      if (!device.access.read && !device.access.write && !device.access.mknod) {
         return Failure("At least one access required for --devices:"
                        " none specified for"
                        " '" + device.hostPath.string() + "'");
@@ -763,11 +755,8 @@ Future<Option<int>> Docker::run(
       // Note that docker silently does not handle default devices
       // passed in with restricted permissions (e.g. /dev/null), so
       // we don't bother checking this case either.
-
-      argv.push_back("--device=" +
-                     device.hostPath.string() + ":" +
-                     device.containerPath.string() + ":" +
-                     permissions);
+      argv.push_back("--device");
+      argv.push_back(device.serialize());
     }
   }
 
