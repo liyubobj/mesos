@@ -42,6 +42,7 @@
 
 #include "slave/containerizer/mesos/isolators/gpu/nvidia.hpp"
 
+#include "tests/flags.hpp"
 #include "tests/mesos.hpp"
 
 using mesos::internal::master::Master;
@@ -57,11 +58,15 @@ using mesos::internal::slave::Slave;
 
 using mesos::master::detector::MasterDetector;
 
-using process::Future;
-using process::Owned;
+using mesos::internal::slave::DockerContainerizer;
+using mesos::internal::slave::DockerContainerizerProcess;
+using mesos::slave::ContainerLogger;
+
+using namespace process;
 
 using std::set;
 using std::vector;
+using std::list;
 
 using testing::_;
 using testing::Eq;
@@ -72,7 +77,93 @@ namespace internal {
 namespace tests {
 
 class NvidiaGpuTest : public MesosTest {};
+class NvidiaGpuAllocatorTest : public MesosTest {};
+class NvidiaGpuDockerContainerizerTest: public MesosTest
+{
+public:
+  static string containerName(
+      const SlaveID& slaveId,
+      const ContainerID& containerId)
+  {
+    return slave::DOCKER_NAME_PREFIX + slaveId.value() +
+      slave::DOCKER_NAME_SEPERATOR + containerId.value();
+  }
 
+  enum ContainerState
+  {
+    EXISTS,
+    RUNNING
+  };
+
+  static bool exists(
+      const process::Shared<Docker>& docker,
+      const SlaveID& slaveId,
+      const ContainerID& containerId,
+      ContainerState state = ContainerState::EXISTS)
+  {
+    Duration waited = Duration::zero();
+    string expectedName = containerName(slaveId, containerId);
+
+    do {
+      Future<Docker::Container> inspect = docker->inspect(expectedName);
+
+      if (!inspect.await(Seconds(3))) {
+        return false;
+      }
+
+      if (inspect.isReady()) {
+        switch (state) {
+          case ContainerState::RUNNING:
+            if (inspect.get().pid.isSome()) {
+              return true;
+            }
+            // Retry looking for running pid until timeout.
+            break;
+          case ContainerState::EXISTS:
+            return true;
+        }
+      }
+
+      os::sleep(Milliseconds(200));
+      waited += Milliseconds(200);
+    } while (waited < Seconds(5));
+
+    return false;
+  }
+
+  static bool containsLine(
+    const vector<string>& lines,
+    const string& expectedLine)
+  {
+    foreach (const string& line, lines) {
+      if (line == expectedLine) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  virtual void TearDown()
+  {
+    Try<Owned<Docker>> docker = Docker::create(
+        tests::flags.docker,
+        tests::flags.docker_socket,
+        false);
+
+    ASSERT_SOME(docker);
+
+    Future<list<Docker::Container>> containers =
+      docker.get()->ps(true, slave::DOCKER_NAME_PREFIX);
+
+    AWAIT_READY(containers);
+
+    // Cleanup all mesos launched containers.
+    foreach (const Docker::Container& container, containers.get()) {
+      AWAIT_READY_FOR(docker.get()->rm(container.id, true), Seconds(30));
+    }
+  }
+};
 
 // This test verifies that we are able to enable the Nvidia GPU
 // isolator and launch tasks with restricted access to GPUs. We
@@ -645,6 +736,205 @@ TEST_F(NvidiaGpuTest, NVIDIA_GPU_VolumeShouldInject)
   ASSERT_SOME(volume);
 
   ASSERT_FALSE(volume->shouldInject(manifest.get()));
+}
+
+
+// Nvidia GPU provision test with docker containerizer.
+TEST_F(NvidiaGpuDockerContainerizerTest, ROOT_DOCKER_LaunchWithGpu)
+{
+  ASSERT_TRUE(nvml::isAvailable());
+  ASSERT_SOME(nvml::initialize());
+
+  Try<Owned<cluster::Master>> master = StartMaster();
+  ASSERT_SOME(master);
+
+  MockDocker* mockDocker =
+    new MockDocker(tests::flags.docker, tests::flags.docker_socket);
+
+  Shared<Docker> docker(mockDocker);
+
+  slave::Flags flags = CreateSlaveFlags();
+  flags.resources = "gpus:1";
+  flags.isolation = "cgroups/devices,gpu/nvidia";
+  flags.nvidia_gpu_devices = vector<unsigned int>({0u});
+
+  Try<Resources> resources = NvidiaGpuAllocator::resources(flags);
+  ASSERT_SOME(resources);
+
+  Try<NvidiaGpuAllocator> allocator =
+    NvidiaGpuAllocator::create(flags, resources.get());
+
+  ASSERT_SOME(allocator);
+
+  // Make sure GPU number > 1 for following tests.
+  ASSERT_NE(0u, allocator.get().total().size());
+
+  Fetcher fetcher;
+
+  Try<ContainerLogger*> logger =
+    ContainerLogger::create(flags.container_logger);
+
+  ASSERT_SOME(logger);
+
+  MockDockerContainerizer dockerContainerizer(
+      flags,
+      &fetcher,
+      Owned<ContainerLogger>(logger.get()),
+      docker,
+      allocator.get());
+
+  Owned<MasterDetector> detector = master.get()->createDetector();
+
+  Try<Owned<cluster::Slave>> slave =
+    StartSlave(detector.get(), &dockerContainerizer, flags);
+  ASSERT_SOME(slave);
+
+  MockScheduler sched;
+
+  FrameworkInfo frameworkInfo = DEFAULT_FRAMEWORK_INFO;
+  frameworkInfo.add_capabilities()->set_type(
+      FrameworkInfo::Capability::GPU_RESOURCES);
+
+  MesosSchedulerDriver driver(
+      &sched, frameworkInfo, master.get()->pid, DEFAULT_CREDENTIAL);
+
+  Future<FrameworkID> frameworkId;
+  EXPECT_CALL(sched, registered(&driver, _, _))
+    .WillOnce(FutureArg<1>(&frameworkId));
+
+  Future<vector<Offer> > offers;
+  EXPECT_CALL(sched, resourceOffers(&driver, _))
+    .WillOnce(FutureArg<1>(&offers))
+    .WillRepeatedly(Return()); // Ignore subsequent offers.
+
+  driver.start();
+
+  AWAIT_READY(frameworkId);
+
+  AWAIT_READY(offers);
+  ASSERT_NE(0u, offers.get().size());
+
+  const Offer& offer = offers.get()[0];
+
+  SlaveID slaveId = offer.slave_id();
+
+  TaskInfo task;
+  task.set_name("");
+  task.mutable_task_id()->set_value("1");
+  task.mutable_slave_id()->CopyFrom(offer.slave_id());
+  task.mutable_resources()->CopyFrom(offer.resources());
+
+  CommandInfo command;
+  command.set_value("sleep 1000");
+
+  ContainerInfo containerInfo;
+  containerInfo.set_type(ContainerInfo::DOCKER);
+
+  // TODO(tnachen): Use local image to test if possible.
+  ContainerInfo::DockerInfo dockerInfo;
+  dockerInfo.set_image("alpine");
+  containerInfo.mutable_docker()->CopyFrom(dockerInfo);
+
+  task.mutable_command()->CopyFrom(command);
+  task.mutable_container()->CopyFrom(containerInfo);
+
+  Future<ContainerID> containerId;
+  EXPECT_CALL(dockerContainerizer, launch(_, _, _, _, _, _, _, _))
+    .WillOnce(DoAll(FutureArg<0>(&containerId),
+                    Invoke(&dockerContainerizer,
+                           &MockDockerContainerizer::_launch)));
+
+  Future<TaskStatus> statusRunning;
+  EXPECT_CALL(sched, statusUpdate(&driver, _))
+    .WillOnce(FutureArg<1>(&statusRunning))
+    .WillRepeatedly(DoDefault());
+
+  driver.launchTasks(offers.get()[0].id(), {task});
+
+  AWAIT_READY_FOR(containerId, Seconds(60));
+  AWAIT_READY_FOR(statusRunning, Seconds(60));
+  EXPECT_EQ(TASK_RUNNING, statusRunning.get().state());
+  ASSERT_TRUE(statusRunning.get().has_data());
+
+  Try<JSON::Array> array = JSON::parse<JSON::Array>(statusRunning.get().data());
+  ASSERT_SOME(array);
+
+  // Check if container information is exposed through master's state endpoint.
+  Future<http::Response> response = http::get(
+      master.get()->pid,
+      "state",
+      None(),
+      createBasicAuthHeaders(DEFAULT_CREDENTIAL));
+
+  AWAIT_EXPECT_RESPONSE_STATUS_EQ(process::http::OK().status, response);
+
+  Try<JSON::Object> parse = JSON::parse<JSON::Object>(response.get().body);
+  ASSERT_SOME(parse);
+
+  Result<JSON::Value> find = parse.get().find<JSON::Value>(
+      "frameworks[0].tasks[0].container.docker.privileged");
+
+  EXPECT_SOME_FALSE(find);
+
+  // Check if container information is exposed through slave's state endpoint.
+  response = http::get(
+      slave.get()->pid,
+      "state",
+      None(),
+      createBasicAuthHeaders(DEFAULT_CREDENTIAL));
+
+  AWAIT_EXPECT_RESPONSE_STATUS_EQ(process::http::OK().status, response);
+
+  parse = JSON::parse<JSON::Object>(response.get().body);
+  ASSERT_SOME(parse);
+
+  find = parse.get().find<JSON::Value>(
+      "frameworks[0].executors[0].tasks[0].container.docker.privileged");
+
+  EXPECT_SOME_FALSE(find);
+
+  // Now verify that the TaskStatus contains the container IP address.
+  ASSERT_TRUE(statusRunning.get().has_container_status());
+  EXPECT_EQ(1, statusRunning.get().container_status().network_infos().size());
+  EXPECT_EQ(1, statusRunning.get().container_status().network_infos(0).ip_addresses().size()); // NOLINT(whitespace/line_length)
+
+  ASSERT_TRUE(exists(docker, slaveId, containerId.get()));
+
+  // Now verify that GPU0 is exposed to container.
+  string name = containerName(slaveId, containerId.get());
+  Future<Docker::Container> inspect = docker->inspect(name);
+
+  AWAIT_READY(inspect);
+
+  // Get allocated GPU from allocator. We assume that the allocator
+  // allocated the first GPU to the container.
+  unsigned int minor = allocator.get().total().begin()->minor;
+
+  // Check if Nvidia GPU devices are successfully exposed.
+  EXPECT_EQ(3u, inspect->devices.size());
+  vector<Path> devPaths;
+  devPaths.push_back(Path("/dev/nvidiactl"));
+  devPaths.push_back(Path("/dev/nvidia-uvm"));
+  devPaths.push_back(Path("/dev/nvidia" + stringify(minor)));
+
+  for(unsigned int i = 0; i< devPaths.size(); i++) {
+    EXPECT_EQ(devPaths[i], inspect->devices[i].hostPath);
+    EXPECT_EQ(devPaths[i], inspect->devices[i].containerPath);
+    EXPECT_EQ(true, inspect->devices[i].access.read);
+    EXPECT_EQ(true, inspect->devices[i].access.write);
+    EXPECT_EQ(true, inspect->devices[i].access.mknod);
+  }
+
+  Future<containerizer::Termination> termination =
+    dockerContainerizer.wait(containerId.get());
+
+  driver.stop();
+  driver.join();
+
+  AWAIT_READY(termination);
+
+  ASSERT_FALSE(
+    exists(docker, slaveId, containerId.get(), ContainerState::RUNNING));
 }
 
 } // namespace tests {
