@@ -3952,6 +3952,163 @@ TEST_F(DockerContainerizerTest, ROOT_NVIDIA_GPU_DOCKER_Launch)
     exists(docker, slaveId, containerId.get(), ContainerState::RUNNING));
 }
 
+
+// This test checks the docker containerizer is able to allocate the GPUs
+// used by the recovered containers.
+TEST_F(DockerContainerizerTest, ROOT_NVIDIA_GPU_DOCKER_LaunchWithGpuRecovery)
+{
+  ASSERT_TRUE(nvml::isAvailable());
+  ASSERT_SOME(nvml::initialize());
+
+  Try<Owned<cluster::Master>> master = StartMaster();
+  ASSERT_SOME(master);
+
+  MockDocker* mockDocker =
+    new MockDocker(tests::flags.docker, tests::flags.docker_socket);
+
+  Shared<Docker> docker(mockDocker);
+
+  slave::Flags flags = CreateSlaveFlags();
+  flags.resources = "gpus:1";
+  flags.isolation = "cgroups/devices,gpu/nvidia";
+  flags.nvidia_gpu_devices = vector<unsigned int>({0u});
+
+  Try<Resources> resources = NvidiaGpuAllocator::resources(flags);
+  ASSERT_SOME(resources);
+
+  Try<NvidiaGpuAllocator> allocator =
+    NvidiaGpuAllocator::create(flags, resources.get());
+
+  ASSERT_SOME(allocator);
+
+  // Make sure GPU number > 1 for following tests.
+  ASSERT_NE(0u, allocator->total().size());
+
+  Fetcher fetcher;
+
+  Try<ContainerLogger*> logger =
+    ContainerLogger::create(flags.container_logger);
+
+  ASSERT_SOME(logger);
+
+  Owned<MockDockerContainerizer> dockerContainerizer(
+      new MockDockerContainerizer(
+          flags,
+          &fetcher,
+          Owned<ContainerLogger>(logger.get()),
+          docker,
+          allocator.get()));
+
+  Owned<MasterDetector> detector = master.get()->createDetector();
+
+  Try<Owned<cluster::Slave>> slave =
+    StartSlave(detector.get(), dockerContainerizer.get(), flags);
+  ASSERT_SOME(slave);
+
+  FrameworkInfo frameworkInfo = DEFAULT_FRAMEWORK_INFO;
+  frameworkInfo.set_checkpoint(true);
+  frameworkInfo.add_capabilities()->set_type(
+      FrameworkInfo::Capability::GPU_RESOURCES);
+
+  MockScheduler sched;
+  MesosSchedulerDriver driver(
+      &sched, frameworkInfo, master.get()->pid, DEFAULT_CREDENTIAL);
+
+  Future<FrameworkID> frameworkId;
+  EXPECT_CALL(sched, registered(&driver, _, _))
+    .WillOnce(FutureArg<1>(&frameworkId));
+
+
+  // NOTE: We set filter explicitly here so that the resources will
+  // not be filtered for 5 seconds (the default).
+  Future<vector<Offer>> offers;
+  EXPECT_CALL(sched, resourceOffers(&driver, _))
+    .WillOnce(FutureArg<1>(&offers))
+    .WillRepeatedly(Return()); // Ignore subsequent offers.
+
+  driver.start();
+
+  AWAIT_READY(frameworkId);
+
+  AWAIT_READY(offers);
+  ASSERT_NE(0u, offers->size());
+
+  Offer offer = offers.get()[0];
+
+  SlaveID slaveId = offer.slave_id();
+
+  TaskInfo task;
+  task.set_name("");
+  task.mutable_task_id()->set_value("1");
+  task.mutable_slave_id()->CopyFrom(offer.slave_id());
+  task.mutable_resources()->CopyFrom(offer.resources());
+
+  CommandInfo command;
+  command.set_value("sleep 1000");
+
+  ContainerInfo containerInfo;
+  containerInfo.set_type(ContainerInfo::DOCKER);
+
+  // TODO(tnachen): Use local image to test if possible.
+  ContainerInfo::DockerInfo dockerInfo;
+  dockerInfo.set_image("alpine");
+  containerInfo.mutable_docker()->CopyFrom(dockerInfo);
+
+  task.mutable_command()->CopyFrom(command);
+  task.mutable_container()->CopyFrom(containerInfo);
+
+  Future<ContainerID> containerId;
+  EXPECT_CALL(*dockerContainerizer, launch(_, _, _, _, _, _, _, _))
+    .WillOnce(DoAll(FutureArg<0>(&containerId),
+                    Invoke(dockerContainerizer.get(),
+                           &MockDockerContainerizer::_launch)));
+
+  Future<TaskStatus> statusRunning;
+  EXPECT_CALL(sched, statusUpdate(&driver, _))
+    .WillOnce(FutureArg<1>(&statusRunning))
+    .WillRepeatedly(DoDefault());
+
+  driver.launchTasks(offers->at(0).id(), {task});
+
+  AWAIT_READY_FOR(containerId, Seconds(60));
+  AWAIT_READY_FOR(statusRunning, Seconds(60));
+  EXPECT_EQ(TASK_RUNNING, statusRunning.get().state());
+  ASSERT_TRUE(statusRunning.get().has_data());
+
+
+  // Recreate containerizer and start slave again.
+  slave.get()->terminate();
+  slave->reset();
+
+  logger = ContainerLogger::create(flags.container_logger);
+  ASSERT_SOME(logger);
+
+  dockerContainerizer.reset(new MockDockerContainerizer(
+      flags,
+      &fetcher,
+      Owned<ContainerLogger>(logger.get()),
+      docker,
+      allocator.get()));
+
+  slave = StartSlave(detector.get(), dockerContainerizer.get(), flags);
+  ASSERT_SOME(slave);
+
+  Future<Nothing> _recover = FUTURE_DISPATCH(_, &Slave::_recover);
+
+  // Wait until containerizer recover is complete.
+  AWAIT_READY(_recover);
+
+  Future<containerizer::Termination> termination =
+    dockerContainerizer->wait(containerId.get());
+
+  dockerContainerizer->destroy(containerId.get());
+
+  AWAIT_READY(termination);
+
+  driver.stop();
+  driver.join();
+}
+
 } // namespace tests {
 } // namespace internal {
 } // namespace mesos {

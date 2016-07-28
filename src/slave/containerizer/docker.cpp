@@ -76,6 +76,8 @@ namespace mesos {
 namespace internal {
 namespace slave {
 
+static constexpr unsigned int NVIDIA_MAJOR_DEVICE = 195;
+
 using state::SlaveState;
 using state::FrameworkState;
 using state::ExecutorState;
@@ -944,6 +946,8 @@ Future<Nothing> DockerContainerizerProcess::_recover(
                          << executorInfo.executor_id() << "': "
                          << message;
           }));
+
+        recoverDevices(container->name());
       }
     }
   }
@@ -1004,6 +1008,96 @@ Future<Nothing> DockerContainerizerProcess::__recover(
 
       return Nothing();
     }));
+}
+
+void DockerContainerizerProcess::recoverDevices(
+    const std::string& containerName)
+{
+    // Invoke docker inspect on the recovered container.
+    Future<Nothing> inspect =
+      docker->inspect(containerName, slave::DOCKER_INSPECT_DELAY)
+      .then(defer(self(), [=](const Docker::Container& container) {
+      // Get all the devices in the inspect output.
+      Option<set<string>> deviceInspect = parseInspectDevices(container.output);
+      if (deviceInspect.isSome()) {
+        // Look for NV devices in the list of devices. Get the GPU device
+        // numbers from the list of devices used by the container.
+        std::string nvDevicePrefix = "/dev/nvidia";
+        Option<set<Gpu>> gpus = None();
+
+        foreach(const std::string& deviceString, deviceInspect.get()) {
+          if (strings::startsWith(deviceString, nvDevicePrefix)) {
+            std::string leftOverString = deviceString.substr(
+                    nvDevicePrefix.length(),
+                    deviceString.length());
+            // Convert the leftover string to number.
+            char* refString;
+            int minorNumber =
+              (int) strtol(leftOverString.c_str(), &refString, 10);
+            // If refString points to 0 then the leftOverString
+            // is converted to int.
+            if (*refString == 0) {
+              // use the minor number to account for the GPUs on recovery.
+              Gpu gpu;
+              gpu.major = NVIDIA_MAJOR_DEVICE;
+              gpu.minor = minorNumber;
+
+              if (gpus.isNone()) {
+                gpus = set<Gpu> ();
+              }
+              gpus.get().insert(gpu);
+            }
+          }
+        }
+
+        if (gpus.isSome()) {
+          // Invoke allocator to account for the GPUs used by the
+          // recovered containers.
+          allocator.get().allocate(gpus.get());
+        }
+      }
+
+      return Nothing();
+    }));
+}
+
+Option<std::set<std::string>> DockerContainerizerProcess::parseInspectDevices(
+        const std::string& inspect) {
+    set<std::string> devices;
+    Try<JSON::Array> parse = JSON::parse<JSON::Array>(inspect);
+    if (parse.isError()) {
+      return None();
+    }
+
+    JSON::Array array = parse.get();
+    if (array.values.size() != 1) {
+      return None();
+    }
+
+    CHECK(array.values.front().is<JSON::Object>());
+    JSON::Object json = array.values.front().as<JSON::Object>();
+
+    Option<set < string>> hostDevices = set<string>();
+    Result<JSON::Array> deviceJson =
+      json.find<JSON::Array>("HostConfig.Devices");
+    if (deviceJson.isSome()) {
+      // Get elements in the array and push it to devices set.
+      const std::vector<JSON::Value> values = deviceJson.get().values;
+      if (values.size() != 0) {
+        foreach(const JSON::Value& value, values) {
+          if (value.is<JSON::Object>()) {
+            Result<JSON::String> devicePath =
+                    value.as<JSON::Object>().find<JSON::String>("PathOnHost");
+            if (devicePath.isSome()) {
+              // Push the device to the set.
+              hostDevices.get().insert(devicePath.get().value);
+            }
+          }
+        }
+      }
+    }
+
+    return hostDevices;
 }
 
 
