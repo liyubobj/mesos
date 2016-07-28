@@ -194,6 +194,12 @@ private:
   process::Future<Nothing> __recover(
       const std::list<Docker::Container>& containers);
 
+#ifdef __linux__
+  process::Future<Nothing> recoverDevices(
+    const ContainerID& containerId,
+    const std::string& containerName);
+#endif
+
   // Starts the executor in a Docker container.
   process::Future<Docker::Container> launchExecutorContainer(
       const ContainerID& containerId,
@@ -262,6 +268,10 @@ private:
   process::Future<Nothing> allocateNvidiaGpus(
       const ContainerID& containerId,
       const size_t count);
+
+  process::Future<Nothing> allocateNvidiaGpus(
+    const std::set<Gpu>& gpus,
+    const ContainerID& containerId);
 
   process::Future<Nothing> _allocateNvidiaGpus(
       const ContainerID& containerId,
