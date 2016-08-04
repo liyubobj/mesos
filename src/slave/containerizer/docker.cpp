@@ -1322,7 +1322,21 @@ Future<pid_t> DockerContainerizerProcess::launchExecutorProcess(
       return Failure("Can not request GPUs without enabling GPU support");
     }
 
-    // TODO(Yubo): allocate requested GPUs through `NvidiaGpuAllocator`.
+    // We block the code until the GPU allocation finished.
+    // For docker containerizer, we must wait for GPUs allocated
+    // completed, and pass allocated GPUs to mesos-docker-executor.
+    Future<set<Gpu>> future = allocator->allocate(requested);
+    future.await();
+
+    if (!future.isReady()) {
+      return Failure("GPU allocator allocating GPU failed");
+    }
+
+    set<Gpu> allocated = future.get();
+
+    foreach (const Gpu& gpu, allocated) {
+      container->gpuAllocated.push_back(gpu);
+    }
   }
 
   // Prepare environment variables for the executor.
@@ -1515,7 +1529,25 @@ Future<Nothing> DockerContainerizerProcess::_update(
     const Resources& _resources,
     const Docker::Container& container)
 {
+  // Release GPUs after task exits. We check whether container pid is
+  // 'None()' to ensure that this update refers to task exits and
+  // container destruction.
   if (container.pid.isNone()) {
+    set<Gpu> deallocated;
+    if (!containers_[containerId]->gpuAllocated.empty()) {
+      foreach (const Gpu& gpu, containers_[containerId]->gpuAllocated) {
+        deallocated.insert(gpu);
+      }
+
+      containers_[containerId]->gpuAllocated.clear();
+
+      if (!allocator.isSome()) {
+        return Failure("Can not deallocate GPU without enabling GPU support.");
+      }
+
+      allocator->deallocate(deallocated);
+    }
+
     return Nothing();
   }
 
@@ -1865,6 +1897,22 @@ void DockerContainerizerProcess::destroy(
   }
 
   Container* container = containers_[containerId];
+
+  // Here we double check if GPUs are completely released after the task
+  // finished or died. That is necessary when task failed that _update()
+  // was not called.
+  set<Gpu> deallocated;
+  if (!containers_[containerId]->gpuAllocated.empty()) {
+    foreach (const Gpu& gpu, containers_[containerId]->gpuAllocated) {
+      deallocated.insert(gpu);
+    }
+
+    containers_[containerId]->gpuAllocated.clear();
+
+    if (allocator.isSome()) {
+      allocator->deallocate(deallocated);
+    }
+  }
 
   if (container->launch.isFailed()) {
     VLOG(1) << "Container '" << containerId << "' launch failed";

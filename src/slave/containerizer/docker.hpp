@@ -502,6 +502,9 @@ private:
     // on destroy.
     Option<pid_t> executorPid;
 
+    // GPU allocated to the container
+    std::list<Gpu> gpuAllocated;
+
     // Marks if this container launches an executor in a docker
     // container.
     bool launchesExecutorContainer;
