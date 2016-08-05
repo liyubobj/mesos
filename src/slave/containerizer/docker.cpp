@@ -226,7 +226,8 @@ docker::Flags dockerFlags(
   const Flags& flags,
   const string& name,
   const string& directory,
-  const Option<map<string, string>>& taskEnvironment)
+  const Option<map<string, string>>& taskEnvironment,
+  const Option<string>& device)
 {
   docker::Flags dockerFlags;
   dockerFlags.container = name;
@@ -242,6 +243,9 @@ docker::Flags dockerFlags(
 
   // TODO(alexr): Remove this after the deprecation cycle (started in 1.0).
   dockerFlags.stop_timeout = flags.docker_stop_timeout;
+
+  // TODO(Yubo): Expose device through dockerFlags after device control
+  // feature supported by `mesos-docker-executor`.
 
   return dockerFlags;
 }
@@ -349,6 +353,7 @@ DockerContainerizerProcess::Container::create(
       flags,
       Container::name(slaveId, stringify(id)),
       containerWorkdir,
+      None(),
       None());
 
     // Override the command with the docker command executor.
@@ -1317,6 +1322,8 @@ Future<pid_t> DockerContainerizerProcess::launchExecutorProcess(
 
   size_t requested = static_cast<size_t>(gpus.getOrElse(0.0));
 
+  Option<string> nvidiaGpuDevices = None();
+
   if (requested > 0) {
     if (!allocator.isSome()) {
       return Failure("Can not request GPUs without enabling GPU support");
@@ -1334,9 +1341,46 @@ Future<pid_t> DockerContainerizerProcess::launchExecutorProcess(
 
     set<Gpu> allocated = future.get();
 
+    // TODO(Yubo): Nvidia devices are hard-coded here. Will move to Nvidia
+    // specific modules so that all vendor specific data should be isolated
+    // into seperated module.
+    const string nvidiaCtl = "/dev/nvidiactl";
+    const string nvidiaUvm = "/dev/nvidia-uvm";
+    const string nvidiaDataPrefix = "/dev/nvidia";
+    const string permission = "mrw";
+
+    vector<string> argv;
+
+    // The GPU exposed format is DevHostPath:DevContainerPath:Permission.
+    // Permission: m--make node  r--read  w--write.
+    const Docker::Device nvidiaCtlDevice = Docker::Device(
+        nvidiaCtl, nvidiaCtl, permission);
+
+    argv.push_back(nvidiaCtlDevice.serialize());
+
+    const Docker::Device nvidiaUvmDevice = Docker::Device(
+        nvidiaUvm, nvidiaUvm, permission);
+
+    argv.push_back(nvidiaUvmDevice.serialize());
+
     foreach (const Gpu& gpu, allocated) {
+      const string nvidiaData = nvidiaDataPrefix +
+        boost::lexical_cast<string>(gpu.minor);
+
+      const Docker::Device nvidiaDataDevice = Docker::Device(
+          nvidiaData, nvidiaData, permission);
+
+      argv.push_back(nvidiaDataDevice.serialize());
+
       container->gpuAllocated.push_back(gpu);
     }
+
+    // "nvidiaGpuDevices" indicates Nvidia GPU devices need
+    // to be exposed in the docker container. For example, to
+    // expose Nvidia GPU0, "nvidiaGpuDevices" should be a string
+    // like "/dev/nvidiactl:/dev/nvidiactl:mrw,/dev/nvidia-uvm:
+    // /dev/nvidia-uvm:mrw,/dev/nvidia0:/dev/nvidia0:mrw"
+    nvidiaGpuDevices = strings::join(",", argv);
   }
 
   // Prepare environment variables for the executor.
@@ -1398,7 +1442,8 @@ Future<pid_t> DockerContainerizerProcess::launchExecutorProcess(
         flags,
         container->name(),
         container->directory,
-        container->taskEnvironment);
+        container->taskEnvironment,
+        nvidiaGpuDevices);
 
     VLOG(1) << "Launching 'mesos-docker-executor' with flags '"
             << launchFlags << "'";
