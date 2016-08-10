@@ -507,6 +507,9 @@ private:
     std::set<Gpu> gpus;
 #endif // __linux__
 
+    // Devices attached to the container.
+    Option<std::vector<Docker::Device>> devices;
+
     // Marks if this container launches an executor in a docker
     // container.
     bool launchesExecutorContainer;

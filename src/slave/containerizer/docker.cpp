@@ -688,7 +688,43 @@ Future<Nothing> DockerContainerizerProcess::_allocateNvidiaGpus(
       });
   }
 
-  containers_.at(containerId)->gpus = allocated;
+  Container* container = containers_.at(containerId);
+
+  container->gpus = allocated;
+  container->devices = vector<Docker::Device>();
+
+  // TODO(Yubo): Nvidia devices are hard-coded here. Will move to Nvidia
+  // specific modules so that all vendor specific data should be isolated
+  // into seperated module.
+  //
+  // NOTE: Devices permissions are required to be `mrw` by GPU support.
+  const string nvidiaCtl = "/dev/nvidiactl";
+  const string nvidiaUvm = "/dev/nvidia-uvm";
+  const string nvidiaUvmTools = "/dev/nvidia-uvm-tools";
+  const string nvidiaDataPrefix = "/dev/nvidia";
+  const string permissions = "mrw";
+
+  // `container->devices` records Nvidia GPU devices
+  // to be attached to the docker container.
+  container->devices->push_back(
+      Docker::Device::parse(nvidiaCtl, nvidiaCtl, permissions).get());
+
+  container->devices->push_back(
+      Docker::Device::parse(nvidiaUvm, nvidiaUvm, permissions).get());
+
+  if (os::exists(nvidiaUvmTools)) {
+    container->devices->push_back(
+        Docker::Device::parse(
+            nvidiaUvmTools, nvidiaUvmTools, permissions).get());
+  }
+
+  foreach (const Gpu& gpu, container->gpus) {
+    const string nvidiaData =
+      nvidiaDataPrefix + boost::lexical_cast<string>(gpu.minor);
+
+    container->devices->push_back(
+        Docker::Device::parse(nvidiaData, nvidiaData, permissions).get());
+  }
 
   return Nothing();
 }
