@@ -21,6 +21,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <vector>
 
 #include <mesos/slave/container_logger.hpp>
 
@@ -506,6 +507,9 @@ private:
     // GPU resources allocated to the container.
     std::set<Gpu> gpus;
 #endif // __linux__
+
+    // Devices attached to the container.
+    std::vector<Docker::Device> devices;
 
     // Marks if this container launches an executor in a docker
     // container.

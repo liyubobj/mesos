@@ -694,8 +694,33 @@ Future<Nothing> DockerContainerizerProcess::_allocateNvidiaGpus(
     return nvidia->allocator.deallocate(allocated);
   }
 
+  Container* container = containers_.at(containerId);
+
+  // NOTE: GPU devices permissions are required to be `rmw` by default,
+  // that is because GPU tasks launched in the container may need to
+  // read/write/mknod to GPU devices in their lifecycle.
+  //
+  // `container->devices` records Nvidia GPU devices to be attached to
+  // the docker container.
+  container->devices.push_back(
+      Docker::Device::parse("/dev/nvidiactl:/dev/nvidiactl:rmw").get());
+
+  container->devices.push_back(
+      Docker::Device::parse("/dev/nvidia-uvm:/dev/nvidia-uvm:rmw").get());
+
+  if (os::exists("/dev/nvidia-uvm-tools")) {
+    container->devices.push_back(
+        Docker::Device::parse(
+            "/dev/nvidia-uvm-tools:/dev/nvidia-uvm-tools:rmw").get());
+  }
+
   foreach (const Gpu& gpu, allocated) {
     containers_.at(containerId)->gpus.insert(gpu);
+
+    const string devicePath = "/dev/nvidia" + stringify(gpu.minor);
+    container->devices.push_back(
+        Docker::Device::parse(
+            devicePath + ":" + devicePath + ":" + "rmw").get());
   }
 
   return Nothing();
