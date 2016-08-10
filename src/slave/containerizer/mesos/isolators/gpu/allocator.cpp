@@ -143,10 +143,15 @@ static Try<Resources> enumerateGpuResources(const Flags& flags)
   const vector<string> tokens = strings::tokenize(flags.isolation, ",");
   const set<string> isolators = set<string>(tokens.begin(), tokens.end());
 
-  // Don't allow the `--nvidia-gpu_devices` flag without the GPU isolator.
-  if (flags.nvidia_gpu_devices.isSome() && isolators.count("gpu/nvidia") == 0) {
-    return Error("'--nvidia_gpus_devices' can only be specified if the"
-                 " `--isolation` flag contains 'gpu/nvidia'");
+  // Don't allow the `--nvidia_gpu_devices` flag without the GPU
+  // isolator when using the mesos containerizer. For the docker
+  // containerizer, this is not required.
+  if (strings::contains(flags.containerizers, "mesos") &&
+      isolators.count("gpu/nvidia") == 0 &&
+      flags.nvidia_gpu_devices.isSome()) {
+    return Error("'--nvidia_gpus_devices' can only be specified if the "
+                 "'--isolation' flag contains 'gpu/nvidia' with 'mesos' "
+                 "containerizer");
   }
 
   // Pull out just the GPU resources from --resources.
@@ -163,8 +168,11 @@ static Try<Resources> enumerateGpuResources(const Flags& flags)
       });
 
   // Pass the GPU resources through if we're not going to do any
-  // isolation or we cannot validate the resources using NVML.
-  if (isolators.count("gpu/nvidia") == 0 || !nvml::isAvailable()) {
+  // isolation for mesos conainerizer or we cannot validate the
+  // resources using NVML.
+  if ((strings::contains(flags.containerizers, "mesos") &&
+       isolators.count("gpu/nvidia") == 0) ||
+      !nvml::isAvailable()) {
     return resources;
   }
 
