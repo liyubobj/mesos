@@ -2149,12 +2149,6 @@ void DockerContainerizerProcess::__destroy(
   Container* container = containers_.at(containerId);
 
   if (!kill.isReady() && !container->status.future().isReady()) {
-    // TODO(benh): This means we've failed to do a Docker::kill, which
-    // means it's possible that the container is still going to be
-    // running after we return! We either need to have a periodic
-    // "garbage collector", or we need to retry the Docker::kill
-    // indefinitely until it has been sucessful.
-
     string failure = "Failed to kill the Docker container: " +
                      (kill.isFailed() ? kill.failure() : "discarded future");
 
@@ -2170,6 +2164,10 @@ void DockerContainerizerProcess::__destroy(
 
     containers_.erase(containerId);
 
+    // We've failed to do a Docker::kill, which means that the
+    // container is still running! Here we invoke `Self::remove`
+    // after `docker_remove_delay` to force remove the docker
+    // container again.
     delay(
       flags.docker_remove_delay,
       self(),
