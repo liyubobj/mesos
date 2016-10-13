@@ -220,7 +220,8 @@ docker::Flags dockerFlags(
   const Flags& flags,
   const string& name,
   const string& directory,
-  const Option<map<string, string>>& taskEnvironment)
+  const Option<map<string, string>>& taskEnvironment,
+  const Option<vector<Docker::Device>>& devices)
 {
   docker::Flags dockerFlags;
   dockerFlags.container = name;
@@ -236,6 +237,11 @@ docker::Flags dockerFlags(
 
   // TODO(alexr): Remove this after the deprecation cycle (started in 1.0).
   dockerFlags.stop_timeout = flags.docker_stop_timeout;
+
+  // Expose devices to this docker container.
+  if (devices.isSome()) {
+    dockerFlags.devices = strings::join(",", devices.get());
+  }
 
   return dockerFlags;
 }
@@ -335,13 +341,18 @@ DockerContainerizerProcess::Container::create(
 
     newContainerInfo.mutable_docker()->CopyFrom(dockerInfo);
 
-    // NOTE: We do not set the optional `taskEnvironment` here as
-    // this field is currently used to propagate environment variables
-    // from a hook. This hook is called after `Container::create`.
+    // NOTE: We do not set the optional `taskEnvironment` and `devices`
+    // here. The `taskEnvironment` field is currently used to propagate
+    // environment variables from a hook, this hook is called after
+    // `Container::create`. The `devices` field is currently used to
+    // expose Nvidia devices to the docker container, this is set in
+    // `DockerContainerizerProcess::launchExecutorProcess` which is also
+    // after `Container::create`.
     docker::Flags dockerExecutorFlags = dockerFlags(
       flags,
       Container::name(slaveId, stringify(id)),
       containerWorkdir,
+      None(),
       None());
 
     // Override the command with the docker command executor.
@@ -1461,7 +1472,8 @@ Future<pid_t> DockerContainerizerProcess::launchExecutorProcess(
         flags,
         container->name(),
         container->directory,
-        container->taskEnvironment);
+        container->taskEnvironment,
+        container->devices);
 
     VLOG(1) << "Launching 'mesos-docker-executor' with flags '"
             << launchFlags << "'";

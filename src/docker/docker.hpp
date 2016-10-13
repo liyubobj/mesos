@@ -91,6 +91,17 @@ public:
 
       return device;
     }
+
+    static Try<Device> parse(const std::string& devices)
+    {
+      const std::vector<std::string> deviceInfo = strings::split(devices, ":");
+      if (deviceInfo.size() != 3) {
+        return Error("Parse device information error for '" + devices +
+                     "', 'PathInHost:PathInContainer:Permission' expected");
+      }
+
+      return parse(deviceInfo[0], deviceInfo[1], deviceInfo[2]);
+    }
   };
 
   class Container
