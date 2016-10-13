@@ -15,6 +15,7 @@
 // limitations under the License.
 
 #include <map>
+#include <ostream>
 #include <vector>
 
 #include <stout/error.hpp>
@@ -55,6 +56,7 @@ using namespace process;
 
 using std::list;
 using std::map;
+using std::ostream;
 using std::string;
 using std::vector;
 
@@ -766,10 +768,8 @@ Future<Option<int>> Docker::run(
       // passed in with restricted permissions (e.g. /dev/null), so
       // we don't bother checking this case either.
 
-      argv.push_back("--device=" +
-                     device.hostPath.string() + ":" +
-                     device.containerPath.string() + ":" +
-                     permissions);
+      argv.push_back("--device");
+      argv.push_back(stringify(device));
     }
   }
 
@@ -1487,4 +1487,23 @@ Future<Docker::Image> Docker::____pull(
   // not sufficiently unique and 'array.values.size() > 1'.
 
   return Failure("Failed to find image");
+}
+
+
+ostream& operator<<(ostream& stream, const Docker::Device& device)
+{
+  stream << device.hostPath.string() << ":";
+  stream << device.containerPath.string() << ":";
+
+  if (device.access.read) {
+    stream << "r";
+  }
+  if (device.access.write) {
+    stream << "w";
+  }
+  if (device.access.mknod) {
+    stream << "m";
+  }
+
+  return stream;
 }

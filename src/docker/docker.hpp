@@ -19,6 +19,7 @@
 
 #include <list>
 #include <map>
+#include <ostream>
 #include <string>
 
 #include <process/future.hpp>
@@ -309,4 +310,6 @@ private:
   const Option<JSON::Object> config;
 };
 
+
+std::ostream& operator<<(std::ostream& stream, const Docker::Device& device);
 #endif // __DOCKER_HPP__
