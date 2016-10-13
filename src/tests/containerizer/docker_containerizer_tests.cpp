@@ -56,6 +56,10 @@ using mesos::internal::master::Master;
 using mesos::internal::slave::DockerContainerizer;
 using mesos::internal::slave::DockerContainerizerProcess;
 using mesos::internal::slave::Fetcher;
+#ifdef __linux__
+using mesos::internal::slave::NvidiaGpuAllocator;
+using mesos::internal::slave::NvidiaVolume;
+#endif // __linux__
 using mesos::internal::slave::Slave;
 
 using mesos::master::detector::MasterDetector;
@@ -3817,6 +3821,209 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_WaitUnknownContainer)
   AWAIT_READY(wait);
   EXPECT_NONE(wait.get());
 }
+
+
+#ifdef __linux__
+// This test verifies that the docker container can be
+// launched with some GPU resources allocated when
+// enabling Nvidia GPU allocator.
+TEST_F(DockerContainerizerTest, ROOT_NVIDIA_GPU_DOCKER_Launch)
+{
+  ASSERT_TRUE(nvml::isAvailable());
+  ASSERT_SOME(nvml::initialize());
+
+  Try<Owned<cluster::Master>> master = StartMaster();
+  ASSERT_SOME(master);
+
+  MockDocker* mockDocker =
+    new MockDocker(tests::flags.docker, tests::flags.docker_socket);
+
+  Shared<Docker> docker(mockDocker);
+
+  slave::Flags flags = CreateSlaveFlags();
+  flags.resources = "gpus:1";
+  flags.containerizers = "docker";
+  flags.nvidia_gpu_devices = vector<unsigned int>({0u});
+
+  Try<Resources> resources = NvidiaGpuAllocator::resources(flags);
+  ASSERT_SOME(resources);
+
+  Try<NvidiaGpuAllocator> allocator =
+    NvidiaGpuAllocator::create(flags, resources.get());
+
+  ASSERT_SOME(allocator);
+
+  // TODO(Yubo): Nvidia volume is not used currently, will
+  // add volume related tests when Nvidia volume injection is
+  // supported by docker containerizer.
+  Try<NvidiaVolume> volume = NvidiaVolume::create();
+  ASSERT_SOME(volume);
+
+  NvidiaComponents nvidia = NvidiaComponents(allocator.get(), volume.get());
+
+  // Make sure GPU number detected by allocator is 1, same
+  // to what we set.
+  ASSERT_EQ(1u, allocator->total().size());
+
+  Fetcher fetcher;
+
+  Try<ContainerLogger*> logger =
+    ContainerLogger::create(flags.container_logger);
+
+  ASSERT_SOME(logger);
+
+  MockDockerContainerizer dockerContainerizer(
+      flags,
+      &fetcher,
+      Owned<ContainerLogger>(logger.get()),
+      docker,
+      nvidia);
+
+  Owned<MasterDetector> detector = master.get()->createDetector();
+
+  Try<Owned<cluster::Slave>> slave =
+    StartSlave(detector.get(), &dockerContainerizer, flags);
+
+  ASSERT_SOME(slave);
+
+  MockScheduler sched;
+
+  FrameworkInfo frameworkInfo = DEFAULT_FRAMEWORK_INFO;
+  frameworkInfo.add_capabilities()->set_type(
+      FrameworkInfo::Capability::GPU_RESOURCES);
+
+  MesosSchedulerDriver driver(
+      &sched, frameworkInfo, master.get()->pid, DEFAULT_CREDENTIAL);
+
+  Future<FrameworkID> frameworkId;
+  EXPECT_CALL(sched, registered(&driver, _, _))
+    .WillOnce(FutureArg<1>(&frameworkId));
+
+  Future<vector<Offer>> offers;
+  EXPECT_CALL(sched, resourceOffers(&driver, _))
+    .WillOnce(FutureArg<1>(&offers))
+    .WillRepeatedly(Return()); // Ignore subsequent offers.
+
+  driver.start();
+
+  AWAIT_READY(frameworkId);
+
+  AWAIT_READY(offers);
+  ASSERT_NE(0u, offers->size());
+
+  const Offer& offer = offers.get()[0];
+
+  SlaveID slaveId = offer.slave_id();
+
+  TaskInfo task;
+  task.set_name("");
+  task.mutable_task_id()->set_value("1");
+  task.mutable_slave_id()->CopyFrom(offer.slave_id());
+  task.mutable_resources()->CopyFrom(offer.resources());
+
+  CommandInfo command;
+  command.set_value("sleep 1000");
+
+  ContainerInfo containerInfo;
+  containerInfo.set_type(ContainerInfo::DOCKER);
+
+  ContainerInfo::DockerInfo dockerInfo;
+  dockerInfo.set_image("alpine");
+  containerInfo.mutable_docker()->CopyFrom(dockerInfo);
+
+  task.mutable_command()->CopyFrom(command);
+  task.mutable_container()->CopyFrom(containerInfo);
+
+  Future<ContainerID> containerId;
+  EXPECT_CALL(dockerContainerizer, launch(_, _, _, _, _, _, _, _))
+    .WillOnce(DoAll(FutureArg<0>(&containerId),
+                    Invoke(&dockerContainerizer,
+                           &MockDockerContainerizer::_launch)));
+
+  Future<TaskStatus> statusRunning;
+  EXPECT_CALL(sched, statusUpdate(&driver, _))
+    .WillOnce(FutureArg<1>(&statusRunning))
+    .WillRepeatedly(DoDefault());
+
+  driver.launchTasks(offers->at(0).id(), {task});
+
+  AWAIT_READY_FOR(containerId, Seconds(60));
+  AWAIT_READY_FOR(statusRunning, Seconds(60));
+  EXPECT_EQ(TASK_RUNNING, statusRunning->state());
+  ASSERT_TRUE(statusRunning->has_data());
+
+  Try<JSON::Array> array = JSON::parse<JSON::Array>(statusRunning->data());
+  ASSERT_SOME(array);
+
+  // Check if container information is exposed through master's state endpoint.
+  Future<http::Response> response = http::get(
+      master.get()->pid,
+      "state",
+      None(),
+      createBasicAuthHeaders(DEFAULT_CREDENTIAL));
+
+  AWAIT_EXPECT_RESPONSE_STATUS_EQ(process::http::OK().status, response);
+
+  Try<JSON::Object> parse = JSON::parse<JSON::Object>(response->body);
+  ASSERT_SOME(parse);
+
+  Result<JSON::Value> find = parse->find<JSON::Value>(
+      "frameworks[0].tasks[0].container.docker.privileged");
+
+  // Docker container running in priviledged will get all GPU resources
+  // from host machine and the GPU resources will not be allocated by
+  // the GPU allocator, so here we need to make sure that the docker
+  // container is running in non-priviledged mode so as to make sure the
+  // GPU resources are allocated by the GPU allocator.
+  EXPECT_SOME_FALSE(find);
+
+  ASSERT_TRUE(exists(docker, slaveId, containerId.get()));
+
+  // Now verify that GPU0 is exposed to container.
+  const string name = containerName(slaveId, containerId.get());
+
+  Future<Docker::Container> inspect = docker->inspect(name);
+  AWAIT_READY(inspect);
+
+  // Get allocated GPU from allocator. We assume that the allocator
+  // allocated the first GPU to the container.
+  unsigned int minor = allocator->total().begin()->minor;
+
+  vector<Path> devPaths;
+  devPaths.push_back(Path("/dev/nvidiactl"));
+  devPaths.push_back(Path("/dev/nvidia-uvm"));
+
+  if (os::exists("/dev/nvidia-uvm-tools")) {
+    devPaths.push_back(Path("/dev/nvidia-uvm-tools"));
+  }
+
+  devPaths.push_back(Path("/dev/nvidia" + stringify(minor)));
+
+  // Check if attached Nvidia GPU devices number is correct.
+  EXPECT_EQ(devPaths.size(), inspect->devices.size());
+
+  // Check if attached Nvidia GPU devices are correct.
+  for(size_t i = 0; i< devPaths.size(); i++) {
+    EXPECT_EQ(devPaths[i], inspect->devices[i].hostPath);
+    EXPECT_EQ(devPaths[i], inspect->devices[i].containerPath);
+    EXPECT_TRUE(inspect->devices[i].access.read);
+    EXPECT_TRUE(inspect->devices[i].access.write);
+    EXPECT_TRUE(inspect->devices[i].access.mknod);
+  }
+
+  Future<Option<ContainerTermination>> termination =
+    dockerContainerizer.wait(containerId.get());
+
+  driver.stop();
+  driver.join();
+
+  AWAIT_READY(termination);
+  EXPECT_SOME(termination.get());
+
+  ASSERT_FALSE(
+      exists(docker, slaveId, containerId.get(), ContainerState::RUNNING));
+}
+#endif // __linux__
 
 } // namespace tests {
 } // namespace internal {
