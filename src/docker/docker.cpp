@@ -386,14 +386,17 @@ Try<Docker::Container> Docker::Container::create(const string& output)
                      " '" + stringify(object) + "'");
       }
 
-      Device device;
-      device.hostPath = Path(hostPath->value);
-      device.containerPath = Path(containerPath->value);
-      device.access.read = strings::contains(permissions->value, "r");
-      device.access.write = strings::contains(permissions->value, "w");
-      device.access.mknod = strings::contains(permissions->value, "m");
+      Try<Device> device = Device::parse(
+          hostPath->value,
+          containerPath->value,
+          permissions->value);
 
-      devices.push_back(device);
+      if (device.isError()) {
+        return Error("Failed to parse device from HostConfig.Devices entry"
+                     ": " + device.error());
+      }
+
+      devices.push_back(device.get());
     }
   }
 
@@ -766,10 +769,8 @@ Future<Option<int>> Docker::run(
       // passed in with restricted permissions (e.g. /dev/null), so
       // we don't bother checking this case either.
 
-      argv.push_back("--device=" +
-                     device.hostPath.string() + ":" +
-                     device.containerPath.string() + ":" +
-                     permissions);
+      argv.push_back("--device");
+      argv.push_back(stringify(device));
     }
   }
 
@@ -1487,4 +1488,23 @@ Future<Docker::Image> Docker::____pull(
   // not sufficiently unique and 'array.values.size() > 1'.
 
   return Failure("Failed to find image");
+}
+
+
+std::ostream& operator<<(std::ostream& stream, const Docker::Device& device)
+{
+  stream << device.hostPath.string() << ":";
+  stream << device.containerPath.string() << ":";
+
+  if (device.access.read) {
+    stream << "r";
+  }
+  if (device.access.write) {
+    stream << "w";
+  }
+  if (device.access.mknod) {
+    stream << "m";
+  }
+
+  return stream;
 }

@@ -20,6 +20,7 @@
 #include <list>
 #include <map>
 #include <string>
+#include <vector>
 
 #include <process/future.hpp>
 #include <process/owned.hpp>
@@ -66,6 +67,30 @@ public:
       bool write;
       bool mknod;
     } access;
+
+    static Try<Device> parse(
+        const std::string& host,
+        const std::string& container,
+        const std::string& permissions)
+    {
+      Device device;
+
+      device.hostPath = Path(host);
+      device.containerPath = Path(container);
+
+      device.access.read = strings::contains(permissions, "r");
+      device.access.write = strings::contains(permissions, "w");
+      device.access.mknod = strings::contains(permissions, "m");
+
+      if (!device.access.read &&
+          !device.access.write &&
+          !device.access.mknod) {
+        return Error("Device should have at least one"
+                     " permission of 'r', 'w' or 'm'");
+      }
+
+      return device;
+    }
   };
 
   class Container
@@ -309,4 +334,6 @@ private:
   const Option<JSON::Object> config;
 };
 
+
+std::ostream& operator<<(std::ostream& stream, const Docker::Device& device);
 #endif // __DOCKER_HPP__
